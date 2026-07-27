@@ -1,6 +1,9 @@
 import { PALETTE } from "../data/palette";
 import { Input } from "./Input";
-import { Renderer, TILE_SIZE, VIEW_HEIGHT, VIEW_WIDTH } from "./Renderer";
+import { Renderer } from "./Renderer";
+import mapData from "../data/maps/hamlet_well.json";
+import { TileMap, type TiledMapData } from "../world/TileMap";
+import { TileSet } from "../world/TileSet";
 
 export const FIXED_STEP_MS = 1000 / 60;
 export const MAX_FRAME_DELTA_MS = 250;
@@ -25,6 +28,7 @@ export class Game {
   private previousTimeMs = 0;
   private running = false;
   private frame = 0;
+  private readonly map = new TileMap(mapData as TiledMapData, new TileSet());
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new Renderer(canvas);
@@ -56,17 +60,13 @@ export class Game {
   private render(): void {
     const { ctx } = this.renderer;
     this.renderer.clear(PALETTE.grass);
-    for (let y = 0; y < VIEW_HEIGHT / TILE_SIZE; y += 1) {
-      for (let x = 0; x < VIEW_WIDTH / TILE_SIZE; x += 1) {
-        ctx.fillStyle = (x + y) % 2 === 0 ? PALETTE.grass : PALETTE.grassDark;
-        ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-      }
-    }
+    this.map.drawLayer(ctx, "ground");
+    this.map.drawLayer(ctx, "terrain");
+    this.map.drawLayer(ctx, "decor_below");
+    this.map.drawLayer(ctx, "decor_above");
     ctx.fillStyle = PALETTE.night;
-    ctx.fillRect(72, 92, 112, 40);
-    ctx.strokeStyle = PALETTE.sandLight;
-    ctx.strokeRect(73.5, 93.5, 109, 37);
-    this.renderer.pixelText("LES RACINES CREUSES", 128, 101, PALETTE.cream, "center");
-    this.renderer.pixelText(`FRAME ${String(this.frame).padStart(6, "0")}`, 128, 117, PALETTE.grassLight, "center");
+    ctx.fillRect(4, 4, 74, 13);
+    this.renderer.pixelText("PLACE DU PUITS", 8, 6, PALETTE.cream);
+    this.renderer.pixelText(`F${String(this.frame).padStart(5, "0")}`, 250, 6, PALETTE.cream, "right");
   }
 }
