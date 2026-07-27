@@ -1,0 +1,22 @@
+{
+  "name": "les-racines-creuses",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc --noEmit && vite build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "validate:data": "tsx tools/validate-data.ts",
+    "screenshot": "tsx tools/screenshot.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.1.0",
+    "playwright": "^1.54.1",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3",
+    "vite": "^7.0.5",
+    "vitest": "^3.2.4"
+  }
+}

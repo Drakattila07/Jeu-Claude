@@ -1,0 +1,72 @@
+@import url("https://fonts.googleapis.com/css2?family=Germania+One&family=VT323&display=swap");
+
+:root {
+  color: #f8e7aa;
+  background: #0b1818;
+  font-family: "VT323", monospace;
+  font-synthesis: none;
+  --scale: 3;
+}
+
+* { box-sizing: border-box; }
+html, body { min-width: 100%; min-height: 100%; margin: 0; }
+body {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 32%, rgba(49, 91, 72, 0.34), transparent 42%),
+    repeating-linear-gradient(45deg, rgba(255,255,255,.012) 0 1px, transparent 1px 5px),
+    #0b1818;
+}
+.game-shell { display: grid; justify-items: center; gap: 10px; }
+.title-card { text-align: center; text-shadow: 0 2px #351f29; }
+.kicker { color: #98b966; font-size: 14px; letter-spacing: .18em; }
+h1 {
+  margin: -2px 0 0;
+  color: #f8e7aa;
+  font-family: "Germania One", serif;
+  font-size: clamp(28px, 5vw, 42px);
+  font-weight: 400;
+  letter-spacing: .04em;
+}
+.game-frame {
+  position: relative;
+  line-height: 0;
+  border: 4px solid #d2ae5d;
+  box-shadow: 0 0 0 4px #51352a, 0 0 0 8px #1b3934, 0 16px 45px #000c;
+  background: #101f20;
+}
+canvas {
+  display: block;
+  width: calc(256px * var(--scale));
+  height: calc(224px * var(--scale));
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  outline: none;
+}
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 18px;
+  margin: 5px 0 0;
+  color: #91aa88;
+  font-size: 18px;
+}
+kbd {
+  display: inline-block;
+  min-width: 20px;
+  padding: 0 4px;
+  border: 1px solid #6f815d;
+  border-bottom-width: 2px;
+  border-radius: 2px;
+  color: #f8e7aa;
+  background: #1b3934;
+  font: inherit;
+  text-align: center;
+}
+@media (max-height: 560px) {
+  .title-card, .controls { display: none; }
+}

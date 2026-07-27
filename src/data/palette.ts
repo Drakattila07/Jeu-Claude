@@ -1,0 +1,37 @@
+export const PALETTE = {
+  ink: "#101820",
+  night: "#142b2b",
+  deepWater: "#1e3a4c",
+  water: "#28616b",
+  waterLight: "#52a59a",
+  marsh: "#344d43",
+  pineDark: "#203c35",
+  pine: "#315c46",
+  leafDark: "#376849",
+  leaf: "#57915a",
+  leafLight: "#8fbd67",
+  grassDark: "#6e9d58",
+  grass: "#94c96b",
+  grassLight: "#c6df83",
+  sandDark: "#b68b55",
+  sand: "#d4b96f",
+  sandLight: "#f1d88b",
+  soil: "#895f3f",
+  woodDark: "#4c342c",
+  wood: "#76513a",
+  woodLight: "#ab7850",
+  stoneDark: "#525a55",
+  stone: "#7b8172",
+  stoneLight: "#b1ad8a",
+  roofDark: "#723f3f",
+  roof: "#a7564f",
+  cream: "#f8e7aa",
+  white: "#fff8dc",
+  red: "#c74645",
+  rose: "#d87575",
+  purple: "#754a73",
+  yellow: "#e7bb4c"
+} as const;
+
+export type PaletteColor = (typeof PALETTE)[keyof typeof PALETTE];
+export const PALETTE_COLORS = Object.values(PALETTE);
