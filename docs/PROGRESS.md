@@ -77,3 +77,10 @@
 - Météo journalière déterministe et historique sur trois jours
 - Nuit et Canopée Dense avec masque radial
 - Pluie pixel et ressources à repousse journalière
+
+## T12 — Reconfiguration du monde ✅
+
+- Résolution ordonnée des variantes depuis les données
+- Forêt v1/v2/v3, clairière jour/nuit, rivière et pont
+- Moulin arrêté/tournant et dix écrans de lac bas/haut
+- Tests des cascades de flags

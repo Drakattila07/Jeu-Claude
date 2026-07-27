@@ -22,6 +22,7 @@ import { Affinity } from "../systems/Affinity";
 import { NPCS } from "../data/npcs/core";
 import { Npc } from "../entities/Npc";
 import { EnvironmentOverlay } from "../ui/EnvironmentOverlay";
+import { ZoneVariants } from "../world/ZoneVariants";
 
 export const FIXED_STEP_MS = 1000 / 60;
 export const MAX_FRAME_DELTA_MS = 250;
@@ -65,6 +66,7 @@ export class Game {
   private readonly affinity = new Affinity();
   private npcs: Npc[] = [];
   private readonly environment = new EnvironmentOverlay();
+  private readonly variants = new ZoneVariants();
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new Renderer(canvas);
@@ -209,7 +211,11 @@ export class Game {
     ctx.fillStyle = PALETTE.night;
     ctx.fillRect(4, 4, 74, 13);
     const zone = this.zones.at(this.camera.zone);
-    this.renderer.pixelText(zone?.name ?? "VALLÉE INCONNUE", 8, 6, PALETTE.cream);
+    const variant = zone ? this.variants.resolve(zone.id, {
+      flags: new Set(this.flags.snapshot()), isNight: this.clock.isNight,
+    }) : "default";
+    this.renderer.pixelText(`${zone?.name ?? "VALLÉE INCONNUE"} ${variant === "default" ? "" : variant.toUpperCase()}`,
+      8, 6, PALETTE.cream);
     this.renderer.pixelText(
       `${String(this.clock.hour).padStart(2, "0")}:${String(this.clock.minute).padStart(2, "0")} ${this.clock.weather === "rain" ? "PLUIE" : ""}`,
       250, 6, PALETTE.cream, "right");
