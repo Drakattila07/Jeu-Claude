@@ -4,6 +4,7 @@ import { Renderer } from "./Renderer";
 import mapData from "../data/maps/hamlet_well.json";
 import { TileMap, type TiledMapData } from "../world/TileMap";
 import { TileSet } from "../world/TileSet";
+import { Player } from "../entities/Player";
 
 export const FIXED_STEP_MS = 1000 / 60;
 export const MAX_FRAME_DELTA_MS = 250;
@@ -29,10 +30,12 @@ export class Game {
   private running = false;
   private frame = 0;
   private readonly map = new TileMap(mapData as TiledMapData, new TileSet());
+  private readonly player: Player;
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new Renderer(canvas);
     this.input = new Input();
+    this.player = new Player(this.input, this.map);
   }
 
   start(): void {
@@ -54,6 +57,7 @@ export class Game {
 
   private update(): void {
     this.frame += 1;
+    this.player.update();
     this.input.endFrame();
   }
 
@@ -63,6 +67,7 @@ export class Game {
     this.map.drawLayer(ctx, "ground");
     this.map.drawLayer(ctx, "terrain");
     this.map.drawLayer(ctx, "decor_below");
+    this.player.draw(ctx);
     this.map.drawLayer(ctx, "decor_above");
     ctx.fillStyle = PALETTE.night;
     ctx.fillRect(4, 4, 74, 13);
