@@ -70,3 +70,10 @@
 - Emplois du temps horaires et déplacement A* sur grille
 - Affinité plafonnée à 9, paliers uniques 3/6/9
 - Réactions à la mémoire récente de l'EventBus
+
+## T11 — Horloge, nuit et météo ✅
+
+- Minutes, heures et jours de jeu en frames
+- Météo journalière déterministe et historique sur trois jours
+- Nuit et Canopée Dense avec masque radial
+- Pluie pixel et ressources à repousse journalière

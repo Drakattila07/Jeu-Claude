@@ -21,6 +21,7 @@ import { Clock } from "./Clock";
 import { Affinity } from "../systems/Affinity";
 import { NPCS } from "../data/npcs/core";
 import { Npc } from "../entities/Npc";
+import { EnvironmentOverlay } from "../ui/EnvironmentOverlay";
 
 export const FIXED_STEP_MS = 1000 / 60;
 export const MAX_FRAME_DELTA_MS = 250;
@@ -63,6 +64,7 @@ export class Game {
   private readonly clock = new Clock();
   private readonly affinity = new Affinity();
   private npcs: Npc[] = [];
+  private readonly environment = new EnvironmentOverlay();
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new Renderer(canvas);
@@ -198,11 +200,19 @@ export class Game {
     this.player.draw(ctx);
     this.map.drawLayer(ctx, "decor_above");
     ctx.restore();
+    const zoneForLight = this.zones.at(this.camera.zone);
+    this.environment.draw(ctx, this.frame, this.player.position, {
+      night: this.clock.isNight,
+      dense: zoneForLight?.id === "lisiere_carrefour" && !this.flags.has("lantern"),
+      weather: this.clock.weather,
+    });
     ctx.fillStyle = PALETTE.night;
     ctx.fillRect(4, 4, 74, 13);
     const zone = this.zones.at(this.camera.zone);
     this.renderer.pixelText(zone?.name ?? "VALLÉE INCONNUE", 8, 6, PALETTE.cream);
-    this.renderer.pixelText(`F${String(this.frame).padStart(5, "0")}`, 250, 6, PALETTE.cream, "right");
+    this.renderer.pixelText(
+      `${String(this.clock.hour).padStart(2, "0")}:${String(this.clock.minute).padStart(2, "0")} ${this.clock.weather === "rain" ? "PLUIE" : ""}`,
+      250, 6, PALETTE.cream, "right");
     if (this.noticeFrames > 0) {
       ctx.fillStyle = PALETTE.night;
       ctx.fillRect(8, 181, 240, 35);
