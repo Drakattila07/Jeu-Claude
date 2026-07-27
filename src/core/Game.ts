@@ -14,6 +14,9 @@ import { Combat, overlaps } from "../systems/Combat";
 import { ENEMY_SPAWNS } from "../data/enemies";
 import { Enemy } from "../entities/Enemy";
 import { TextBox } from "../ui/TextBox";
+import { EventBus } from "./EventBus";
+import { Flags } from "../systems/Flags";
+import { QuestSystem } from "../systems/Quest";
 
 export const FIXED_STEP_MS = 1000 / 60;
 export const MAX_FRAME_DELTA_MS = 250;
@@ -50,12 +53,16 @@ export class Game {
   private readonly combat = new Combat();
   private enemies: Enemy[] = [];
   private readonly textBox = new TextBox();
+  private readonly events = new EventBus();
+  private readonly flags = new Flags();
+  private readonly quests = new QuestSystem(this.flags, this.events);
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new Renderer(canvas);
     this.input = new Input();
     this.player = new Player(this.input, this.map);
     this.loadZoneObjects();
+    this.quests.refresh();
   }
 
   start(): void {
@@ -111,6 +118,7 @@ export class Game {
           this.notice = result.message;
           this.noticeFrames = 150;
           this.textBox.open(result.message);
+          this.events.publish({ type: "interact", id: nearest.data.id, frame: this.frame });
         } else if (this.player.startAttack()) {
           this.combat.beginSwing();
         }
@@ -125,6 +133,7 @@ export class Game {
               this.player.rupees += 3;
               this.notice = `${enemy.definition.name} vaincu · +3 rubis`;
               this.noticeFrames = 80;
+              this.quests.notify("defeat", enemy.spawn.type, this.frame);
             }
           }
         }
@@ -152,6 +161,7 @@ export class Game {
       }
     }
     this.transition.update();
+    this.quests.syncFlags(this.frame);
     if (this.noticeFrames > 0) this.noticeFrames -= 1;
     this.input.endFrame();
   }

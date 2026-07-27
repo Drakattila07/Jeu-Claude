@@ -56,3 +56,10 @@
 - Typewriter 2 frames/caractère, accélérable avec A
 - Résolution en cascade selon flags, météo et horaire
 - Panneau, puits et objets raccordés à l'interface
+
+## T09 — Flags et quêtes ✅
+
+- Flags comme source de vérité unique
+- Machines de quêtes : prérequis, étapes, récompenses et effets monde
+- EventBus pub/sub avec mémoire des 10 derniers événements
+- Quatre actes et douze quêtes secondaires entièrement décrits dans les données
