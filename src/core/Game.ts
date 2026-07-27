@@ -11,6 +11,8 @@ import { ZoneRegistry } from "../world/Zone";
 import { INTERACTABLES } from "../data/interactables";
 import { Interactable, ZoneObjectState } from "../entities/Interactable";
 import { Combat, overlaps } from "../systems/Combat";
+import { ENEMY_SPAWNS } from "../data/enemies";
+import { Enemy } from "../entities/Enemy";
 
 export const FIXED_STEP_MS = 1000 / 60;
 export const MAX_FRAME_DELTA_MS = 250;
@@ -45,6 +47,7 @@ export class Game {
   private notice = "";
   private noticeFrames = 0;
   private readonly combat = new Combat();
+  private enemies: Enemy[] = [];
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new Renderer(canvas);
@@ -75,6 +78,22 @@ export class Game {
     this.combat.update();
     if (!this.transition.active && !this.combat.frozen) {
       this.player.update();
+      for (const enemy of this.enemies) {
+        enemy.update();
+        if (enemy.active && overlaps(enemy.bounds, {
+          x: this.player.position.x + this.player.hitbox.x,
+          y: this.player.position.y + this.player.hitbox.y,
+          width: this.player.hitbox.width,
+          height: this.player.hitbox.height,
+        })) {
+          const dx = this.player.position.x - enemy.position.x;
+          const dy = this.player.position.y - enemy.position.y;
+          const length = Math.max(1, Math.hypot(dx, dy));
+          if (this.player.takeDamage(enemy.definition.damage, { x: dx / length, y: dy / length })) {
+            this.combat.confirmHit(`player:${this.frame}`, enemy.spawn.type === "gargoyle");
+          }
+        }
+      }
       if (this.input.wasPressed("A")) {
         const nearest = this.interactables
           .filter((object) => object.distanceTo(this.player.position) <= 25)
@@ -90,6 +109,17 @@ export class Game {
       }
       if (this.player.swordActive) {
         const sword = this.player.attackHitbox();
+        for (const enemy of this.enemies) {
+          if (enemy.active && overlaps(sword, enemy.bounds) && this.combat.confirmHit(enemy.spawn.id,
+            enemy.spawn.type === "gargoyle")) {
+            const defeated = enemy.hit(1, this.player.position);
+            if (defeated) {
+              this.player.rupees += 3;
+              this.notice = `${enemy.definition.name} vaincu · +3 rubis`;
+              this.noticeFrames = 80;
+            }
+          }
+        }
         for (const object of this.interactables) {
           if (object.data.kind === "bush" && overlaps(sword, object.bounds())
             && this.combat.confirmHit(object.data.id)) {
@@ -128,6 +158,7 @@ export class Game {
     this.map.drawLayer(ctx, "terrain");
     this.map.drawLayer(ctx, "decor_below");
     for (const object of this.interactables) object.draw(ctx);
+    for (const enemy of this.enemies) enemy.draw(ctx);
     this.player.draw(ctx);
     this.map.drawLayer(ctx, "decor_above");
     ctx.restore();
@@ -151,6 +182,9 @@ export class Game {
     const zone = this.zones.at(this.camera.zone);
     this.interactables = zone
       ? INTERACTABLES.filter((data) => data.zone === zone.id).map((data) => new Interactable(data, this.objectState))
+      : [];
+    this.enemies = zone
+      ? ENEMY_SPAWNS.filter((data) => data.zone === zone.id).map((data) => new Enemy(data, this.player))
       : [];
   }
 }

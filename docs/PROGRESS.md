@@ -42,3 +42,10 @@
 - Hitstop 3 frames, flash, i-frames 40 frames et knockback
 - Screen shake 2 px sur les impacts lourds
 - Buissons coupables et contrôle verrouillé pendant le windup
+
+## T07 — Ennemis et IA ✅
+
+- Coléoptères, chauves-souris, champignons et gargouilles pilotés par données
+- Patrouille, bond, plongée et réveil selon rayon
+- Dégâts de contact, drops, recul, flash et mort
+- Spawns détruits/recréés avec les changements de zone
