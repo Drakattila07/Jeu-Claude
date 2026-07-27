@@ -49,3 +49,10 @@
 - Patrouille, bond, plongée et réveil selon rayon
 - Dégâts de contact, drops, recul, flash et mort
 - Spawns détruits/recréés avec les changements de zone
+
+## T08 — Dialogues et typewriter ✅
+
+- Boîte de texte 3 lignes de 18 caractères et pagination
+- Typewriter 2 frames/caractère, accélérable avec A
+- Résolution en cascade selon flags, météo et horaire
+- Panneau, puits et objets raccordés à l'interface

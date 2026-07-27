@@ -13,6 +13,7 @@ import { Interactable, ZoneObjectState } from "../entities/Interactable";
 import { Combat, overlaps } from "../systems/Combat";
 import { ENEMY_SPAWNS } from "../data/enemies";
 import { Enemy } from "../entities/Enemy";
+import { TextBox } from "../ui/TextBox";
 
 export const FIXED_STEP_MS = 1000 / 60;
 export const MAX_FRAME_DELTA_MS = 250;
@@ -48,6 +49,7 @@ export class Game {
   private noticeFrames = 0;
   private readonly combat = new Combat();
   private enemies: Enemy[] = [];
+  private readonly textBox = new TextBox();
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new Renderer(canvas);
@@ -76,6 +78,11 @@ export class Game {
   private update(): void {
     this.frame += 1;
     this.combat.update();
+    if (this.textBox.active) {
+      this.textBox.update(this.input);
+      this.input.endFrame();
+      return;
+    }
     if (!this.transition.active && !this.combat.frozen) {
       this.player.update();
       for (const enemy of this.enemies) {
@@ -103,6 +110,7 @@ export class Game {
           if (result.changed && nearest.data.kind === "chest") this.player.rupees += 20;
           this.notice = result.message;
           this.noticeFrames = 150;
+          this.textBox.open(result.message);
         } else if (this.player.startAttack()) {
           this.combat.beginSwing();
         }
@@ -175,6 +183,7 @@ export class Game {
       this.renderer.pixelText(this.notice.slice(0, 38), 16, 190, PALETTE.cream);
       this.renderer.pixelText(this.notice.slice(38, 76), 16, 202, PALETTE.cream);
     }
+    this.textBox.draw(this.renderer);
     this.transition.draw(ctx);
   }
 
