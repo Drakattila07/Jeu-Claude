@@ -21,3 +21,10 @@
 - AABB contre la grille solide, diagonales normalisées
 - Correction de coin jusqu'à 4 px
 - Tests du glissement et de la reproductibilité
+
+## T04 — Caméra et transitions ✅
+
+- Caméra par écran et registre de zones piloté par les données
+- Sorties cardinales et apparition à deux tuiles du bord opposé
+- Fondu noir 8 frames puis retour en 8 frames
+- Test d'une boucle de navigation sur quatre zones

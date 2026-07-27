@@ -5,6 +5,9 @@ import mapData from "../data/maps/hamlet_well.json";
 import { TileMap, type TiledMapData } from "../world/TileMap";
 import { TileSet } from "../world/TileSet";
 import { Player } from "../entities/Player";
+import { Camera } from "./Camera";
+import { Transition } from "../ui/Transition";
+import { ZoneRegistry } from "../world/Zone";
 
 export const FIXED_STEP_MS = 1000 / 60;
 export const MAX_FRAME_DELTA_MS = 250;
@@ -31,6 +34,9 @@ export class Game {
   private frame = 0;
   private readonly map = new TileMap(mapData as TiledMapData, new TileSet());
   private readonly player: Player;
+  private readonly camera = new Camera();
+  private readonly transition = new Transition();
+  private readonly zones = new ZoneRegistry();
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new Renderer(canvas);
@@ -57,7 +63,22 @@ export class Game {
 
   private update(): void {
     this.frame += 1;
-    this.player.update();
+    if (!this.transition.active) {
+      this.player.update();
+      const edge = this.camera.edgeFor(this.player.position);
+      if (edge) {
+        const destination = this.camera.adjacent(edge);
+        if (this.zones.canEnter(destination)) {
+          this.transition.start(() => {
+            this.camera.zone = destination;
+            this.player.position = this.camera.enterPosition(edge, this.player.position);
+          });
+        } else {
+          this.player.position = this.camera.enterPosition(edge, this.player.position);
+        }
+      }
+    }
+    this.transition.update();
     this.input.endFrame();
   }
 
@@ -71,7 +92,9 @@ export class Game {
     this.map.drawLayer(ctx, "decor_above");
     ctx.fillStyle = PALETTE.night;
     ctx.fillRect(4, 4, 74, 13);
-    this.renderer.pixelText("PLACE DU PUITS", 8, 6, PALETTE.cream);
+    const zone = this.zones.at(this.camera.zone);
+    this.renderer.pixelText(zone?.name ?? "VALLÉE INCONNUE", 8, 6, PALETTE.cream);
     this.renderer.pixelText(`F${String(this.frame).padStart(5, "0")}`, 250, 6, PALETTE.cream, "right");
+    this.transition.draw(ctx);
   }
 }
