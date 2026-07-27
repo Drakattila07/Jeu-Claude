@@ -28,3 +28,10 @@
 - Sorties cardinales et apparition à deux tuiles du bord opposé
 - Fondu noir 8 frames puis retour en 8 frames
 - Test d'une boucle de navigation sur quatre zones
+
+## T05 — Interactables ✅
+
+- Puits, panneau, coffre, pot et buisson décrits dans les données
+- Interaction contextuelle à proximité
+- Persistance par zone des coffres ouverts et buissons coupés
+- Messages de retour et récompense en rubis
