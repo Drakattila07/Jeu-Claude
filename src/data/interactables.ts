@@ -4,6 +4,7 @@ export const INTERACTABLES = [
   { id: "starter_chest", zone: "hameau_nord", kind: "chest", x: 96, y: 128, text: "Vous trouvez 20 rubis !" },
   { id: "south_pot", zone: "hameau_sud", kind: "pot", x: 176, y: 112, text: "Une vieille jarre fêlée." },
   { id: "quay_bush", zone: "quai_lac", kind: "bush", x: 64, y: 96, text: "Un buisson agité par le vent du lac." }
+  ,{ id: "iris_cauldron", zone: "lisiere_carrefour", kind: "cauldron", x: 48, y: 112, text: "Le chaudron bouillonne d'impatience." }
 ] as const;
 
 export type InteractableData = (typeof INTERACTABLES)[number];

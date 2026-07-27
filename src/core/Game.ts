@@ -23,6 +23,8 @@ import { NPCS } from "../data/npcs/core";
 import { Npc } from "../entities/Npc";
 import { EnvironmentOverlay } from "../ui/EnvironmentOverlay";
 import { ZoneVariants } from "../world/ZoneVariants";
+import { Inventory } from "../systems/Inventory";
+import { Alchemy } from "../systems/Alchemy";
 
 export const FIXED_STEP_MS = 1000 / 60;
 export const MAX_FRAME_DELTA_MS = 250;
@@ -67,6 +69,8 @@ export class Game {
   private npcs: Npc[] = [];
   private readonly environment = new EnvironmentOverlay();
   private readonly variants = new ZoneVariants();
+  private readonly inventory = new Inventory();
+  private readonly alchemy = new Alchemy();
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new Renderer(canvas);
@@ -74,6 +78,9 @@ export class Game {
     this.player = new Player(this.input, this.map);
     this.loadZoneObjects();
     this.quests.refresh();
+    this.inventory.add("bitter_root", 2);
+    this.inventory.add("well_water");
+    this.inventory.add("apple");
   }
 
   start(): void {
@@ -134,11 +141,14 @@ export class Game {
           this.quests.notify("talkTo", nearestNpc.data.id, this.frame);
           this.events.publish({ type: "talk", id: nearestNpc.data.id, frame: this.frame });
         } else if (nearest) {
-          const result = nearest.interact();
-          if (result.changed && nearest.data.kind === "chest") this.player.rupees += 20;
+          const result = nearest.data.kind === "cauldron"
+            ? this.alchemy.brewFirst(this.inventory)
+            : nearest.interact();
+          if ("changed" in result && result.changed && nearest.data.kind === "chest") this.player.rupees += 20;
           this.notice = result.message;
           this.noticeFrames = 150;
           this.textBox.open(result.message);
+          if ("result" in result && result.result === "eternal_lantern") this.flags.set("lantern");
           this.events.publish({ type: "interact", id: nearest.data.id, frame: this.frame });
         } else if (this.player.startAttack()) {
           this.combat.beginSwing();

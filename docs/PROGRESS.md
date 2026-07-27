@@ -84,3 +84,10 @@
 - Forêt v1/v2/v3, clairière jour/nuit, rivière et pont
 - Moulin arrêté/tournant et dix écrans de lac bas/haut
 - Tests des cascades de flags
+
+## T13 — Chaudron et alchimie ✅
+
+- Inventaire typé et recettes entièrement pilotées par données
+- Potions rouge, verte et bleue
+- Lanterne éternelle et lecture de la Lettre jamais envoyée
+- Résultat comique « Bloup » pour les objets sans recette

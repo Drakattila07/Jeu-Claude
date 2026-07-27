@@ -68,6 +68,16 @@ export class Interactable extends Entity {
       ctx.fillStyle = PALETTE.leaf;
       ctx.fillRect(x + 3, y + 3, 6, 9);
       ctx.fillRect(x + 8, y + 2, 5, 10);
+    } else if (this.data.kind === "cauldron") {
+      ctx.fillStyle = PALETTE.ink;
+      ctx.fillRect(x + 1, y + 6, 14, 8);
+      ctx.fillStyle = PALETTE.purple;
+      ctx.fillRect(x + 3, y + 5, 10, 3);
+      ctx.fillStyle = PALETTE.leafLight;
+      ctx.fillRect(x + 5, y + 2, 2, 2);
+      ctx.fillRect(x + 10, y, 2, 2);
+      ctx.fillStyle = PALETTE.red;
+      ctx.fillRect(x + 5, y + 14, 6, 2);
     }
     ctx.restore();
   }
