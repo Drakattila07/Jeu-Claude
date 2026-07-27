@@ -17,6 +17,10 @@ import { TextBox } from "../ui/TextBox";
 import { EventBus } from "./EventBus";
 import { Flags } from "../systems/Flags";
 import { QuestSystem } from "../systems/Quest";
+import { Clock } from "./Clock";
+import { Affinity } from "../systems/Affinity";
+import { NPCS } from "../data/npcs/core";
+import { Npc } from "../entities/Npc";
 
 export const FIXED_STEP_MS = 1000 / 60;
 export const MAX_FRAME_DELTA_MS = 250;
@@ -56,6 +60,9 @@ export class Game {
   private readonly events = new EventBus();
   private readonly flags = new Flags();
   private readonly quests = new QuestSystem(this.flags, this.events);
+  private readonly clock = new Clock();
+  private readonly affinity = new Affinity();
+  private npcs: Npc[] = [];
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new Renderer(canvas);
@@ -85,6 +92,7 @@ export class Game {
   private update(): void {
     this.frame += 1;
     this.combat.update();
+    this.clock.update();
     if (this.textBox.active) {
       this.textBox.update(this.input);
       this.input.endFrame();
@@ -92,6 +100,7 @@ export class Game {
     }
     if (!this.transition.active && !this.combat.frozen) {
       this.player.update();
+      for (const npc of this.npcs) npc.update();
       for (const enemy of this.enemies) {
         enemy.update();
         if (enemy.active && overlaps(enemy.bounds, {
@@ -112,7 +121,15 @@ export class Game {
         const nearest = this.interactables
           .filter((object) => object.distanceTo(this.player.position) <= 25)
           .sort((a, b) => a.distanceTo(this.player.position) - b.distanceTo(this.player.position))[0];
-        if (nearest) {
+        const nearestNpc = this.npcs
+          .filter((npc) => npc.distanceTo(this.player.position) <= 25)
+          .sort((a, b) => a.distanceTo(this.player.position) - b.distanceTo(this.player.position))[0];
+        if (nearestNpc && (!nearest || nearestNpc.distanceTo(this.player.position) < nearest.distanceTo(this.player.position))) {
+          this.textBox.open(nearestNpc.talk(this.events), nearestNpc.data.name);
+          this.affinity.add(nearestNpc.data.id, 1);
+          this.quests.notify("talkTo", nearestNpc.data.id, this.frame);
+          this.events.publish({ type: "talk", id: nearestNpc.data.id, frame: this.frame });
+        } else if (nearest) {
           const result = nearest.interact();
           if (result.changed && nearest.data.kind === "chest") this.player.rupees += 20;
           this.notice = result.message;
@@ -176,6 +193,7 @@ export class Game {
     this.map.drawLayer(ctx, "terrain");
     this.map.drawLayer(ctx, "decor_below");
     for (const object of this.interactables) object.draw(ctx);
+    for (const npc of this.npcs) npc.draw(ctx);
     for (const enemy of this.enemies) enemy.draw(ctx);
     this.player.draw(ctx);
     this.map.drawLayer(ctx, "decor_above");
@@ -204,6 +222,11 @@ export class Game {
       : [];
     this.enemies = zone
       ? ENEMY_SPAWNS.filter((data) => data.zone === zone.id).map((data) => new Enemy(data, this.player))
+      : [];
+    this.npcs = zone
+      ? NPCS.filter((npc) => npc.schedule.some((entry) =>
+        entry.zone === zone.id && this.clock.hour >= entry.start && this.clock.hour < entry.end))
+        .map((data) => new Npc(data, this.map, this.clock))
       : [];
   }
 }

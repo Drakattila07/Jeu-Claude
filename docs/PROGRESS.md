@@ -63,3 +63,10 @@
 - Machines de quêtes : prérequis, étapes, récompenses et effets monde
 - EventBus pub/sub avec mémoire des 10 derniers événements
 - Quatre actes et douze quêtes secondaires entièrement décrits dans les données
+
+## T10 — PNJ, horaires et affinité ✅
+
+- Casting complet piloté par données, avec quatre bavardages chacun
+- Emplois du temps horaires et déplacement A* sur grille
+- Affinité plafonnée à 9, paliers uniques 3/6/9
+- Réactions à la mémoire récente de l'EventBus
