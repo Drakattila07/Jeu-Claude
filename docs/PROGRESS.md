@@ -35,3 +35,10 @@
 - Interaction contextuelle à proximité
 - Persistance par zone des coffres ouverts et buissons coupés
 - Messages de retour et récompense en rubis
+
+## T06 — Combat et game feel ✅
+
+- Épée : 4 frames de windup, 8 actives, 6 de recovery
+- Hitstop 3 frames, flash, i-frames 40 frames et knockback
+- Screen shake 2 px sur les impacts lourds
+- Buissons coupables et contrôle verrouillé pendant le windup

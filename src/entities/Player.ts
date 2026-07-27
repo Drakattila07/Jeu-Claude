@@ -13,6 +13,10 @@ export class Player extends Entity {
   maxHearts = 6;
   rupees = 12;
   readonly speed = 1.5;
+  attackFrame = -1;
+  invulnerabilityFrames = 0;
+  flashFrames = 0;
+  knockbackFrames = 0;
 
   constructor(private readonly input: Input, private map: TileMap) {
     super({ x: 120, y: 168 }, { x: 3, y: 7, width: 10, height: 9 });
@@ -22,8 +26,15 @@ export class Player extends Entity {
   setMap(map: TileMap): void { this.map = map; }
 
   update(): void {
+    if (this.invulnerabilityFrames > 0) this.invulnerabilityFrames -= 1;
+    if (this.flashFrames > 0) this.flashFrames -= 1;
+    if (this.attackFrame >= 0) {
+      this.attackFrame += 1;
+      if (this.attackFrame >= 18) this.attackFrame = -1;
+    }
     let dx = (this.input.isDown("Right") ? 1 : 0) - (this.input.isDown("Left") ? 1 : 0);
     let dy = (this.input.isDown("Down") ? 1 : 0) - (this.input.isDown("Up") ? 1 : 0);
+    if (this.attackFrame >= 0 && this.attackFrame <= 4) { dx = 0; dy = 0; }
     if (dx !== 0 && dy !== 0) {
       const diagonal = Math.SQRT1_2;
       dx *= diagonal;
@@ -38,7 +49,36 @@ export class Player extends Entity {
     else this.walkFrame = 0;
   }
 
+  startAttack(): boolean {
+    if (this.attackFrame >= 0) return false;
+    this.attackFrame = 0;
+    return true;
+  }
+
+  get swordActive(): boolean { return this.attackFrame >= 4 && this.attackFrame < 12; }
+
+  attackHitbox(): { x: number; y: number; width: number; height: number } {
+    const x = this.position.x;
+    const y = this.position.y;
+    if (this.direction === "up") return { x: x + 2, y: y - 12, width: 12, height: 16 };
+    if (this.direction === "down") return { x: x + 2, y: y + 12, width: 12, height: 16 };
+    if (this.direction === "left") return { x: x - 12, y: y + 2, width: 16, height: 12 };
+    return { x: x + 12, y: y + 2, width: 16, height: 12 };
+  }
+
+  takeDamage(hearts: number, direction: Readonly<{ x: number; y: number }>): boolean {
+    if (this.invulnerabilityFrames > 0) return false;
+    this.hearts = Math.max(0, this.hearts - hearts);
+    this.invulnerabilityFrames = 40;
+    this.flashFrames = 4;
+    this.knockbackFrames = 8;
+    this.position.x += direction.x * 4;
+    this.position.y += direction.y * 4;
+    return true;
+  }
+
   draw(ctx: CanvasRenderingContext2D): void {
+    if (this.invulnerabilityFrames > 0 && Math.floor(this.invulnerabilityFrames / 4) % 2 === 0) return;
     const x = Math.round(this.position.x);
     const y = Math.round(this.position.y);
     const step = Math.floor(this.walkFrame / 8) % 4;
@@ -63,6 +103,17 @@ export class Player extends Entity {
     ctx.fillStyle = PALETTE.woodDark;
     ctx.fillRect(x + 4 + (step % 2), y + 13, 3, 3);
     ctx.fillRect(x + 9 - (step % 2), y + 13, 3, 3);
+    if (this.attackFrame >= 0) {
+      const blade = this.attackHitbox();
+      ctx.fillStyle = this.flashFrames > 0 ? PALETTE.white : PALETTE.stoneLight;
+      if (this.direction === "up" || this.direction === "down") {
+        ctx.fillRect(Math.round(blade.x + 5), Math.round(blade.y), 3, blade.height);
+      } else {
+        ctx.fillRect(Math.round(blade.x), Math.round(blade.y + 5), blade.width, 3);
+      }
+      ctx.fillStyle = PALETTE.yellow;
+      ctx.fillRect(x + 5, y + 8, 6, 2);
+    }
     ctx.restore();
   }
 }

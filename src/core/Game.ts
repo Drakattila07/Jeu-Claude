@@ -10,6 +10,7 @@ import { Transition } from "../ui/Transition";
 import { ZoneRegistry } from "../world/Zone";
 import { INTERACTABLES } from "../data/interactables";
 import { Interactable, ZoneObjectState } from "../entities/Interactable";
+import { Combat, overlaps } from "../systems/Combat";
 
 export const FIXED_STEP_MS = 1000 / 60;
 export const MAX_FRAME_DELTA_MS = 250;
@@ -43,6 +44,7 @@ export class Game {
   private interactables: Interactable[] = [];
   private notice = "";
   private noticeFrames = 0;
+  private readonly combat = new Combat();
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new Renderer(canvas);
@@ -70,7 +72,8 @@ export class Game {
 
   private update(): void {
     this.frame += 1;
-    if (!this.transition.active) {
+    this.combat.update();
+    if (!this.transition.active && !this.combat.frozen) {
       this.player.update();
       if (this.input.wasPressed("A")) {
         const nearest = this.interactables
@@ -81,6 +84,19 @@ export class Game {
           if (result.changed && nearest.data.kind === "chest") this.player.rupees += 20;
           this.notice = result.message;
           this.noticeFrames = 150;
+        } else if (this.player.startAttack()) {
+          this.combat.beginSwing();
+        }
+      }
+      if (this.player.swordActive) {
+        const sword = this.player.attackHitbox();
+        for (const object of this.interactables) {
+          if (object.data.kind === "bush" && overlaps(sword, object.bounds())
+            && this.combat.confirmHit(object.data.id)) {
+            object.interact();
+            this.notice = "FSSSH ! Des feuilles tourbillonnent.";
+            this.noticeFrames = 90;
+          }
         }
       }
       const edge = this.camera.edgeFor(this.player.position);
@@ -105,12 +121,16 @@ export class Game {
   private render(): void {
     const { ctx } = this.renderer;
     this.renderer.clear(PALETTE.grass);
+    const shake = this.combat.shakeOffset(this.frame);
+    ctx.save();
+    ctx.translate(shake.x, shake.y);
     this.map.drawLayer(ctx, "ground");
     this.map.drawLayer(ctx, "terrain");
     this.map.drawLayer(ctx, "decor_below");
     for (const object of this.interactables) object.draw(ctx);
     this.player.draw(ctx);
     this.map.drawLayer(ctx, "decor_above");
+    ctx.restore();
     ctx.fillStyle = PALETTE.night;
     ctx.fillRect(4, 4, 74, 13);
     const zone = this.zones.at(this.camera.zone);

@@ -27,6 +27,11 @@ export class Interactable extends Entity {
     return Math.hypot(this.position.x - position.x, this.position.y - position.y);
   }
 
+  bounds(): { x: number; y: number; width: number; height: number } {
+    return { x: this.position.x + this.hitbox.x, y: this.position.y + this.hitbox.y,
+      width: this.hitbox.width, height: this.hitbox.height };
+  }
+
   interact(): InteractionResult {
     if (this.data.kind === "chest") {
       if (this.state.get(this.data.zone, this.data.id)) return { message: "Le coffre est vide.", changed: false };
