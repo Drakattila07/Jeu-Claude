@@ -85,6 +85,12 @@ export const NPC_ROUTINES: Readonly<Record<string, readonly NpcRoutineStep[]>> =
     { activity: "walk", duration: 260, offset: [3, -1] },
     { activity: "inspect", duration: 260, offset: [1, 2], facing: "left" },
   ],
+  garde_ronan: [
+    { activity: "guard", duration: 300, offset: [0, 0], facing: "left" },
+    { activity: "walk", duration: 360, offset: [-4, -3] },
+    { activity: "guard", duration: 300, offset: [-2, 1], facing: "up" },
+    { activity: "walk", duration: 360, offset: [0, -5] },
+  ],
   fermier_a: [
     { activity: "walk", duration: 280, offset: [-2, -2] },
     { activity: "farm", duration: 360, offset: [2, 0], facing: "down" },

@@ -18,21 +18,21 @@ export interface QuestDefinition {
 
 export const QUESTS = [
   { id: "act1_puits_muet", title: "Le Puits Muet", giver: "doyen_orme", prerequisites: [], steps: [
-    { id: "epee", type: "flag", target: "sword_obtained", hint: "Bram forge une lame pour l'expédition." },
-    { id: "racines", type: "defeat", target: "source_roots", hint: "La source est bloquée au nord de la Lisière." },
-    { id: "vanne", type: "flag", target: "source_open", hint: "Tournez la vieille vanne." }
+    { id: "epee", type: "flag", target: "sword_obtained", hint: "Hameau Nord : parlez à Bram avec X." },
+    { id: "racines", type: "defeat", target: "source_roots", hint: "Bosquet des Souches : coupez les racines." },
+    { id: "vanne", type: "flag", target: "source_open", hint: "Près de la source : actionnez la vieille vanne." }
   ], rewards: [{ type: "flag", id: "act1_complete" }], worldEffects: ["well_restored", "river_flowing"] },
   { id: "act2_marche_nuit", title: "Ce qui Marche la Nuit", giver: "doyen_orme", prerequisites: ["act1_complete"], steps: [
-    { id: "observe", type: "flag", target: "walker_seen", hint: "Attendez la nuit dans la Clairière des Cimes." },
-    { id: "suivre", type: "flag", target: "walker_followed", hint: "Suivez les empreintes sans courir." }
+    { id: "observe", type: "flag", target: "walker_seen", hint: "La nuit : rejoignez la Clairière des Cimes." },
+    { id: "suivre", type: "flag", target: "walker_followed", hint: "Clairière des Cimes : suivez les empreintes." }
   ], rewards: [{ type: "flag", id: "gloves_obtained" }], worldEffects: ["stone_steps_open"] },
   { id: "act3_trois_sceaux", title: "Les Trois Sceaux", giver: "iris", prerequisites: ["walker_followed"], steps: [
-    { id: "sceaux", type: "collect", target: "seal", count: 3, hint: "Trois épreuves gardent le Canal Tari." },
-    { id: "coeur", type: "flag", target: "mechanism_repaired", hint: "Réparez le Cœur du Mécanisme." }
+    { id: "sceaux", type: "collect", target: "seal", count: 3, hint: "Ruines Basses : activez les trois Sceaux." },
+    { id: "coeur", type: "flag", target: "mechanism_repaired", hint: "Canal Tari : réparez le Cœur du Mécanisme." }
   ], rewards: [{ type: "flag", id: "lead_boots" }], worldEffects: ["lake_high", "mill_running"] },
   { id: "act4_cime_errante", title: "La Cime Errante", giver: "doyen_orme", prerequisites: ["mechanism_repaired"], steps: [
-    { id: "boss", type: "defeat", target: "mother_tree", hint: "La grande silhouette attend aux Cimes." },
-    { id: "choix", type: "choice", target: "ending", hint: "Libérer ou enraciner l'Arbre-Mère." }
+    { id: "boss", type: "defeat", target: "mother_tree", hint: "Cime Errante : affrontez l'Arbre-Mère." },
+    { id: "choix", type: "choice", target: "ending", hint: "Devant l'Arbre-Mère : choisissez son destin." }
   ], rewards: [{ type: "flag", id: "postgame" }], worldEffects: ["secret_hunt"] },
   { id: "canne_perdue", title: "La Canne Perdue", giver: "nessa", prerequisites: ["act1_complete"], steps: [
     { id: "trouver", type: "flag", target: "rod_found", hint: "Le vent souffle vers l'est." },

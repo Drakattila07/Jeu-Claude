@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createCottageMap, nearCottageExit } from "../world/CottageInterior";
+import { createCottageMap, createHermitageMap, nearCottageExit } from "../world/CottageInterior";
 import { TileMap } from "../world/TileMap";
 import { TileSet } from "../world/TileSet";
 import { createProceduralMap } from "../world/ZoneMapFactory";
@@ -14,12 +14,20 @@ describe("maison et lieux remarquables", () => {
     const tileSet = new TileSet();
     const room = new TileMap(createCottageMap(), tileSet);
     expect(tileSet.properties(14).solid).toBe(true);
-    expect(room.tileAt("terrain", 2, 3)).toBe(35);
-    expect(room.tileAt("terrain", 12, 3)).toBe(36);
-    expect(room.tileAt("terrain", 7, 6)).toBe(37);
-    expect(room.tileAt("terrain", 7, 1)).toBe(38);
+    expect(room.tileAt("ground", 5, 5)).toBe(32);
+    expect(room.tileAt("terrain", 2, 3)).toBe(41);
+    expect(room.tileAt("terrain", 12, 3)).toBe(41);
+    expect(room.tileAt("terrain", 7, 6)).toBe(41);
     expect(room.isSolid(7, 12)).toBe(true);
     expect(nearCottageExit({ x: 120, y: 176 })).toBe(true);
+  });
+
+  it("construit un intérieur distinct pour l'ermitage", () => {
+    const room = new TileMap(createHermitageMap(), new TileSet());
+    expect(room.tileAt("ground", 5, 5)).toBe(31);
+    expect(room.tileAt("terrain", 2, 3)).toBe(41);
+    expect(room.tileAt("terrain", 10, 3)).toBe(41);
+    expect(room.isSolid(7, 12)).toBe(true);
   });
 
   it("fait réellement serpenter le fleuve", () => {
@@ -37,5 +45,12 @@ describe("maison et lieux remarquables", () => {
     expect(hermitage.tileAt("terrain", 10, 4)).toBe(9);
     expect(hermitage.tileAt("terrain", 11, 4)).toBe(14);
     expect(hermitage.tileAt("terrain", 2, 4)).toBe(29);
+  });
+
+  it("conserve une arène de sommet dégagée pour le boss", () => {
+    const arena = new TileMap(createProceduralMap(zone("boss_arena")), new TileSet());
+    for (let y = 4; y <= 9; y += 1) {
+      for (let x = 5; x <= 10; x += 1) expect(arena.isSolid(x, y)).toBe(false);
+    }
   });
 });

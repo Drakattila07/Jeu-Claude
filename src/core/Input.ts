@@ -1,10 +1,10 @@
-export const ACTIONS = ["Up", "Down", "Left", "Right", "A", "B", "Start", "Select"] as const;
+export const ACTIONS = ["Up", "Down", "Left", "Right", "A", "Attack", "B", "Start", "Select"] as const;
 export type Action = (typeof ACTIONS)[number];
 
 const KEY_BINDINGS: Readonly<Record<string, Action>> = {
   ArrowUp: "Up", KeyW: "Up", ArrowDown: "Down", KeyS: "Down",
   ArrowLeft: "Left", KeyA: "Left", ArrowRight: "Right", KeyD: "Right",
-  KeyX: "A", Space: "A", KeyC: "B", Enter: "Start", ShiftLeft: "Select"
+  KeyX: "A", Space: "Attack", KeyC: "B", Enter: "Start", ShiftLeft: "Select"
 };
 
 export class Input {

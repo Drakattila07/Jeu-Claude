@@ -166,6 +166,16 @@
 - Falaises en terrasses avec escaliers et sentiers lisibles
 - Ermitage de Gorm reconstruit autour d'une maison isolée dans les hauteurs
 
+## Lisibilité, habitants et montagnes ✅
+
+- Intérieur du Doyen redessiné autour d'un grand tapis rouge et de meubles complets
+- Journal multi-quêtes, étapes numérotées, progression et objectif permanent
+- X réservé aux dialogues et interactions ; Espace réservé à l'épée
+- Garde du village, riposte des habitants agressés et alarme collective
+- Cinq loups répartis dans les forêts
+- Cimes, terrasses rocheuses, ruines et arène finale entièrement restructurées
+- Intérieur distinct et accessible pour l'ermitage de Gorm
+
 ## État final
 
 Les vingt tickets sont implémentés, compilés, testés et versionnés

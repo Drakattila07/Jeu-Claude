@@ -87,6 +87,41 @@ export function createProceduralMap(zone: WorldZoneData): TiledMapData {
       if (x < 6 || x > 9) layers.decor_above[index(x, 1)] = zone.biome === "peaks" ? 24 : 6;
     }
   }
+  if (zone.biome === "peaks") {
+    for (const ridgeY of [3, 9]) {
+      for (let x = 1; x < WIDTH - 1; x += 1) {
+        if (x >= 6 && x <= 9) continue;
+        layers.terrain[index(x, ridgeY)] = 19;
+        if ((x + ridgeY) % 3 === 0) layers.decor_above[index(x, ridgeY - 1)] = 24;
+      }
+      layers.decor_below[index(7, ridgeY)] = 16;
+      layers.decor_below[index(8, ridgeY)] = 16;
+    }
+    for (let y = 1; y < HEIGHT - 1; y += 1) {
+      const trailX = y < 5 ? 7 : y < 9 ? 8 : 7;
+      for (const x of [trailX, trailX + 1]) {
+        layers.ground[index(x, y)] = 31;
+        layers.terrain[index(x, y)] = 0;
+        layers.decor_below[index(x, y)] = 0;
+      }
+    }
+    for (const [x, y] of [[2, 6], [3, 7], [12, 5], [13, 6], [4, 11], [11, 2]] as const) {
+      if (!isMainPath(x, y)) layers.terrain[index(x, y)] = 29;
+    }
+  }
+  if (zone.id === "boss_arena") {
+    for (let y = 2; y <= 11; y += 1) {
+      for (let x = 2; x <= 13; x += 1) {
+        layers.ground[index(x, y)] = (x + y) % 3 === 0 ? 31 : 2;
+        layers.terrain[index(x, y)] = 0;
+        layers.decor_below[index(x, y)] = 0;
+        layers.decor_above[index(x, y)] = 0;
+      }
+    }
+    for (const [x, y] of [[2, 2], [13, 2], [2, 11], [13, 11]] as const) {
+      layers.terrain[index(x, y)] = 29;
+    }
+  }
   if (zone.biome === "river") {
     const curve = [7, 7, 6, 5, 5, 6, 7, 8, 9, 10, 9, 8, 8, 8] as const;
     for (let y = 1; y < HEIGHT - 1; y += 1) {
@@ -139,14 +174,34 @@ export function createProceduralMap(zone: WorldZoneData): TiledMapData {
     layers.ground[index(12, 7)] = 28;
   }
   if (zone.biome === "ruins") {
-    layers.terrain[index(5, 4)] = 29;
-    layers.terrain[index(10, 4)] = 29;
-    layers.terrain[index(5, 9)] = 21;
-    layers.terrain[index(10, 9)] = 21;
-    layers.decor_below[index(6, 5)] = 16;
-    layers.decor_below[index(9, 5)] = 16;
-    layers.decor_below[index(6, 8)] = 16;
-    layers.decor_below[index(9, 8)] = 16;
+    for (let y = 3; y <= 10; y += 1) {
+      for (let x = 3; x <= 12; x += 1) {
+        layers.ground[index(x, y)] = 31;
+        layers.terrain[index(x, y)] = 0;
+        layers.decor_below[index(x, y)] = 0;
+      }
+    }
+    for (const [x, y] of [[3, 3], [4, 3], [11, 3], [12, 3], [3, 4], [12, 4],
+      [3, 8], [12, 8], [3, 9], [4, 9], [11, 9], [12, 9]] as const) {
+      layers.terrain[index(x, y)] = 29;
+    }
+    layers.decor_below[index(5, 4)] = 16;
+    layers.decor_below[index(10, 4)] = 16;
+    layers.decor_below[index(5, 9)] = 16;
+    layers.decor_below[index(10, 9)] = 16;
+    if (zone.id === "grand_escalier") {
+      for (let y = 3; y <= 10; y += 1) {
+        layers.decor_below[index(6, y)] = 16;
+        layers.decor_below[index(7, y)] = 16;
+        layers.decor_below[index(8, y)] = 16;
+        layers.decor_below[index(9, y)] = 16;
+      }
+    }
+    if (zone.id === "cour_statues") {
+      for (const [x, y] of [[5, 4], [10, 4], [5, 8], [10, 8], [3, 6], [12, 6]] as const) {
+        layers.terrain[index(x, y)] = 29;
+      }
+    }
   }
   if (zone.biome === "cliffs") {
     for (const ridgeY of [3, 9]) {

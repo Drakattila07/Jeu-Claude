@@ -2,7 +2,8 @@ export const ENEMY_TYPES = {
   beetle: { name: "Coléoptère sauteur", hearts: 2, speed: 0.45, damage: 1, behavior: "leap", color: "leaf" },
   branch_bat: { name: "Chauve-souris de branche", hearts: 1, speed: 0.8, damage: 1, behavior: "dive", color: "purple" },
   hop_mushroom: { name: "Champignon bondissant", hearts: 2, speed: 0.55, damage: 1, behavior: "hop", color: "rose" },
-  gargoyle: { name: "Gargouille dormante", hearts: 4, speed: 0.35, damage: 2, behavior: "wake", color: "stone" }
+  gargoyle: { name: "Gargouille dormante", hearts: 4, speed: 0.35, damage: 2, behavior: "wake", color: "stone" },
+  wolf: { name: "Loup des brumes", hearts: 3, speed: 0.78, damage: 1, behavior: "hunt", color: "stone" }
 } as const;
 
 export type EnemyType = keyof typeof ENEMY_TYPES;
@@ -12,7 +13,12 @@ export const ENEMY_SPAWNS = [
   { id: "beetle_2", zone: "lisiere_carrefour", type: "beetle", x: 184, y: 128 },
   { id: "bat_1", zone: "lisiere_carrefour", type: "branch_bat", x: 176, y: 56 },
   { id: "mushroom_1", zone: "lisiere_carrefour", type: "hop_mushroom", x: 88, y: 48 },
-  { id: "gargoyle_1", zone: "marches_ruines", type: "gargoyle", x: 136, y: 88 }
+  { id: "gargoyle_1", zone: "marches_ruines", type: "gargoyle", x: 136, y: 88 },
+  { id: "wolf_1", zone: "lisiere_sentier", type: "wolf", x: 64, y: 80 },
+  { id: "wolf_2", zone: "bosquet_souches", type: "wolf", x: 176, y: 128 },
+  { id: "wolf_3", zone: "clairiere_cimes", type: "wolf", x: 72, y: 120 },
+  { id: "wolf_4", zone: "lisiere_est", type: "wolf", x: 184, y: 72 },
+  { id: "wolf_5", zone: "canopee_dense", type: "wolf", x: 96, y: 144 }
 ] as const;
 
 export type EnemySpawn = (typeof ENEMY_SPAWNS)[number];

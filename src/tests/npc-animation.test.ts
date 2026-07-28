@@ -42,4 +42,14 @@ describe("routines visuelles des PNJ", () => {
     for (let frame = 0; frame < 100; frame += 1) npc.update();
     expect(Math.hypot(npc.position.x - start.x, npc.position.y - start.y)).toBeGreaterThan(30);
   });
+
+  it("ajoute un garde qui devient hostile après une attaque", () => {
+    const guardData = NPCS.find((npc) => npc.id === "garde_ronan")!;
+    const guard = new Npc(guardData, openMap(), new Clock());
+    expect(guard.isGuard).toBe(true);
+    expect(guard.hostile).toBe(false);
+    guard.provoke({ x: 120, y: 120 });
+    expect(guard.hostile).toBe(true);
+    expect(guard.activity).toBe("guard");
+  });
 });

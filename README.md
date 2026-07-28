@@ -8,7 +8,8 @@ et comprendre pourquoi les arbres se sont mis à marcher.
 ## Jouer
 
 - Flèches ou WASD : marcher
-- X / Espace : parler, agir, épée
+- X : parler et agir
+- Espace : utiliser l'épée
 - C : objet / pêche
 - Entrée : sac, carte et quête
 

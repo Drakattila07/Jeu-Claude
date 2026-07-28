@@ -42,8 +42,11 @@ import { createProceduralMap } from "../world/ZoneMapFactory";
 import {
   COTTAGE_ENTRY,
   createCottageMap,
-  drawCottageWarmth,
+  createHermitageMap,
+  drawCottageInterior,
+  drawHermitageInterior,
   nearCottageExit,
+  type InteriorKind,
 } from "../world/CottageInterior";
 
 export const FIXED_STEP_MS = 1000 / 60;
@@ -105,7 +108,7 @@ export class Game {
   private readonly audio = new Audio();
   private readonly particles = new Particles();
   private readonly saveLoad = new SaveLoad(window.localStorage);
-  private insideCottage = false;
+  private interior: InteriorKind | null = null;
   private exteriorReturnPosition = { x: 128, y: 72 };
 
   constructor(canvas: HTMLCanvasElement) {
@@ -154,7 +157,8 @@ export class Game {
     this.combat.update();
     this.clock.update();
     this.particles.update();
-    if (this.input.wasPressed("A") || this.input.wasPressed("B") || this.input.wasPressed("Start")) this.audio.unlock();
+    if (this.input.wasPressed("A") || this.input.wasPressed("Attack")
+      || this.input.wasPressed("B") || this.input.wasPressed("Start")) this.audio.unlock();
     const audioZone = this.zones.at(this.camera.zone)?.id ?? "village";
     const mood = audioZone === "boss_arena" ? "boss"
       : audioZone === "canal_entry" ? "dungeon"
@@ -206,7 +210,17 @@ export class Game {
     }
     if (!this.transition.active && !this.combat.frozen) {
       this.player.update();
-      for (const npc of this.npcs) npc.update();
+      for (const npc of this.npcs) {
+        npc.update();
+        if (npc.tryAttack()) {
+          const dx = this.player.position.x - npc.position.x;
+          const dy = this.player.position.y - npc.position.y;
+          const length = Math.max(1, Math.hypot(dx, dy));
+          if (this.player.takeDamage(1, { x: dx / length, y: dy / length })) {
+            this.combat.confirmHit(`npc-attack:${npc.data.id}:${this.frame}`, npc.isGuard);
+          }
+        }
+      }
       this.boss?.update();
       for (const enemy of this.enemies) {
         enemy.update();
@@ -225,8 +239,8 @@ export class Game {
         }
       }
       if (this.input.wasPressed("A")) {
-        if (this.insideCottage && nearCottageExit(this.player.position)) {
-          this.leaveCottage();
+        if (this.interior && nearCottageExit(this.player.position)) {
+          this.leaveInterior();
           this.input.endFrame();
           return;
         }
@@ -258,7 +272,7 @@ export class Game {
           }
           this.events.publish({ type: "talk", id: nearestNpc.data.id, frame: this.frame });
         } else if (nearest?.data.kind === "door") {
-          this.enterCottage();
+          this.enterInterior(nearest.data.id === "hermitage_door" ? "hermitage" : "cottage");
           this.input.endFrame();
           return;
         } else if (nearest) {
@@ -295,10 +309,11 @@ export class Game {
             this.textBox.open(this.notice);
             this.player.hearts = this.player.maxHearts;
           }
-        } else if (this.player.startAttack()) {
-          this.combat.beginSwing();
-          this.audio.playSfx("sword");
         }
+      }
+      if (this.input.wasPressed("Attack") && this.player.startAttack()) {
+        this.combat.beginSwing();
+        this.audio.playSfx("sword");
       }
       if (this.player.swordActive) {
         const sword = this.player.attackHitbox();
@@ -325,6 +340,19 @@ export class Game {
             }
           }
         }
+        for (const npc of this.npcs) {
+          if (overlaps(sword, npc.bounds) && this.combat.confirmHit(`npc:${npc.data.id}`)) {
+            npc.provoke(this.player.position);
+            for (const guard of this.npcs) if (guard.isGuard) guard.alert();
+            this.flags.set("village_alarm");
+            this.notice = npc.isGuard
+              ? "Le garde pare le coup et sonne l'alarme !"
+              : `${npc.data.name} se défend ! Le garde accourt.`;
+            this.noticeFrames = 120;
+            this.audio.playSfx("hit");
+            this.particles.emit(npc.position.x + 8, npc.position.y + 8, "spark", 5);
+          }
+        }
         for (const object of this.interactables) {
           if ((object.data.kind === "bush" || object.data.kind === "roots") && overlaps(sword, object.bounds())
             && this.combat.confirmHit(object.data.id)) {
@@ -337,7 +365,7 @@ export class Game {
           }
         }
       }
-      const edge = this.insideCottage ? null : this.camera.edgeFor(this.player.position);
+      const edge = this.interior ? null : this.camera.edgeFor(this.player.position);
       if (edge) {
         const destination = this.camera.adjacent(edge);
         if (this.zones.canEnter(destination)) {
@@ -367,7 +395,8 @@ export class Game {
     this.map.drawLayer(ctx, "ground", this.frame);
     this.map.drawLayer(ctx, "terrain", this.frame);
     this.map.drawLayer(ctx, "decor_below", this.frame);
-    if (this.insideCottage) drawCottageWarmth(ctx, this.frame);
+    if (this.interior === "cottage") drawCottageInterior(ctx, this.frame);
+    else if (this.interior === "hermitage") drawHermitageInterior(ctx, this.frame);
     for (const object of this.interactables) object.draw(ctx);
     for (const npc of this.npcs) npc.draw(ctx);
     for (const enemy of this.enemies) enemy.draw(ctx);
@@ -378,7 +407,7 @@ export class Game {
     if (this.zones.at(this.camera.zone)?.id === "canal_entry") this.dungeon.drawWater(ctx);
     ctx.restore();
     const zoneForLight = this.zones.at(this.camera.zone);
-    if (!this.insideCottage) {
+    if (!this.interior) {
       this.environment.draw(ctx, this.frame, this.player.position, {
         night: this.clock.isNight,
         dense: zoneForLight?.id === "lisiere_carrefour" && !this.flags.has("lantern"),
@@ -390,10 +419,12 @@ export class Game {
     const variant = zone ? this.variants.resolve(zone.id, {
       flags: new Set(this.flags.snapshot()), isNight: this.clock.isNight,
     }) : "default";
-    this.hud.draw(this.renderer, this.player, this.clock, this.insideCottage
-      ? "MAISON DU DOYEN"
-      : `${zone?.name ?? "INCONNU"}${variant === "default" ? "" : ` ${variant}`}`);
-    if (this.insideCottage && nearCottageExit(this.player.position) && !this.textBox.active) {
+    const interiorName = this.interior === "cottage" ? "MAISON DU DOYEN"
+      : this.interior === "hermitage" ? "ERMITAGE DE GORM" : null;
+    this.hud.draw(this.renderer, this.player, this.clock, interiorName
+      ?? `${zone?.name ?? "INCONNU"}${variant === "default" ? "" : ` ${variant}`}`,
+    this.quests.activeObjective()?.hint);
+    if (this.interior && nearCottageExit(this.player.position) && !this.textBox.active) {
       ctx.fillStyle = PALETTE.night;
       ctx.fillRect(96, 188, 64, 17);
       this.renderer.pixelText("X  SORTIR", 128, 191, PALETTE.cream, "center");
@@ -430,33 +461,35 @@ export class Game {
     this.npcs = zone
       ? NPCS.filter((npc) => npc.schedule.some((entry) =>
         entry.zone === zone.id && this.clock.hour >= entry.start && this.clock.hour < entry.end))
-        .map((data) => new Npc(data, this.map, this.clock))
+        .map((data) => new Npc(data, this.map, this.clock, this.player))
       : [];
     this.boss = zone?.id === "boss_arena" && this.flags.has("mechanism_repaired")
       && !this.flags.has("boss_defeated") ? new MotherTreeBoss(this.player) : null;
   }
 
-  private enterCottage(): void {
-    if (this.transition.active || this.insideCottage) return;
-    this.exteriorReturnPosition = { x: 128, y: 72 };
+  private enterInterior(kind: InteriorKind): void {
+    if (this.transition.active || this.interior) return;
+    this.exteriorReturnPosition = kind === "cottage" ? { x: 128, y: 72 } : { x: 176, y: 88 };
     this.transition.start(() => {
-      this.insideCottage = true;
-      this.map = new TileMap(createCottageMap(), this.tileSet);
+      this.interior = kind;
+      this.map = new TileMap(kind === "cottage" ? createCottageMap() : createHermitageMap(), this.tileSet);
       this.player.setMap(this.map);
       this.player.position = { ...COTTAGE_ENTRY };
       this.interactables = [];
       this.enemies = [];
       this.npcs = [];
       this.boss = null;
-      this.notice = "Une chaleur de bois et de feu emplit la pièce.";
+      this.notice = kind === "cottage"
+        ? "Le tapis rouge et le feu rendent la pièce accueillante."
+        : "L'ermitage sent la pierre chaude, le bois et les cartes anciennes.";
       this.noticeFrames = 120;
     });
   }
 
-  private leaveCottage(): void {
-    if (this.transition.active || !this.insideCottage) return;
+  private leaveInterior(): void {
+    if (this.transition.active || !this.interior) return;
     this.transition.start(() => {
-      this.insideCottage = false;
+      this.interior = null;
       this.loadZoneObjects();
       this.player.position = { ...this.exteriorReturnPosition };
     });

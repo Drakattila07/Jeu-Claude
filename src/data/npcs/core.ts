@@ -40,6 +40,9 @@ export const NPCS = [
   { id: "crane", name: "Le Crâne", color: "stone", schedule: [{ start: 0, end: 24, zone: "lisiere_carrefour", x: 32, y: 136 }], chatter: [
     "Perdu ? Quel délicieux parfum.", "Les morts font d'excellents cartographes.", "J'aurais un indice, si j'avais une langue.", "Dix minutes sans progrès. Impressionnant."
   ]},
+  { id: "garde_ronan", name: "Garde Ronan", color: "stone", schedule: [{ start: 0, end: 24, zone: "place_puits", x: 208, y: 144 }], chatter: [
+    "Je veille sur la place et ses habitants.", "L'épée reste au fourreau dans le village.", "Les loups descendent parfois de la Lisière.", "Un bon garde écoute avant de frapper."
+  ]},
   { id: "fermier_a", name: "Alban", color: "sand", schedule: [{ start: 7, end: 18, zone: "marches_ruines", x: 64, y: 144 }], chatter: [
     "La terre boit tout ce qu'on lui donne.", "Le blé penche avant le vent.", "On manque d'eau, pas de travail.", "Le moulin repartira."
   ]},

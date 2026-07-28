@@ -5,6 +5,15 @@ import type { Flags } from "./Flags";
 
 export type QuestStatus = "locked" | "active" | "complete";
 export interface QuestRecord { status: QuestStatus; step: number; progress: number }
+export interface ActiveObjective {
+  readonly id: string;
+  readonly title: string;
+  readonly hint: string;
+  readonly step: number;
+  readonly stepCount: number;
+  readonly progress: number;
+  readonly targetCount: number;
+}
 
 export class QuestSystem {
   private readonly records = new Map<string, QuestRecord>();
@@ -53,15 +62,31 @@ export class QuestSystem {
     }
   }
 
-  activeObjective(): { title: string; hint: string } | null {
+  activeObjectives(limit = 4): readonly ActiveObjective[] {
+    const objectives: ActiveObjective[] = [];
     for (const quest of this.definitions) {
       const record = this.records.get(quest.id)!;
       if (record.status === "active") {
         const step = quest.steps[record.step];
-        if (step) return { title: quest.title, hint: step.hint };
+        if (step) {
+          objectives.push({
+            id: quest.id,
+            title: quest.title,
+            hint: step.hint,
+            step: record.step + 1,
+            stepCount: quest.steps.length,
+            progress: record.progress,
+            targetCount: step.count ?? 1,
+          });
+        }
       }
+      if (objectives.length >= limit) break;
     }
-    return null;
+    return objectives;
+  }
+
+  activeObjective(): ActiveObjective | null {
+    return this.activeObjectives(1)[0] ?? null;
   }
 
   snapshot(): Readonly<Record<string, QuestRecord>> {

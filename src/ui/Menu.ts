@@ -36,11 +36,23 @@ export class Menu {
     if (tab === "carte") {
       map.draw(renderer, current);
     } else if (tab === "quête") {
-      const objective = quests.activeObjective();
-      renderer.pixelText(objective?.title ?? "AUCUNE QUÊTE", 24, 64, PALETTE.cream);
-      const words = objective?.hint.match(/.{1,32}(?:\s|$)/g) ?? ["Explorez librement."];
-      words.slice(0, 4).forEach((line, index) =>
-        renderer.pixelText(line.trim(), 24, 84 + index * 13, PALETTE.grassLight));
+      const objectives = quests.activeObjectives(3);
+      renderer.pixelText("JOURNAL DES QUÊTES", 24, 55, PALETTE.yellow);
+      if (objectives.length === 0) {
+        renderer.pixelText("Aucune quête active.", 24, 79, PALETTE.stoneLight);
+        renderer.pixelText("Explorez la vallée librement.", 24, 94, PALETTE.grassLight);
+      }
+      objectives.forEach((objective, index) => {
+        const y = 73 + index * 39;
+        renderer.pixelText(`› ${objective.title.slice(0, 22)}`, 24, y, PALETTE.cream);
+        renderer.pixelText(`${objective.step}/${objective.stepCount}`, 229, y, PALETTE.yellow, "right");
+        const words = objective.hint.match(/.{1,34}(?:\s|$)/g) ?? [objective.hint];
+        renderer.pixelText(words[0]?.trim() ?? "", 31, y + 13, PALETTE.grassLight);
+        if (objective.targetCount > 1) {
+          renderer.pixelText(`Progression ${objective.progress}/${objective.targetCount}`,
+            31, y + 25, PALETTE.stoneLight);
+        }
+      });
     } else {
       const entries = inventory.snapshot();
       renderer.pixelText("OBJETS", 24, 58, PALETTE.cream);

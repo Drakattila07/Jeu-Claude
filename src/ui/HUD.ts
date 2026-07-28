@@ -4,7 +4,7 @@ import type { Player } from "../entities/Player";
 import type { Clock } from "../core/Clock";
 
 export class HUD {
-  draw(renderer: Renderer, player: Player, clock: Clock, zoneName: string): void {
+  draw(renderer: Renderer, player: Player, clock: Clock, zoneName: string, objective?: string): void {
     const { ctx } = renderer;
     ctx.fillStyle = PALETTE.ink;
     ctx.fillRect(0, 0, 256, 22);
@@ -25,5 +25,14 @@ export class HUD {
     renderer.pixelText(zoneName.slice(0, 16), 128, 5, PALETTE.grassLight, "center");
     renderer.pixelText(`${clock.weather === "rain" ? "R" : "·"} ${String(clock.hour).padStart(2, "0")}:${String(clock.minute).padStart(2, "0")}`,
       249, 5, PALETTE.cream, "right");
+    if (objective) {
+      ctx.fillStyle = PALETTE.night;
+      ctx.globalAlpha = 0.88;
+      ctx.fillRect(0, 22, 256, 13);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = PALETTE.yellow;
+      ctx.fillRect(4, 26, 4, 4);
+      renderer.pixelText(objective.slice(0, 39), 12, 23, PALETTE.cream);
+    }
   }
 }

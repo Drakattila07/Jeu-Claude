@@ -19,6 +19,21 @@ describe("quêtes et mémoire", () => {
     expect(flags.has("water")).toBe(true);
   });
 
+  it("expose clairement l'étape et la progression de chaque quête active", () => {
+    const flags = new Flags();
+    const quests = new QuestSystem(flags, new EventBus(), [{
+      id: "lisible", title: "Une quête lisible", giver: "garde", prerequisites: [],
+      steps: [{ id: "loups", type: "defeat", target: "wolf", count: 3, hint: "Éloignez les loups." }],
+      rewards: [], worldEffects: [],
+    }]);
+    quests.refresh();
+    quests.notify("defeat", "wolf", 1);
+    expect(quests.activeObjectives()).toEqual([{
+      id: "lisible", title: "Une quête lisible", hint: "Éloignez les loups.",
+      step: 1, stepCount: 1, progress: 1, targetCount: 3,
+    }]);
+  });
+
   it("ne garde que dix événements récents", () => {
     const events = new EventBus();
     for (let index = 0; index < 12; index += 1) events.publish({ type: "x", id: String(index), frame: index });

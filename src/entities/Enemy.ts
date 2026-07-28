@@ -36,7 +36,8 @@ export class Enemy extends Entity {
     const dx = this.target.position.x - this.position.x;
     const dy = this.target.position.y - this.position.y;
     const distance = Math.max(1, Math.hypot(dx, dy));
-    const near = distance <= (this.definition.behavior === "wake" ? 36 : 56);
+    const near = distance <= (this.definition.behavior === "wake" ? 36
+      : this.definition.behavior === "hunt" ? 96 : 56);
     const pulse = this.definition.behavior === "leap" ? this.aiFrame % 90 >= 72
       : this.definition.behavior === "hop" ? this.aiFrame % 60 >= 48
       : this.definition.behavior === "dive" ? near
@@ -70,7 +71,26 @@ export class Enemy extends Entity {
     ctx.fillStyle = PALETTE.ink;
     ctx.fillRect(x + 3, y + 13, 10, 2);
     ctx.fillStyle = this.flashFrames > 0 ? PALETTE.white : PALETTE[this.definition.color];
-    if (this.spawn.type === "branch_bat") {
+    if (this.spawn.type === "wolf") {
+      const stride = Math.floor(this.aiFrame / 7) % 2;
+      ctx.fillStyle = PALETTE.ink;
+      ctx.fillRect(x + 1, y + 6, 14, 8);
+      ctx.fillRect(x + 12, y + 2, 6, 8);
+      ctx.fillRect(x + 13, y, 2, 4);
+      ctx.fillRect(x + 17, y + 1, 2, 4);
+      ctx.fillRect(x - 3, y + 5, 6, 3);
+      ctx.fillStyle = this.flashFrames > 0 ? PALETTE.white : PALETTE.stone;
+      ctx.fillRect(x + 2, y + 7, 12, 6);
+      ctx.fillRect(x + 12, y + 3, 5, 6);
+      ctx.fillRect(x + 3 + stride, y + 12, 3, 4);
+      ctx.fillRect(x + 10 - stride, y + 12, 3, 4);
+      ctx.fillStyle = PALETTE.stoneLight;
+      ctx.fillRect(x + 13, y + 4, 3, 2);
+      ctx.fillStyle = PALETTE.yellow;
+      ctx.fillRect(x + 15, y + 5, 1, 1);
+      ctx.fillStyle = PALETTE.white;
+      ctx.fillRect(x + 17, y + 8, 2, 1);
+    } else if (this.spawn.type === "branch_bat") {
       ctx.fillRect(x, y + 5, 16, 5);
       ctx.fillRect(x + 5, y + 2, 6, 11);
     } else if (this.spawn.type === "hop_mushroom") {

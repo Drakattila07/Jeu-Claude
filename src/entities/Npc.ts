@@ -5,6 +5,8 @@ import type { EventBus } from "../core/EventBus";
 import type { TileMap } from "../world/TileMap";
 import { findPath, type GridPoint } from "../world/Pathfinding";
 import { routineStateFor, type NpcActivity } from "../data/npcs/routines";
+import { moveOnGrid } from "../world/Collision";
+import type { Player } from "./Player";
 import type { Vec2 } from "./Entity";
 import { Entity } from "./Entity";
 
@@ -26,8 +28,16 @@ export class Npc extends Entity {
   private direction: "left" | "right" | "up" | "down" = "down";
   private readonly seed: number;
   private routineIndex = -1;
+  private angry = false;
+  private flashFrames = 0;
+  private attackCooldown = 0;
 
-  constructor(readonly data: NpcData, private readonly map: TileMap, private readonly clock: Clock) {
+  constructor(
+    readonly data: NpcData,
+    private readonly map: TileMap,
+    private readonly clock: Clock,
+    private readonly target?: Player,
+  ) {
     const schedule = data.schedule.find((entry) => clock.hour >= entry.start && clock.hour < entry.end) ?? data.schedule[0]!;
     super({ x: schedule.x, y: schedule.y }, { x: 3, y: 6, width: 10, height: 10 });
     this.depth = 9;
@@ -35,8 +45,15 @@ export class Npc extends Entity {
   }
 
   get activity(): NpcActivity {
+    if (this.angry) return "guard";
     if (this.pathIndex < this.path.length) return "walk";
     return npcActivityFor(this.data.id, this.frame);
+  }
+
+  get hostile(): boolean { return this.angry; }
+  get isGuard(): boolean { return this.data.id === "garde_ronan"; }
+  get bounds(): { x: number; y: number; width: number; height: number } {
+    return { x: this.position.x + 2, y: this.position.y + 4, width: 12, height: 12 };
   }
 
   distanceTo(position: Readonly<Vec2>): number {
@@ -45,6 +62,12 @@ export class Npc extends Entity {
 
   update(): void {
     this.frame += 1;
+    if (this.flashFrames > 0) this.flashFrames -= 1;
+    if (this.attackCooldown > 0) this.attackCooldown -= 1;
+    if (this.angry && this.target) {
+      this.updateHostile();
+      return;
+    }
     const schedule = this.data.schedule.find((entry) => this.clock.hour >= entry.start && this.clock.hour < entry.end);
     if (!schedule) return;
 
@@ -78,6 +101,42 @@ export class Npc extends Entity {
       if (Math.abs(dx) > Math.abs(dy)) this.direction = dx < 0 ? "left" : "right";
       else this.direction = dy < 0 ? "up" : "down";
     }
+  }
+
+  provoke(from: Readonly<Vec2>): void {
+    this.angry = true;
+    this.flashFrames = 5;
+    const dx = this.position.x - from.x;
+    const dy = this.position.y - from.y;
+    const length = Math.max(1, Math.hypot(dx, dy));
+    this.position.x += (dx / length) * 3;
+    this.position.y += (dy / length) * 3;
+  }
+
+  alert(): void { this.angry = true; }
+
+  tryAttack(): boolean {
+    if (!this.angry || !this.target || this.attackCooldown > 0
+      || this.distanceTo(this.target.position) > 18) return false;
+    this.attackCooldown = this.isGuard ? 38 : 55;
+    return true;
+  }
+
+  private updateHostile(): void {
+    if (!this.target) return;
+    const dx = this.target.position.x - this.position.x;
+    const dy = this.target.position.y - this.position.y;
+    const distance = Math.max(1, Math.hypot(dx, dy));
+    if (distance <= 14) {
+      this.velocity = { x: 0, y: 0 };
+      return;
+    }
+    const speed = this.isGuard ? 0.82 : 0.62;
+    this.velocity = { x: (dx / distance) * speed, y: (dy / distance) * speed };
+    this.position = moveOnGrid(this.position, this.velocity, this.hitbox,
+      (tileX, tileY) => this.map.isSolid(tileX, tileY), 2);
+    if (Math.abs(dx) > Math.abs(dy)) this.direction = dx < 0 ? "left" : "right";
+    else this.direction = dy < 0 ? "up" : "down";
   }
 
   private planRoute(homeX: number, homeY: number, offset: readonly [number, number]): void {
@@ -124,7 +183,7 @@ export class Npc extends Entity {
     const walking = Math.abs(this.velocity.x) + Math.abs(this.velocity.y) > 0.05;
     const step = walking ? Math.floor(this.frame / 8) % 2 : 0;
     const bob = walking && Math.floor(this.frame / 8) % 2 === 1 ? -1 : 0;
-    const outfit = PALETTE[this.data.color];
+    const outfit = this.flashFrames > 0 ? PALETTE.white : PALETTE[this.data.color];
     const accent = this.data.color === "sand" ? PALETTE.yellow
       : this.data.color === "water" ? PALETTE.waterLight
         : this.data.color === "stone" ? PALETTE.stoneLight
@@ -172,6 +231,18 @@ export class Npc extends Entity {
 
     const activity = this.activity;
     if (activity !== "walk") this.drawActivity(ctx, x, y, activity);
+    if (this.angry) {
+      ctx.fillStyle = PALETTE.red;
+      ctx.fillRect(x + 6, y - 8, 4, 6);
+      ctx.fillStyle = PALETTE.yellow;
+      ctx.fillRect(x + 7, y - 7, 2, 3);
+      ctx.fillRect(x + 7, y - 1, 2, 2);
+      ctx.fillStyle = PALETTE.stoneLight;
+      const thrust = Math.floor(this.frame / 10) % 2;
+      ctx.fillRect(x + 14 + thrust * 2, y + 7, 8, 2);
+      ctx.fillStyle = PALETTE.woodDark;
+      ctx.fillRect(x + 11, y + 7, 5 + thrust * 2, 2);
+    }
     ctx.restore();
   }
 

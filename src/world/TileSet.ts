@@ -9,7 +9,7 @@ export type TileKind =
   | "crop" | "pine_crown" | "stump" | "mushroom" | "deep_water"
   | "bridge" | "moss_stone" | "wildflowers" | "cracked_path"
   | "wood_floor" | "interior_wall" | "rug" | "bed" | "bookshelf"
-  | "table" | "fireplace" | "chair" | "window";
+  | "table" | "fireplace" | "chair" | "window" | "interior_block";
 
 export interface TileProperties {
   readonly kind: TileKind;
@@ -36,6 +36,7 @@ const TILES: readonly TileProperties[] = [
   { kind: "bed", solid: true }, { kind: "bookshelf", solid: true },
   { kind: "table", solid: true }, { kind: "fireplace", solid: true },
   { kind: "chair", solid: true }, { kind: "window", solid: true },
+  { kind: "interior_block", solid: true },
 ];
 
 function fill(ctx: CanvasRenderingContext2D, color: string, x: number, y: number,
@@ -377,6 +378,8 @@ export class TileSet {
         fill(ctx, PALETTE.woodLight, px + 7, py + 2, 2, 10);
         fill(ctx, PALETTE.woodLight, px + 2, py + 7, 12, 2);
         fill(ctx, PALETTE.roof, px + 1, py + 12, 14, 3);
+        break;
+      case "interior_block":
         break;
     }
     ctx.restore();
