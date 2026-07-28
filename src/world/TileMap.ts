@@ -38,10 +38,10 @@ export class TileMap {
     return this.byName.get(layerName)?.data[y * this.width + x] ?? 0;
   }
 
-  drawLayer(ctx: CanvasRenderingContext2D, layerName: LayerName): void {
+  drawLayer(ctx: CanvasRenderingContext2D, layerName: LayerName, frame = 0): void {
     for (let y = 0; y < this.height; y += 1) {
       for (let x = 0; x < this.width; x += 1) {
-        this.tileSet.draw(ctx, this.tileAt(layerName, x, y), x, y);
+        this.tileSet.draw(ctx, this.tileAt(layerName, x, y), x, y, frame);
       }
     }
   }

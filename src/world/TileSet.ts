@@ -4,7 +4,10 @@ import { TILE_SIZE } from "../core/Renderer";
 export type TileKind =
   | "empty" | "grass" | "grass_alt" | "path" | "stone" | "water"
   | "tree_crown" | "tree_trunk" | "roof" | "wall" | "well"
-  | "flowers" | "fence" | "bush" | "door" | "sign" | "stairs";
+  | "flowers" | "fence" | "bush" | "door" | "sign" | "stairs"
+  | "forest_floor" | "mud" | "cliff" | "reeds" | "rubble" | "lilypad"
+  | "crop" | "pine_crown" | "stump" | "mushroom" | "deep_water"
+  | "bridge" | "moss_stone" | "wildflowers" | "cracked_path";
 
 export interface TileProperties {
   readonly kind: TileKind;
@@ -21,144 +24,271 @@ const TILES: readonly TileProperties[] = [
   { kind: "tree_crown", solid: true }, { kind: "tree_trunk", solid: true },
   { kind: "roof", solid: true }, { kind: "wall", solid: true }, { kind: "well", solid: true },
   { kind: "flowers" }, { kind: "fence", solid: true }, { kind: "bush", solid: true, cuttable: true },
-  { kind: "door" }, { kind: "sign", solid: true }, { kind: "stairs", ledge: true }
+  { kind: "door" }, { kind: "sign", solid: true }, { kind: "stairs", ledge: true },
+  { kind: "forest_floor" }, { kind: "mud", slow: 0.82 }, { kind: "cliff", solid: true },
+  { kind: "reeds", solid: true }, { kind: "rubble", solid: true }, { kind: "lilypad", water: true, slow: 0.6 },
+  { kind: "crop" }, { kind: "pine_crown", solid: true }, { kind: "stump", solid: true },
+  { kind: "mushroom" }, { kind: "deep_water", water: true, slow: 0.5 }, { kind: "bridge" },
+  { kind: "moss_stone", solid: true }, { kind: "wildflowers" }, { kind: "cracked_path" },
 ];
+
+function fill(ctx: CanvasRenderingContext2D, color: string, x: number, y: number,
+  width: number, height: number): void {
+  ctx.fillStyle = color;
+  ctx.fillRect(x, y, width, height);
+}
+
+function shadow(ctx: CanvasRenderingContext2D, x: number, y: number, width = 14): void {
+  ctx.globalAlpha = 0.28;
+  fill(ctx, PALETTE.ink, x + Math.floor((16 - width) / 2), y + 13, width, 3);
+  ctx.globalAlpha = 1;
+}
 
 export class TileSet {
   properties(id: number): TileProperties {
     return TILES[id] ?? TILES[0]!;
   }
 
-  draw(ctx: CanvasRenderingContext2D, id: number, x: number, y: number): void {
+  draw(ctx: CanvasRenderingContext2D, id: number, x: number, y: number, frame = 0): void {
     const px = x * TILE_SIZE;
     const py = y * TILE_SIZE;
     const kind = this.properties(id).kind;
+    const variant = (x * 17 + y * 31) & 3;
     if (kind === "empty") return;
     ctx.save();
+
     switch (kind) {
       case "grass":
-      case "grass_alt":
-        ctx.fillStyle = kind === "grass" ? PALETTE.grass : PALETTE.grassDark;
-        ctx.fillRect(px, py, 16, 16);
-        ctx.fillStyle = kind === "grass" ? PALETTE.grassLight : PALETTE.leaf;
-        ctx.fillRect(px + ((x * 5 + y * 3) % 13), py + ((x * 7 + y * 5) % 13), 1, 2);
+      case "grass_alt": {
+        const base = kind === "grass" ? PALETTE.grass : PALETTE.grassDark;
+        const light = kind === "grass" ? PALETTE.grassLight : PALETTE.leaf;
+        fill(ctx, base, px, py, 16, 16);
+        fill(ctx, kind === "grass" ? PALETTE.leafLight : PALETTE.leafDark,
+          px + 2 + variant * 3, py + 3 + ((x + y) & 5), 1, 2);
+        fill(ctx, light, px + 11 - variant, py + 11, 1, 2);
+        if ((x + y) % 5 === 0) {
+          fill(ctx, PALETTE.grassDark, px + 5, py + 8, 1, 1);
+          fill(ctx, light, px + 6, py + 7, 1, 2);
+        }
+        break;
+      }
+      case "forest_floor":
+        fill(ctx, PALETTE.pine, px, py, 16, 16);
+        fill(ctx, PALETTE.pineDark, px + 1, py + 3 + variant * 2, 4, 1);
+        fill(ctx, PALETTE.leafDark, px + 10, py + 2 + variant, 2, 2);
+        fill(ctx, PALETTE.wood, px + 6, py + 12, 3, 1);
+        fill(ctx, PALETTE.leaf, px + 13, py + 9, 1, 3);
+        break;
+      case "mud":
+        fill(ctx, PALETTE.marsh, px, py, 16, 16);
+        fill(ctx, PALETTE.pineDark, px + 2, py + 4, 6, 2);
+        fill(ctx, PALETTE.soil, px + 9, py + 11, 5, 2);
+        fill(ctx, PALETTE.water, px + 4 + variant, py + 10, 3, 1);
         break;
       case "path":
-        ctx.fillStyle = PALETTE.sand;
-        ctx.fillRect(px, py, 16, 16);
-        ctx.fillStyle = PALETTE.sandDark;
-        ctx.fillRect(px + 3, py + 4, 2, 1);
-        ctx.fillRect(px + 11, py + 11, 1, 2);
-        ctx.fillStyle = PALETTE.sandLight;
-        ctx.fillRect(px + 7, py + 7, 1, 1);
+      case "cracked_path":
+        fill(ctx, kind === "path" ? PALETTE.sand : PALETTE.stone, px, py, 16, 16);
+        fill(ctx, kind === "path" ? PALETTE.sandDark : PALETTE.stoneDark, px + 2, py + 3, 4, 2);
+        fill(ctx, kind === "path" ? PALETTE.sandLight : PALETTE.stoneLight, px + 9, py + 9, 5, 2);
+        fill(ctx, kind === "path" ? PALETTE.soil : PALETTE.ink, px + 7, py + 13, 2, 1);
+        if (kind === "cracked_path") {
+          fill(ctx, PALETTE.stoneDark, px + 6, py + 5, 1, 4);
+          fill(ctx, PALETTE.stoneDark, px + 7, py + 8, 3, 1);
+        }
         break;
       case "stone":
-        ctx.fillStyle = PALETTE.stoneDark;
-        ctx.fillRect(px, py, 16, 16);
-        ctx.fillStyle = PALETTE.stone;
-        ctx.fillRect(px + 1, py + 1, 14, 12);
-        ctx.fillStyle = PALETTE.stoneLight;
-        ctx.fillRect(px + 3, py + 2, 7, 2);
+      case "moss_stone":
+        shadow(ctx, px, py);
+        fill(ctx, PALETTE.stoneDark, px + 1, py + 4, 14, 10);
+        fill(ctx, PALETTE.stone, px + 2, py + 2, 12, 10);
+        fill(ctx, PALETTE.stoneLight, px + 4, py + 3, 6, 2);
+        fill(ctx, PALETTE.ink, px + 11, py + 9, 3, 2);
+        if (kind === "moss_stone") {
+          fill(ctx, PALETTE.leafDark, px + 2, py + 8, 5, 4);
+          fill(ctx, PALETTE.leaf, px + 4, py + 7, 4, 2);
+        }
+        break;
+      case "cliff":
+        fill(ctx, PALETTE.stoneDark, px, py, 16, 16);
+        fill(ctx, PALETTE.stone, px + 1, py, 14, 12);
+        fill(ctx, PALETTE.stoneLight, px + 2, py + 1, 12, 3);
+        fill(ctx, PALETTE.ink, px, py + 13, 16, 3);
+        fill(ctx, PALETTE.stoneDark, px + 4, py + 6, 2, 5);
+        fill(ctx, PALETTE.stoneDark, px + 10, py + 4, 3, 2);
+        break;
+      case "rubble":
+        shadow(ctx, px, py);
+        fill(ctx, PALETTE.stoneDark, px + 1, py + 9, 14, 5);
+        fill(ctx, PALETTE.stone, px + 3, py + 4, 6, 7);
+        fill(ctx, PALETTE.stoneLight, px + 5, py + 3, 4, 2);
+        fill(ctx, PALETTE.stone, px + 10, py + 7, 4, 5);
+        fill(ctx, PALETTE.ink, px + 2, py + 12, 4, 2);
         break;
       case "water":
-        ctx.fillStyle = PALETTE.water;
-        ctx.fillRect(px, py, 16, 16);
-        ctx.fillStyle = PALETTE.waterLight;
-        ctx.fillRect(px + ((x + y) % 4), py + 5, 7, 1);
-        ctx.fillRect(px + 8, py + 12, 5, 1);
+      case "deep_water": {
+        const offset = Math.floor(frame / 18 + x * 2 + y) % 8;
+        fill(ctx, kind === "water" ? PALETTE.water : PALETTE.deepWater, px, py, 16, 16);
+        fill(ctx, kind === "water" ? PALETTE.waterLight : PALETTE.water, px + offset - 4, py + 4, 8, 1);
+        fill(ctx, kind === "water" ? PALETTE.deepWater : PALETTE.pineDark, px + 9 - offset / 2, py + 11, 7, 1);
+        fill(ctx, PALETTE.waterLight, px + ((offset + 8) % 11), py + 14, 3, 1);
+        break;
+      }
+      case "lilypad":
+        fill(ctx, PALETTE.water, px, py, 16, 16);
+        fill(ctx, PALETTE.waterLight, px + ((frame / 20 + x) % 8), py + 3, 6, 1);
+        fill(ctx, PALETTE.leafDark, px + 3, py + 7, 10, 6);
+        fill(ctx, PALETTE.leaf, px + 4, py + 6, 8, 6);
+        fill(ctx, PALETTE.water, px + 8, py + 6, 2, 4);
+        fill(ctx, PALETTE.white, px + 5, py + 5, 2, 2);
+        fill(ctx, PALETTE.rose, px + 6, py + 6, 1, 1);
+        break;
+      case "bridge":
+        fill(ctx, PALETTE.deepWater, px, py, 16, 16);
+        fill(ctx, PALETTE.woodDark, px, py + 1, 16, 14);
+        for (let plank = 1; plank < 16; plank += 5) {
+          fill(ctx, PALETTE.wood, px + plank, py + 2, 4, 12);
+          fill(ctx, PALETTE.woodLight, px + plank, py + 3, 3, 1);
+        }
+        fill(ctx, PALETTE.ink, px, py + 1, 16, 2);
+        fill(ctx, PALETTE.ink, px, py + 13, 16, 2);
         break;
       case "tree_crown":
-        ctx.fillStyle = PALETTE.pineDark;
-        ctx.fillRect(px, py + 3, 16, 13);
-        ctx.fillStyle = PALETTE.leafDark;
-        ctx.fillRect(px + 2, py + 1, 12, 13);
-        ctx.fillStyle = PALETTE.leaf;
-        ctx.fillRect(px + 4, py + 2, 7, 7);
-        ctx.fillStyle = PALETTE.leafLight;
-        ctx.fillRect(px + 5, py + 3, 3, 2);
+      case "pine_crown":
+        shadow(ctx, px, py, 16);
+        fill(ctx, PALETTE.pineDark, px, py + 6, 16, 10);
+        if (kind === "tree_crown") {
+          fill(ctx, PALETTE.leafDark, px + 1, py + 4, 14, 9);
+          fill(ctx, PALETTE.leaf, px + 3, py + 1, 10, 10);
+          fill(ctx, PALETTE.leafLight, px + 5, py + 2, 5, 3);
+          fill(ctx, PALETTE.pineDark, px + 2, py + 11, 4, 3);
+          fill(ctx, PALETTE.leafDark, px + 11, py + 8, 4, 5);
+        } else {
+          fill(ctx, PALETTE.leafDark, px + 6, py, 4, 3);
+          fill(ctx, PALETTE.leafDark, px + 4, py + 3, 8, 4);
+          fill(ctx, PALETTE.leaf, px + 2, py + 7, 12, 4);
+          fill(ctx, PALETTE.pine, px, py + 11, 16, 3);
+          fill(ctx, PALETTE.leafLight, px + 7, py + 3, 2, 5);
+        }
         break;
       case "tree_trunk":
-        ctx.fillStyle = PALETTE.leafDark;
-        ctx.fillRect(px, py, 16, 7);
-        ctx.fillStyle = PALETTE.woodDark;
-        ctx.fillRect(px + 5, py + 5, 7, 11);
-        ctx.fillStyle = PALETTE.wood;
-        ctx.fillRect(px + 7, py + 5, 2, 9);
+        fill(ctx, PALETTE.leafDark, px, py, 16, 5);
+        shadow(ctx, px, py, 10);
+        fill(ctx, PALETTE.woodDark, px + 4, py + 3, 9, 13);
+        fill(ctx, PALETTE.wood, px + 6, py + 4, 4, 10);
+        fill(ctx, PALETTE.woodLight, px + 7, py + 5, 2, 5);
+        fill(ctx, PALETTE.ink, px + 10, py + 7, 2, 5);
+        break;
+      case "stump":
+        shadow(ctx, px, py, 14);
+        fill(ctx, PALETTE.woodDark, px + 2, py + 5, 12, 10);
+        fill(ctx, PALETTE.wood, px + 3, py + 3, 10, 8);
+        fill(ctx, PALETTE.woodLight, px + 5, py + 4, 6, 4);
+        fill(ctx, PALETTE.woodDark, px + 7, py + 5, 3, 2);
+        fill(ctx, PALETTE.leafDark, px + 1, py + 12, 5, 3);
         break;
       case "roof":
-        ctx.fillStyle = PALETTE.roofDark;
-        ctx.fillRect(px, py, 16, 16);
-        ctx.fillStyle = PALETTE.roof;
-        ctx.fillRect(px + 1, py + 2, 14, 4);
-        ctx.fillRect(px + 1, py + 9, 14, 4);
-        ctx.fillStyle = PALETTE.rose;
-        ctx.fillRect(px + 3, py + 2, 4, 2);
+        fill(ctx, PALETTE.roofDark, px, py, 16, 16);
+        fill(ctx, PALETTE.ink, px, py + 14, 16, 2);
+        for (let row = 1; row < 14; row += 5) {
+          fill(ctx, PALETTE.roof, px + 1, py + row, 14, 4);
+          fill(ctx, PALETTE.rose, px + 2 + ((row / 5) % 2) * 4, py + row, 5, 1);
+          fill(ctx, PALETTE.roofDark, px + 8, py + row + 1, 1, 3);
+        }
         break;
       case "wall":
-        ctx.fillStyle = PALETTE.stoneDark;
-        ctx.fillRect(px, py, 16, 16);
-        ctx.fillStyle = PALETTE.sandLight;
-        ctx.fillRect(px + 1, py, 14, 13);
-        ctx.fillStyle = PALETTE.sandDark;
-        ctx.fillRect(px, py + 12, 16, 4);
-        ctx.fillRect(px + 7, py, 1, 13);
+        fill(ctx, PALETTE.stoneDark, px, py, 16, 16);
+        fill(ctx, PALETTE.sandLight, px + 1, py, 14, 13);
+        fill(ctx, PALETTE.cream, px + 2, py + 1, 5, 2);
+        fill(ctx, PALETTE.sandDark, px, py + 12, 16, 4);
+        fill(ctx, PALETTE.soil, px + 7, py + 5, 2, 1);
+        fill(ctx, PALETTE.sandDark, px + 11, py + 8, 3, 2);
         break;
       case "well":
-        ctx.fillStyle = PALETTE.stoneDark;
-        ctx.fillRect(px + 1, py + 4, 14, 10);
-        ctx.fillStyle = PALETTE.stoneLight;
-        ctx.fillRect(px + 3, py + 2, 10, 3);
-        ctx.fillStyle = PALETTE.ink;
-        ctx.fillRect(px + 4, py + 6, 8, 5);
-        ctx.fillStyle = PALETTE.wood;
-        ctx.fillRect(px + 1, py, 2, 8);
-        ctx.fillRect(px + 13, py, 2, 8);
+        shadow(ctx, px, py, 16);
+        fill(ctx, PALETTE.woodDark, px + 1, py, 2, 10);
+        fill(ctx, PALETTE.woodDark, px + 13, py, 2, 10);
+        fill(ctx, PALETTE.roofDark, px + 1, py, 14, 3);
+        fill(ctx, PALETTE.roof, px + 3, py, 10, 2);
+        fill(ctx, PALETTE.stoneDark, px + 1, py + 7, 14, 8);
+        fill(ctx, PALETTE.stone, px + 2, py + 5, 12, 8);
+        fill(ctx, PALETTE.ink, px + 4, py + 7, 8, 4);
+        fill(ctx, PALETTE.waterLight, px + 5, py + 8, 5, 1);
+        fill(ctx, PALETTE.stoneLight, px + 3, py + 5, 9, 2);
         break;
       case "flowers":
-        ctx.fillStyle = PALETTE.white;
-        ctx.fillRect(px + 4, py + 7, 2, 2);
-        ctx.fillRect(px + 11, py + 3, 2, 2);
-        ctx.fillStyle = PALETTE.yellow;
-        ctx.fillRect(px + 5, py + 8, 1, 1);
+      case "wildflowers":
+        fill(ctx, PALETTE.leafDark, px + 4, py + 7, 1, 7);
+        fill(ctx, PALETTE.leaf, px + 11, py + 5, 1, 8);
+        fill(ctx, kind === "flowers" ? PALETTE.white : PALETTE.rose, px + 2, py + 5, 5, 4);
+        fill(ctx, kind === "flowers" ? PALETTE.yellow : PALETTE.purple, px + 9, py + 3, 5, 4);
+        fill(ctx, PALETTE.yellow, px + 4, py + 6, 1, 1);
+        fill(ctx, PALETTE.cream, px + 11, py + 4, 1, 1);
+        break;
+      case "mushroom":
+        fill(ctx, PALETTE.sandLight, px + 7, py + 8, 3, 6);
+        fill(ctx, PALETTE.ink, px + 6, py + 13, 5, 2);
+        fill(ctx, PALETTE.roofDark, px + 3, py + 4, 11, 6);
+        fill(ctx, PALETTE.rose, px + 5, py + 3, 7, 4);
+        fill(ctx, PALETTE.cream, px + 6, py + 4, 2, 2);
+        break;
+      case "crop":
+        fill(ctx, PALETTE.soil, px, py, 16, 16);
+        fill(ctx, PALETTE.sandDark, px, py + 13, 16, 2);
+        for (let stem = 2; stem < 16; stem += 5) {
+          fill(ctx, PALETTE.leafDark, px + stem, py + 4, 2, 10);
+          fill(ctx, PALETTE.grassLight, px + stem - 1, py + 3 + ((stem + y) % 3), 2, 4);
+          fill(ctx, PALETTE.yellow, px + stem + 1, py + 5, 2, 3);
+        }
         break;
       case "fence":
-        ctx.fillStyle = PALETTE.woodDark;
-        ctx.fillRect(px, py + 6, 16, 3);
-        ctx.fillStyle = PALETTE.woodLight;
-        ctx.fillRect(px + 3, py + 2, 3, 13);
-        ctx.fillRect(px + 11, py + 2, 3, 13);
+        shadow(ctx, px, py, 16);
+        fill(ctx, PALETTE.woodDark, px, py + 6, 16, 4);
+        fill(ctx, PALETTE.wood, px, py + 6, 16, 2);
+        fill(ctx, PALETTE.woodDark, px + 2, py + 2, 4, 14);
+        fill(ctx, PALETTE.woodLight, px + 3, py + 3, 2, 9);
+        fill(ctx, PALETTE.woodDark, px + 11, py + 2, 4, 14);
+        fill(ctx, PALETTE.woodLight, px + 12, py + 3, 2, 9);
         break;
       case "bush":
-        ctx.fillStyle = PALETTE.leafDark;
-        ctx.fillRect(px + 1, py + 5, 14, 10);
-        ctx.fillStyle = PALETTE.leaf;
-        ctx.fillRect(px + 3, py + 3, 5, 8);
-        ctx.fillRect(px + 8, py + 2, 5, 9);
-        ctx.fillStyle = PALETTE.leafLight;
-        ctx.fillRect(px + 5, py + 4, 3, 2);
+      case "reeds":
+        shadow(ctx, px, py);
+        if (kind === "bush") {
+          fill(ctx, PALETTE.leafDark, px + 1, py + 6, 14, 9);
+          fill(ctx, PALETTE.leaf, px + 2, py + 4, 7, 8);
+          fill(ctx, PALETTE.leaf, px + 8, py + 2, 6, 11);
+          fill(ctx, PALETTE.leafLight, px + 5, py + 5, 3, 2);
+          fill(ctx, PALETTE.pineDark, px + 11, py + 10, 3, 3);
+        } else {
+          fill(ctx, PALETTE.water, px, py + 11, 16, 5);
+          for (let stem = 2; stem < 15; stem += 4) {
+            const height = 7 + ((stem + x) % 5);
+            fill(ctx, PALETTE.leafDark, px + stem, py + 15 - height, 2, height);
+            fill(ctx, PALETTE.leafLight, px + stem + 1, py + 16 - height, 1, 4);
+            fill(ctx, PALETTE.soil, px + stem - 1, py + 4, 3, 2);
+          }
+        }
         break;
       case "door":
-        ctx.fillStyle = PALETTE.woodDark;
-        ctx.fillRect(px + 2, py, 12, 16);
-        ctx.fillStyle = PALETTE.wood;
-        ctx.fillRect(px + 4, py + 2, 8, 14);
-        ctx.fillStyle = PALETTE.yellow;
-        ctx.fillRect(px + 10, py + 9, 1, 1);
+        fill(ctx, PALETTE.woodDark, px + 1, py, 14, 16);
+        fill(ctx, PALETTE.wood, px + 3, py + 2, 10, 14);
+        fill(ctx, PALETTE.woodLight, px + 4, py + 3, 2, 11);
+        fill(ctx, PALETTE.ink, px + 11, py + 8, 2, 2);
+        fill(ctx, PALETTE.yellow, px + 11, py + 8, 1, 1);
         break;
       case "sign":
-        ctx.fillStyle = PALETTE.woodDark;
-        ctx.fillRect(px + 7, py + 8, 2, 8);
-        ctx.fillStyle = PALETTE.woodLight;
-        ctx.fillRect(px + 1, py + 2, 14, 8);
-        ctx.fillStyle = PALETTE.wood;
-        ctx.fillRect(px + 2, py + 3, 12, 5);
+        shadow(ctx, px, py);
+        fill(ctx, PALETTE.woodDark, px + 7, py + 8, 3, 8);
+        fill(ctx, PALETTE.woodDark, px, py + 2, 16, 9);
+        fill(ctx, PALETTE.woodLight, px + 1, py + 3, 14, 6);
+        fill(ctx, PALETTE.wood, px + 3, py + 5, 8, 1);
+        fill(ctx, PALETTE.cream, px + 12, py + 4, 1, 3);
         break;
       case "stairs":
-        ctx.fillStyle = PALETTE.stone;
-        ctx.fillRect(px, py, 16, 16);
-        ctx.fillStyle = PALETTE.stoneLight;
-        ctx.fillRect(px, py + 3, 16, 2);
-        ctx.fillRect(px, py + 9, 16, 2);
+        fill(ctx, PALETTE.stoneDark, px, py, 16, 16);
+        for (let step = 1; step < 16; step += 4) {
+          fill(ctx, PALETTE.stone, px, py + step, 16, 3);
+          fill(ctx, PALETTE.stoneLight, px, py + step, 16, 1);
+        }
         break;
     }
     ctx.restore();

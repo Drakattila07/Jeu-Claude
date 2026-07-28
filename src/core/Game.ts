@@ -347,15 +347,15 @@ export class Game {
     const shake = this.combat.shakeOffset(this.frame);
     ctx.save();
     ctx.translate(shake.x, shake.y);
-    this.map.drawLayer(ctx, "ground");
-    this.map.drawLayer(ctx, "terrain");
-    this.map.drawLayer(ctx, "decor_below");
+    this.map.drawLayer(ctx, "ground", this.frame);
+    this.map.drawLayer(ctx, "terrain", this.frame);
+    this.map.drawLayer(ctx, "decor_below", this.frame);
     for (const object of this.interactables) object.draw(ctx);
     for (const npc of this.npcs) npc.draw(ctx);
     for (const enemy of this.enemies) enemy.draw(ctx);
     this.boss?.draw(ctx);
     this.player.draw(ctx);
-    this.map.drawLayer(ctx, "decor_above");
+    this.map.drawLayer(ctx, "decor_above", this.frame);
     this.particles.draw(ctx);
     if (this.zones.at(this.camera.zone)?.id === "canal_entry") this.dungeon.drawWater(ctx);
     ctx.restore();
@@ -364,6 +364,7 @@ export class Game {
       night: this.clock.isNight,
       dense: zoneForLight?.id === "lisiere_carrefour" && !this.flags.has("lantern"),
       weather: this.clock.weather,
+      biome: zoneForLight?.biome,
     });
     const zone = this.zones.at(this.camera.zone);
     const variant = zone ? this.variants.resolve(zone.id, {

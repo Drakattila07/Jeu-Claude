@@ -148,6 +148,14 @@
 - Passage continu entre toutes les zones voisines
 - Limites extérieures bloquantes, sans retour façon Pac-Man
 
+## Refonte graphique et vie du village ✅
+
+- Tuiles 16-bit redessinées avec ombres, reliefs et détails par biome
+- Eau animée, ponts, falaises, ruines moussues, roseaux et cultures
+- Personnage principal et habitants plus détaillés et plus expressifs
+- Patrouilles des PNJ, animations de balayage et jeu de ballon des jumeaux
+- Particules atmosphériques adaptées à chaque région
+
 ## État final
 
 Les vingt tickets sont implémentés, compilés, testés et versionnés

@@ -81,38 +81,87 @@ export class Player extends Entity {
     if (this.invulnerabilityFrames > 0 && Math.floor(this.invulnerabilityFrames / 4) % 2 === 0) return;
     const x = Math.round(this.position.x);
     const y = Math.round(this.position.y);
-    const step = Math.floor(this.walkFrame / 8) % 4;
+    const step = Math.floor(this.walkFrame / 8) % 2;
+    const walking = this.walkFrame > 0;
+    const bob = walking && step === 1 ? -1 : 0;
     ctx.save();
+
+    ctx.globalAlpha = 0.32;
     ctx.fillStyle = PALETTE.ink;
-    ctx.fillRect(x + 4, y + 14, 8, 2);
+    ctx.fillRect(x + 2, y + 14, 12, 2);
+    ctx.fillRect(x + 4, y + 16, 8, 1);
+    ctx.globalAlpha = 1;
+
+    ctx.fillStyle = PALETTE.ink;
+    ctx.fillRect(x + 3 + step, y + 12, 4, 4);
+    ctx.fillRect(x + 9 - step, y + 12, 4, 4);
+    ctx.fillRect(x + 2, y + 6 + bob, 12, 8);
     ctx.fillStyle = PALETTE.pineDark;
-    ctx.fillRect(x + 3, y + 6, 10, 8);
+    ctx.fillRect(x + 3, y + 7 + bob, 10, 7);
     ctx.fillStyle = PALETTE.leaf;
-    ctx.fillRect(x + 2, y + 2, 12, 7);
+    ctx.fillRect(x + 4, y + 7 + bob, 3, 6);
     ctx.fillStyle = PALETTE.leafLight;
-    ctx.fillRect(x + (this.direction === "left" ? 1 : 3), y, 9, 4);
-    ctx.fillStyle = PALETTE.sandLight;
-    ctx.fillRect(x + 5, y + 5, 6, 5);
-    ctx.fillStyle = PALETTE.ink;
-    if (this.direction === "left") ctx.fillRect(x + 5, y + 7, 1, 1);
-    else if (this.direction === "right") ctx.fillRect(x + 10, y + 7, 1, 1);
-    else {
-      ctx.fillRect(x + 6, y + 7, 1, 1);
-      ctx.fillRect(x + 9, y + 7, 1, 1);
+    ctx.fillRect(x + 5, y + 8 + bob, 1, 4);
+
+    if (this.direction !== "up") {
+      ctx.fillStyle = PALETTE.ink;
+      ctx.fillRect(x + 4, y + 1 + bob, 9, 7);
+      ctx.fillStyle = PALETTE.sandLight;
+      ctx.fillRect(x + 5, y + 3 + bob, 7, 6);
+      ctx.fillStyle = PALETTE.cream;
+      ctx.fillRect(x + 6, y + 3 + bob, 4, 2);
+      ctx.fillStyle = PALETTE.woodDark;
+      ctx.fillRect(x + 4, y + 1 + bob, 9, 3);
+      ctx.fillRect(x + 11, y + 3 + bob, 2, 3);
+    } else {
+      ctx.fillStyle = PALETTE.woodDark;
+      ctx.fillRect(x + 4, y + 1 + bob, 9, 7);
+      ctx.fillStyle = PALETTE.wood;
+      ctx.fillRect(x + 6, y + 3 + bob, 5, 4);
     }
+
+    ctx.fillStyle = PALETTE.ink;
+    ctx.fillRect(x + 1, y + 2 + bob, 13, 4);
+    ctx.fillStyle = PALETTE.leaf;
+    ctx.fillRect(x + 2, y + 1 + bob, 12, 4);
+    ctx.fillStyle = PALETTE.leafLight;
+    ctx.fillRect(x + (this.direction === "left" ? 1 : 3), y + bob, 9, 2);
+    ctx.fillStyle = PALETTE.pineDark;
+    ctx.fillRect(x + 11, y + 4 + bob, 4, 3);
+
+    ctx.fillStyle = PALETTE.ink;
+    if (this.direction === "left") ctx.fillRect(x + 5, y + 6 + bob, 1, 1);
+    else if (this.direction === "right") ctx.fillRect(x + 11, y + 6 + bob, 1, 1);
+    else if (this.direction === "down") {
+      ctx.fillRect(x + 6, y + 6 + bob, 1, 1);
+      ctx.fillRect(x + 10, y + 6 + bob, 1, 1);
+    }
+
     ctx.fillStyle = PALETTE.woodDark;
-    ctx.fillRect(x + 4 + (step % 2), y + 13, 3, 3);
-    ctx.fillRect(x + 9 - (step % 2), y + 13, 3, 3);
+    ctx.fillRect(x + 4 + step, y + 13, 3, 3);
+    ctx.fillRect(x + 10 - step, y + 13, 3, 3);
+
     if (this.attackFrame >= 0) {
       const blade = this.attackHitbox();
+      ctx.fillStyle = PALETTE.ink;
+      if (this.direction === "up" || this.direction === "down") {
+        ctx.fillRect(Math.round(blade.x + 5), Math.round(blade.y), 4, blade.height);
+      } else {
+        ctx.fillRect(Math.round(blade.x), Math.round(blade.y + 5), blade.width, 4);
+      }
       ctx.fillStyle = this.flashFrames > 0 ? PALETTE.white : PALETTE.stoneLight;
       if (this.direction === "up" || this.direction === "down") {
-        ctx.fillRect(Math.round(blade.x + 5), Math.round(blade.y), 3, blade.height);
+        ctx.fillRect(Math.round(blade.x + 6), Math.round(blade.y), 2, blade.height - 2);
       } else {
-        ctx.fillRect(Math.round(blade.x), Math.round(blade.y + 5), blade.width, 3);
+        ctx.fillRect(Math.round(blade.x), Math.round(blade.y + 6), blade.width - 2, 2);
       }
       ctx.fillStyle = PALETTE.yellow;
-      ctx.fillRect(x + 5, y + 8, 6, 2);
+      ctx.fillRect(x + 5, y + 8 + bob, 7, 2);
+      ctx.fillStyle = PALETTE.white;
+      if (this.attackFrame >= 4 && this.attackFrame < 10) {
+        ctx.fillRect(x - 2, y + 2, 2, 2);
+        ctx.fillRect(x + 16, y + 10, 1, 2);
+      }
     }
     ctx.restore();
   }
