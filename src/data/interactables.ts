@@ -12,6 +12,9 @@ export const INTERACTABLES = [
   ,{ id: "seal_b", zone: "marches_ruines", kind: "seal", x: 128, y: 64, text: "Le Sceau du Regard." }
   ,{ id: "seal_c", zone: "marches_ruines", kind: "seal", x: 176, y: 96, text: "Le Sceau du Rythme." }
   ,{ id: "mechanism_heart", zone: "canal_entry", kind: "mechanism", x: 176, y: 80, text: "La roue centrale attend une impulsion." }
+  ,{ id: "lost_rod", zone: "lisiere_carrefour", kind: "pickup", x: 208, y: 144, text: "La canne perdue de Nessa !" }
+  ,{ id: "ghost_stump", zone: "bosquet_souches", kind: "secret", x: 64, y: 128, text: "La Souche Fantôme est coincée." }
+  ,{ id: "statue_intersection", zone: "marches_ruines", kind: "secret", x: 128, y: 128, text: "Les six regards convergent ici." }
 ] as const;
 
 export type InteractableData = (typeof INTERACTABLES)[number];

@@ -112,3 +112,10 @@
 - Traque nocturne de l'Arbre Marcheur
 - Trois Sceaux activables dans les Marches
 - Cœur du Canal et effets en cascade sur le lac, le moulin et les dialogues
+
+## T17 — Quêtes secondaires et mini-jeux ✅
+
+- Douze activités secondaires raccordées aux quêtes de données
+- Canne perdue et mini-jeu de pêche déterministe avec Nessa
+- Souche Fantôme, Statues-Œil et secrets environnementaux
+- Récompenses, flags et progression partagent le même pipeline

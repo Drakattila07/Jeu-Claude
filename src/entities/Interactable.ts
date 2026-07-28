@@ -35,8 +35,9 @@ export class Interactable extends Entity {
   interact(): InteractionResult {
     if (this.data.kind === "chest" || this.data.kind === "seal"
       || this.data.kind === "roots" || this.data.kind === "mechanism"
-      || this.data.kind === "footprints") {
-      if (this.state.get(this.data.zone, this.data.id)) return { message: "Le coffre est vide.", changed: false };
+      || this.data.kind === "footprints" || this.data.kind === "pickup"
+      || this.data.kind === "secret") {
+      if (this.state.get(this.data.zone, this.data.id)) return { message: "Il n'y a plus rien ici.", changed: false };
       this.state.set(this.data.zone, this.data.id);
       return { message: this.data.text, changed: true };
     }
@@ -117,6 +118,19 @@ export class Interactable extends Entity {
       ctx.stroke();
       ctx.fillStyle = PALETTE.yellow;
       ctx.fillRect(x + 6, y + 6, 4, 4);
+    } else if (this.data.kind === "pickup") {
+      if (this.state.get(this.data.zone, this.data.id)) return;
+      ctx.fillStyle = PALETTE.woodLight;
+      ctx.fillRect(x + 7, y, 2, 13);
+      ctx.strokeStyle = PALETTE.cream;
+      ctx.beginPath();
+      ctx.arc(x + 11, y + 11, 4, 0, Math.PI);
+      ctx.stroke();
+    } else if (this.data.kind === "secret") {
+      ctx.fillStyle = this.state.get(this.data.zone, this.data.id) ? PALETTE.yellow : PALETTE.purple;
+      ctx.fillRect(x + 5, y + 5, 6, 6);
+      ctx.fillRect(x + 7, y + 2, 2, 12);
+      ctx.fillRect(x + 2, y + 7, 12, 2);
     }
     ctx.restore();
   }

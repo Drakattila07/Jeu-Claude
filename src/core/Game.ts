@@ -31,6 +31,8 @@ import { Menu } from "../ui/Menu";
 import { MapScreen } from "../ui/MapScreen";
 import { HintSystem } from "../systems/HintSystem";
 import { Campaign } from "../systems/Campaign";
+import { SideActivities } from "../systems/SideActivities";
+import { Fishing } from "../systems/Fishing";
 
 export const FIXED_STEP_MS = 1000 / 60;
 export const MAX_FRAME_DELTA_MS = 250;
@@ -83,6 +85,8 @@ export class Game {
   private readonly mapScreen = new MapScreen();
   private readonly hints = new HintSystem(this.flags, this.quests);
   private readonly campaign = new Campaign(this.flags, this.quests, this.events);
+  private readonly sideActivities = new SideActivities(this.flags, this.quests);
+  private readonly fishing = new Fishing();
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new Renderer(canvas);
@@ -132,6 +136,21 @@ export class Game {
       this.input.endFrame();
       return;
     }
+    if (this.fishing.active) {
+      const fishingResult = this.fishing.update(this.input);
+      if (fishingResult === "caught") {
+        this.player.rupees += 8;
+        this.quests.notify("collect", "fish", this.frame);
+      }
+      this.input.endFrame();
+      return;
+    }
+    if (this.input.wasPressed("B") && this.zones.at(this.camera.zone)?.id === "quai_lac") {
+      if (this.flags.has("fishing_unlocked")) this.fishing.start(this.clock.day);
+      else this.textBox.open("Il vous manque une canne. Nessa en a perdu une dans la Lisière.");
+      this.input.endFrame();
+      return;
+    }
     if (!this.transition.active && !this.combat.frozen) {
       this.player.update();
       for (const npc of this.npcs) npc.update();
@@ -168,6 +187,10 @@ export class Game {
           this.textBox.open(campaignLine ?? line, nearestNpc.data.name);
           this.affinity.add(nearestNpc.data.id, 1);
           this.quests.notify("talkTo", nearestNpc.data.id, this.frame);
+          if (nearestNpc.data.id === "nessa" && this.flags.has("rod_found")) {
+            this.sideActivities.trigger("lost_rod", this.frame);
+            this.quests.notify("talkTo", "nessa", this.frame);
+          }
           this.events.publish({ type: "talk", id: nearestNpc.data.id, frame: this.frame });
         } else if (nearest) {
           const result = nearest.data.kind === "cauldron"
@@ -182,10 +205,13 @@ export class Game {
           const campaignMessage = "changed" in result && result.changed
             ? this.campaign.trigger(nearest.data.id, this.frame)
             : null;
+          const sideMessage = "changed" in result && result.changed
+            ? this.sideActivities.trigger(nearest.data.id, this.frame)
+            : null;
           if ("changed" in result && result.changed && nearest.data.kind === "chest") this.player.rupees += 20;
-          this.notice = campaignMessage ?? result.message;
+          this.notice = campaignMessage ?? sideMessage ?? result.message;
           this.noticeFrames = 150;
-          this.textBox.open(campaignMessage ?? result.message);
+          this.textBox.open(campaignMessage ?? sideMessage ?? result.message);
           if ("result" in result && result.result === "eternal_lantern") this.flags.set("lantern");
           this.events.publish({ type: "interact", id: nearest.data.id, frame: this.frame });
         } else if (this.player.startAttack()) {
@@ -275,6 +301,7 @@ export class Game {
     }
     this.textBox.draw(this.renderer);
     this.menu.draw(this.renderer, this.inventory, this.mapScreen, this.quests, this.camera.zone);
+    this.fishing.draw(this.renderer);
     this.transition.draw(ctx);
   }
 
