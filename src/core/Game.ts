@@ -37,6 +37,7 @@ import { MotherTreeBoss } from "../entities/Boss";
 import { epilogueLine } from "../data/epilogues";
 import { Audio } from "../systems/Audio";
 import { Particles } from "../ui/Particles";
+import { SaveLoad, type SaveData } from "../systems/SaveLoad";
 
 export const FIXED_STEP_MS = 1000 / 60;
 export const MAX_FRAME_DELTA_MS = 250;
@@ -95,17 +96,22 @@ export class Game {
   private endingPending = false;
   private readonly audio = new Audio();
   private readonly particles = new Particles();
+  private readonly saveLoad = new SaveLoad(window.localStorage);
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new Renderer(canvas);
     this.input = new Input();
     this.player = new Player(this.input, this.map);
+    const saved = this.saveLoad.load(0);
+    if (saved) this.restoreSave(saved);
+    else {
+      this.quests.refresh();
+      this.inventory.add("bitter_root", 2);
+      this.inventory.add("well_water");
+      this.inventory.add("apple");
+      this.mapScreen.reveal(this.camera.zone);
+    }
     this.loadZoneObjects();
-    this.quests.refresh();
-    this.inventory.add("bitter_root", 2);
-    this.inventory.add("well_water");
-    this.inventory.add("apple");
-    this.mapScreen.reveal(this.camera.zone);
     this.textBox.setBeep(() => this.audio.playSfx("text"));
   }
 
@@ -113,6 +119,13 @@ export class Game {
     if (this.running) return;
     this.running = true;
     requestAnimationFrame(this.loop);
+  }
+
+  stop(): void { this.running = false; }
+
+  debugAdvance(frames: number): void {
+    for (let index = 0; index < Math.max(0, Math.floor(frames)); index += 1) this.update();
+    this.render();
   }
 
   private readonly loop = (timeMs: number): void => {
@@ -257,6 +270,12 @@ export class Game {
           if (sideMessage) this.audio.playSfx("secret");
           if ("result" in result && result.result === "eternal_lantern") this.flags.set("lantern");
           this.events.publish({ type: "interact", id: nearest.data.id, frame: this.frame });
+          if (nearest.data.kind === "well" && this.flags.has("source_open")) {
+            this.saveLoad.save(0, this.createSave());
+            this.notice = "La fraîcheur du puits vous soigne. Partie sauvegardée.";
+            this.textBox.open(this.notice);
+            this.player.hearts = this.player.maxHearts;
+          }
         } else if (this.player.startAttack()) {
           this.combat.beginSwing();
           this.audio.playSfx("sword");
@@ -379,5 +398,39 @@ export class Game {
       : [];
     this.boss = zone?.id === "boss_arena" && this.flags.has("mechanism_repaired")
       && !this.flags.has("boss_defeated") ? new MotherTreeBoss(this.player) : null;
+  }
+
+  private createSave(): SaveData {
+    return {
+      version: 1,
+      savedAt: new Date().toISOString(),
+      frame: this.frame,
+      player: {
+        x: this.player.position.x, y: this.player.position.y,
+        hearts: this.player.hearts, rupees: this.player.rupees,
+      },
+      zone: { ...this.camera.zone },
+      flags: this.flags.snapshot(),
+      inventory: this.inventory.snapshot(),
+      quests: this.quests.snapshot(),
+      explored: this.mapScreen.snapshot(),
+      objects: this.objectState.entries(),
+      clock: this.clock.snapshot(),
+    };
+  }
+
+  private restoreSave(data: SaveData): void {
+    this.frame = data.frame;
+    this.player.position = { x: data.player.x, y: data.player.y };
+    this.player.hearts = data.player.hearts;
+    this.player.rupees = data.player.rupees;
+    this.camera.zone = { ...data.zone };
+    this.flags.restore(data.flags);
+    this.inventory.restore(data.inventory);
+    this.quests.restore(data.quests);
+    this.mapScreen.restore(data.explored);
+    this.objectState.restore(data.objects);
+    this.clock.restore(data.clock);
+    this.quests.refresh();
   }
 }

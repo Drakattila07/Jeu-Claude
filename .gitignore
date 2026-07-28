@@ -3,3 +3,4 @@ dist/
 coverage/
 screenshots/
 .openai/site-archive.tar.gz
+*.tsbuildinfo

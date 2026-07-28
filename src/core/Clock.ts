@@ -43,4 +43,11 @@ export class Clock {
   }
   harvest(resourceId: string): void { this.harvestDays.set(resourceId, this.day); }
   setTime(hour: number, minute = 0): void { this.minuteOfDay = hour * 60 + minute; }
+  snapshot(): { readonly day: number; readonly hour: number; readonly minute: number } {
+    return { day: this.day, hour: this.hour, minute: this.minute };
+  }
+  restore(value: { readonly day: number; readonly hour: number; readonly minute: number }): void {
+    this.day = Math.max(1, value.day);
+    this.setTime(value.hour, value.minute);
+  }
 }

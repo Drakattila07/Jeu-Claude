@@ -28,4 +28,8 @@ export class Inventory {
   snapshot(): readonly { id: ItemId; count: number }[] {
     return [...this.counts.entries()].map(([id, count]) => ({ id, count }));
   }
+  restore(entries: readonly { readonly id: ItemId; readonly count: number }[]): void {
+    this.counts.clear();
+    for (const entry of entries) this.add(entry.id, entry.count);
+  }
 }

@@ -133,3 +133,17 @@
 - Épée, impact, texte, plouf, enclume et secret
 - Bips toutes les quatre lettres du typewriter
 - Particules de feuilles, étincelles, bulles et fumée
+
+## T20 — Sauvegarde, validation et outillage ✅
+
+- Trois slots localStorage versionnés et tolérants aux données corrompues
+- Sauvegarde/soin au puits restauré et reprise automatique du slot principal
+- Validation de la palette, des JSON et des références
+- Capture headless déterministe après N frames
+
+## État final
+
+Les vingt tickets sont implémentés, compilés, testés et versionnés
+individuellement. Le jeu respecte TypeScript strict, le Canvas 2D pur, la
+résolution 256×224, l'upscale entier, les données séparées du moteur et la
+simulation déterministe à 60 Hz.

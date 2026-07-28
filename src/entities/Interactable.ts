@@ -10,6 +10,10 @@ export class ZoneObjectState {
   get(zoneId: string, entityId: string): boolean { return this.values.get(`${zoneId}:${entityId}`) ?? false; }
   set(zoneId: string, entityId: string): void { this.values.set(`${zoneId}:${entityId}`, true); }
   entries(): readonly [string, boolean][] { return [...this.values.entries()]; }
+  restore(entries: readonly [string, boolean][]): void {
+    this.values.clear();
+    for (const [key, value] of entries) this.values.set(key, value);
+  }
 }
 
 export class Interactable extends Entity {

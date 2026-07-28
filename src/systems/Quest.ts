@@ -68,6 +68,12 @@ export class QuestSystem {
     return Object.fromEntries([...this.records].map(([id, value]) => [id, { ...value }]));
   }
 
+  restore(snapshot: Readonly<Record<string, QuestRecord>>): void {
+    for (const [id, value] of Object.entries(snapshot)) {
+      if (this.records.has(id)) this.records.set(id, { ...value });
+    }
+  }
+
   private complete(quest: QuestDefinition, record: QuestRecord, frame: number): void {
     record.status = "complete";
     for (const reward of quest.rewards) if (reward.type === "flag") this.flags.set(reward.id);
