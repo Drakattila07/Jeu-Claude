@@ -153,7 +153,9 @@
 - Tuiles 16-bit redessinées avec ombres, reliefs et détails par biome
 - Eau animée, ponts, falaises, ruines moussues, roseaux et cultures
 - Personnage principal et habitants plus détaillés et plus expressifs
-- Patrouilles des PNJ, animations de balayage et jeu de ballon des jumeaux
+- Treize routines individuelles avec de vrais trajets de plusieurs cases
+- Nessa pêche au lac, Bram forge, Mira récolte et les fermiers cultivent
+- Balayage occasionnel, méditation, commerce, garde, repos et jeu de ballon
 - Particules atmosphériques adaptées à chaque région
 
 ## État final
