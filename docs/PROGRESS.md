@@ -105,3 +105,10 @@
 - Menu à onglets pour sac, carte et quête active
 - Carte 8×7 révélée par exploration et pourcentage sur 44 zones
 - Sylve reliée au HintSystem et aux secrets non trouvés
+
+## T16 — Trame principale, Actes I à III ✅
+
+- Épée remise par Bram et racines de la source coupables
+- Traque nocturne de l'Arbre Marcheur
+- Trois Sceaux activables dans les Marches
+- Cœur du Canal et effets en cascade sur le lac, le moulin et les dialogues

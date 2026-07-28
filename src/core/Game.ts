@@ -30,6 +30,7 @@ import { HUD } from "../ui/HUD";
 import { Menu } from "../ui/Menu";
 import { MapScreen } from "../ui/MapScreen";
 import { HintSystem } from "../systems/HintSystem";
+import { Campaign } from "../systems/Campaign";
 
 export const FIXED_STEP_MS = 1000 / 60;
 export const MAX_FRAME_DELTA_MS = 250;
@@ -81,6 +82,7 @@ export class Game {
   private readonly menu = new Menu();
   private readonly mapScreen = new MapScreen();
   private readonly hints = new HintSystem(this.flags, this.quests);
+  private readonly campaign = new Campaign(this.flags, this.quests, this.events);
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new Renderer(canvas);
@@ -160,7 +162,10 @@ export class Game {
           const line = nearestNpc.data.id === "sylve"
             ? this.hints.hint(this.camera.zone)
             : nearestNpc.talk(this.events);
-          this.textBox.open(line, nearestNpc.data.name);
+          const campaignLine = nearestNpc.data.id === "bram"
+            ? this.campaign.trigger("bram_sword", this.frame)
+            : null;
+          this.textBox.open(campaignLine ?? line, nearestNpc.data.name);
           this.affinity.add(nearestNpc.data.id, 1);
           this.quests.notify("talkTo", nearestNpc.data.id, this.frame);
           this.events.publish({ type: "talk", id: nearestNpc.data.id, frame: this.frame });
@@ -169,11 +174,18 @@ export class Game {
             ? this.alchemy.brewFirst(this.inventory)
             : nearest.data.kind === "valve"
               ? { message: this.dungeon.turnValve(0), changed: true }
+              : nearest.data.kind === "roots"
+                ? { message: nearest.data.text, changed: false }
+                : nearest.data.kind === "footprints" && !this.clock.isNight
+                  ? { message: "De jour, les empreintes restent immobiles. Revenez la nuit.", changed: false }
               : nearest.interact();
+          const campaignMessage = "changed" in result && result.changed
+            ? this.campaign.trigger(nearest.data.id, this.frame)
+            : null;
           if ("changed" in result && result.changed && nearest.data.kind === "chest") this.player.rupees += 20;
-          this.notice = result.message;
+          this.notice = campaignMessage ?? result.message;
           this.noticeFrames = 150;
-          this.textBox.open(result.message);
+          this.textBox.open(campaignMessage ?? result.message);
           if ("result" in result && result.result === "eternal_lantern") this.flags.set("lantern");
           this.events.publish({ type: "interact", id: nearest.data.id, frame: this.frame });
         } else if (this.player.startAttack()) {
@@ -195,10 +207,11 @@ export class Game {
           }
         }
         for (const object of this.interactables) {
-          if (object.data.kind === "bush" && overlaps(sword, object.bounds())
+          if ((object.data.kind === "bush" || object.data.kind === "roots") && overlaps(sword, object.bounds())
             && this.combat.confirmHit(object.data.id)) {
-            object.interact();
-            this.notice = "FSSSH ! Des feuilles tourbillonnent.";
+            const result = object.interact();
+            const campaignMessage = result.changed ? this.campaign.trigger(object.data.id, this.frame) : null;
+            this.notice = campaignMessage ?? "FSSSH ! Des feuilles tourbillonnent.";
             this.noticeFrames = 90;
           }
         }

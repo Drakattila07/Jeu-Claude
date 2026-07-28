@@ -33,7 +33,9 @@ export class Interactable extends Entity {
   }
 
   interact(): InteractionResult {
-    if (this.data.kind === "chest") {
+    if (this.data.kind === "chest" || this.data.kind === "seal"
+      || this.data.kind === "roots" || this.data.kind === "mechanism"
+      || this.data.kind === "footprints") {
       if (this.state.get(this.data.zone, this.data.id)) return { message: "Le coffre est vide.", changed: false };
       this.state.set(this.data.zone, this.data.id);
       return { message: this.data.text, changed: true };
@@ -87,6 +89,34 @@ export class Interactable extends Entity {
       ctx.fillStyle = PALETTE.roof;
       ctx.fillRect(x + 7, y + 2, 2, 12);
       ctx.fillRect(x + 2, y + 7, 12, 2);
+    } else if (this.data.kind === "roots") {
+      if (this.state.get(this.data.zone, this.data.id)) return;
+      ctx.strokeStyle = PALETTE.woodDark;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(x, y + 2);
+      ctx.bezierCurveTo(x + 14, y + 4, x + 1, y + 12, x + 16, y + 15);
+      ctx.moveTo(x + 16, y + 1);
+      ctx.bezierCurveTo(x + 2, y + 5, x + 15, y + 10, x, y + 15);
+      ctx.stroke();
+    } else if (this.data.kind === "footprints") {
+      ctx.fillStyle = PALETTE.soil;
+      ctx.fillRect(x + 2, y + 9, 5, 7);
+      ctx.fillRect(x + 10, y + 1, 5, 7);
+    } else if (this.data.kind === "seal") {
+      ctx.fillStyle = this.state.get(this.data.zone, this.data.id) ? PALETTE.leafLight : PALETTE.stoneDark;
+      ctx.fillRect(x + 2, y + 2, 12, 12);
+      ctx.fillStyle = PALETTE.yellow;
+      ctx.fillRect(x + 7, y + 4, 2, 8);
+      ctx.fillRect(x + 4, y + 7, 8, 2);
+    } else if (this.data.kind === "mechanism") {
+      ctx.strokeStyle = this.state.get(this.data.zone, this.data.id) ? PALETTE.waterLight : PALETTE.stoneLight;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(x + 8, y + 8, 7, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = PALETTE.yellow;
+      ctx.fillRect(x + 6, y + 6, 4, 4);
     }
     ctx.restore();
   }

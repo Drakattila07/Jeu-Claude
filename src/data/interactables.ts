@@ -6,6 +6,12 @@ export const INTERACTABLES = [
   { id: "quay_bush", zone: "quai_lac", kind: "bush", x: 64, y: 96, text: "Un buisson agité par le vent du lac." }
   ,{ id: "iris_cauldron", zone: "lisiere_carrefour", kind: "cauldron", x: 48, y: 112, text: "Le chaudron bouillonne d'impatience." }
   ,{ id: "canal_valve", zone: "canal_entry", kind: "valve", x: 128, y: 112, text: "Une lourde vanne de bronze." }
+  ,{ id: "source_roots", zone: "bosquet_souches", kind: "roots", x: 128, y: 64, text: "Des racines épaisses bloquent la vanne." }
+  ,{ id: "walker_trace", zone: "clairiere_cimes", kind: "footprints", x: 112, y: 112, text: "D'immenses empreintes quittent la clairière." }
+  ,{ id: "seal_a", zone: "marches_ruines", kind: "seal", x: 80, y: 96, text: "Le Sceau du Bloc." }
+  ,{ id: "seal_b", zone: "marches_ruines", kind: "seal", x: 128, y: 64, text: "Le Sceau du Regard." }
+  ,{ id: "seal_c", zone: "marches_ruines", kind: "seal", x: 176, y: 96, text: "Le Sceau du Rythme." }
+  ,{ id: "mechanism_heart", zone: "canal_entry", kind: "mechanism", x: 176, y: 80, text: "La roue centrale attend une impulsion." }
 ] as const;
 
 export type InteractableData = (typeof INTERACTABLES)[number];
