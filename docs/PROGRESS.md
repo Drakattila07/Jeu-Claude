@@ -91,3 +91,10 @@
 - Potions rouge, verte et bleue
 - Lanterne éternelle et lecture de la Lettre jamais envoyée
 - Résultat comique « Bloup » pour les objets sans recette
+
+## T14 — Donjon du Canal Tari ✅
+
+- Dix salles décrites dans les données
+- Quatre vannes à trois positions et propagation des niveaux d'eau
+- Eau basse/moyenne/haute, blocs flottants et courants décrits
+- Mini-boss Sangsue de Pierre et Bottes de Plomb

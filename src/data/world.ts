@@ -5,6 +5,7 @@ export const WORLD_ZONES = [
   { id: "quai_lac", x: 3, y: 4, name: "QUAI DU LAC", map: "hamlet_well", safe: true }
   ,{ id: "lisiere_carrefour", x: 2, y: 2, name: "CARREFOUR CREUX", map: "hamlet_well", safe: false }
   ,{ id: "marches_ruines", x: 3, y: 2, name: "RUINES BASSES", map: "hamlet_well", safe: false }
+  ,{ id: "canal_entry", x: 3, y: 5, name: "CANAL TARI", map: "hamlet_well", safe: false }
 ] as const;
 
 export type WorldZoneData = (typeof WORLD_ZONES)[number];

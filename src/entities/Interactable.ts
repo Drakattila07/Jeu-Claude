@@ -78,6 +78,15 @@ export class Interactable extends Entity {
       ctx.fillRect(x + 10, y, 2, 2);
       ctx.fillStyle = PALETTE.red;
       ctx.fillRect(x + 5, y + 14, 6, 2);
+    } else if (this.data.kind === "valve") {
+      ctx.strokeStyle = PALETTE.stoneLight;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(x + 8, y + 8, 6, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = PALETTE.roof;
+      ctx.fillRect(x + 7, y + 2, 2, 12);
+      ctx.fillRect(x + 2, y + 7, 12, 2);
     }
     ctx.restore();
   }

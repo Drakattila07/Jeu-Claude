@@ -25,6 +25,7 @@ import { EnvironmentOverlay } from "../ui/EnvironmentOverlay";
 import { ZoneVariants } from "../world/ZoneVariants";
 import { Inventory } from "../systems/Inventory";
 import { Alchemy } from "../systems/Alchemy";
+import { Dungeon } from "../systems/Dungeon";
 
 export const FIXED_STEP_MS = 1000 / 60;
 export const MAX_FRAME_DELTA_MS = 250;
@@ -71,6 +72,7 @@ export class Game {
   private readonly variants = new ZoneVariants();
   private readonly inventory = new Inventory();
   private readonly alchemy = new Alchemy();
+  private readonly dungeon = new Dungeon();
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new Renderer(canvas);
@@ -143,7 +145,9 @@ export class Game {
         } else if (nearest) {
           const result = nearest.data.kind === "cauldron"
             ? this.alchemy.brewFirst(this.inventory)
-            : nearest.interact();
+            : nearest.data.kind === "valve"
+              ? { message: this.dungeon.turnValve(0), changed: true }
+              : nearest.interact();
           if ("changed" in result && result.changed && nearest.data.kind === "chest") this.player.rupees += 20;
           this.notice = result.message;
           this.noticeFrames = 150;
@@ -211,6 +215,7 @@ export class Game {
     for (const enemy of this.enemies) enemy.draw(ctx);
     this.player.draw(ctx);
     this.map.drawLayer(ctx, "decor_above");
+    if (this.zones.at(this.camera.zone)?.id === "canal_entry") this.dungeon.drawWater(ctx);
     ctx.restore();
     const zoneForLight = this.zones.at(this.camera.zone);
     this.environment.draw(ctx, this.frame, this.player.position, {
