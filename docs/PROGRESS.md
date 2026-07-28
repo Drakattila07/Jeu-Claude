@@ -119,3 +119,10 @@
 - Canne perdue et mini-jeu de pêche déterministe avec Nessa
 - Souche Fantôme, Statues-Œil et secrets environnementaux
 - Récompenses, flags et progression partagent le même pipeline
+
+## T18 — Acte IV, boss et épilogues ✅
+
+- Arbre-Mère en trois phases : racines, graines et branches-arène
+- Dix-huit points de vie, projectiles et impacts lourds
+- Choix final Libérer / Enraciner
+- Deux jeux complets de dialogues post-game et Chasse aux Secrets

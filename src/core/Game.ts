@@ -33,6 +33,8 @@ import { HintSystem } from "../systems/HintSystem";
 import { Campaign } from "../systems/Campaign";
 import { SideActivities } from "../systems/SideActivities";
 import { Fishing } from "../systems/Fishing";
+import { MotherTreeBoss } from "../entities/Boss";
+import { epilogueLine } from "../data/epilogues";
 
 export const FIXED_STEP_MS = 1000 / 60;
 export const MAX_FRAME_DELTA_MS = 250;
@@ -87,6 +89,8 @@ export class Game {
   private readonly campaign = new Campaign(this.flags, this.quests, this.events);
   private readonly sideActivities = new SideActivities(this.flags, this.quests);
   private readonly fishing = new Fishing();
+  private boss: MotherTreeBoss | null = null;
+  private endingPending = false;
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new Renderer(canvas);
@@ -145,6 +149,19 @@ export class Game {
       this.input.endFrame();
       return;
     }
+    if (this.endingPending) {
+      if (this.input.wasPressed("A") || this.input.wasPressed("B")) {
+        const release = this.input.wasPressed("A");
+        this.flags.set(release ? "ending_release" : "ending_root");
+        this.quests.notify("choice", "ending", this.frame);
+        this.textBox.open(release
+          ? "Vous libérez l'Arbre-Mère. Elle se lève et disparaît derrière les Cimes."
+          : "Vous enracinez l'Arbre-Mère. L'eau jaillit tandis qu'elle s'endort.");
+        this.endingPending = false;
+      }
+      this.input.endFrame();
+      return;
+    }
     if (this.input.wasPressed("B") && this.zones.at(this.camera.zone)?.id === "quai_lac") {
       if (this.flags.has("fishing_unlocked")) this.fishing.start(this.clock.day);
       else this.textBox.open("Il vous manque une canne. Nessa en a perdu une dans la Lisière.");
@@ -154,6 +171,7 @@ export class Game {
     if (!this.transition.active && !this.combat.frozen) {
       this.player.update();
       for (const npc of this.npcs) npc.update();
+      this.boss?.update();
       for (const enemy of this.enemies) {
         enemy.update();
         if (enemy.active && overlaps(enemy.bounds, {
@@ -178,9 +196,14 @@ export class Game {
           .filter((npc) => npc.distanceTo(this.player.position) <= 25)
           .sort((a, b) => a.distanceTo(this.player.position) - b.distanceTo(this.player.position))[0];
         if (nearestNpc && (!nearest || nearestNpc.distanceTo(this.player.position) < nearest.distanceTo(this.player.position))) {
-          const line = nearestNpc.data.id === "sylve"
+          const postgameLine = this.flags.has("ending_release")
+            ? epilogueLine("release", nearestNpc.data.id)
+            : this.flags.has("ending_root")
+              ? epilogueLine("root", nearestNpc.data.id)
+              : null;
+          const line = postgameLine ?? (nearestNpc.data.id === "sylve"
             ? this.hints.hint(this.camera.zone)
-            : nearestNpc.talk(this.events);
+            : nearestNpc.talk(this.events));
           const campaignLine = nearestNpc.data.id === "bram"
             ? this.campaign.trigger("bram_sword", this.frame)
             : null;
@@ -220,6 +243,15 @@ export class Game {
       }
       if (this.player.swordActive) {
         const sword = this.player.attackHitbox();
+        if (this.boss?.active && overlaps(sword, this.boss.bounds) && this.combat.confirmHit("mother_tree", true)) {
+          const defeated = this.boss.hit();
+          if (defeated) {
+            this.flags.set("boss_defeated");
+            this.quests.notify("defeat", "mother_tree", this.frame);
+            this.endingPending = true;
+            this.textBox.open("L'Arbre-Mère s'agenouille. X : la libérer · C : l'enraciner.");
+          }
+        }
         for (const enemy of this.enemies) {
           if (enemy.active && overlaps(sword, enemy.bounds) && this.combat.confirmHit(enemy.spawn.id,
             enemy.spawn.type === "gargoyle")) {
@@ -275,6 +307,7 @@ export class Game {
     for (const object of this.interactables) object.draw(ctx);
     for (const npc of this.npcs) npc.draw(ctx);
     for (const enemy of this.enemies) enemy.draw(ctx);
+    this.boss?.draw(ctx);
     this.player.draw(ctx);
     this.map.drawLayer(ctx, "decor_above");
     if (this.zones.at(this.camera.zone)?.id === "canal_entry") this.dungeon.drawWater(ctx);
@@ -318,5 +351,7 @@ export class Game {
         entry.zone === zone.id && this.clock.hour >= entry.start && this.clock.hour < entry.end))
         .map((data) => new Npc(data, this.map, this.clock))
       : [];
+    this.boss = zone?.id === "boss_arena" && this.flags.has("mechanism_repaired")
+      && !this.flags.has("boss_defeated") ? new MotherTreeBoss(this.player) : null;
   }
 }
