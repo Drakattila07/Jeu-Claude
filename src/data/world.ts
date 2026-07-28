@@ -35,7 +35,7 @@ export const WORLD_ZONES = [
   { id: "lisiere_carrefour", x: 2, y: 2, name: "CARREFOUR CREUX", map: "procedural", safe: false, biome: "forest" },
   { id: "clairiere_champignons", x: 3, y: 2, name: "CLAIRIÈRE DES CHAMPIGNONS", map: "procedural", safe: false, biome: "forest" },
   { id: "riviere_gue", x: 4, y: 2, name: "LE GUÉ", map: "procedural", safe: false, biome: "river" },
-  { id: "portail_scelle", x: 5, y: 2, name: "PORTAIL SCELLÉ", map: "procedural", safe: false, biome: "ruins" },
+  { id: "portail_scelle", x: 5, y: 2, name: "CHÂTEAU DE CENDRE", map: "procedural", safe: false, biome: "ruins" },
   { id: "marches_ruines", x: 6, y: 2, name: "RUINES BASSES", map: "procedural", safe: false, biome: "ruins" },
   { id: "ermitage_gorm", x: 7, y: 2, name: "ERMITAGE DE GORM", map: "procedural", safe: false, biome: "cliffs" },
 

@@ -5,7 +5,7 @@ import { NPCS } from "../src/data/npcs/core";
 import { QUESTS } from "../src/data/quests/core";
 import { WORLD_ZONES } from "../src/data/world";
 import { INTERACTABLES } from "../src/data/interactables";
-import { ENEMY_SPAWNS } from "../src/data/enemies";
+import { CASTLE_ENEMY_SPAWNS, ENEMY_SPAWNS } from "../src/data/enemies";
 
 async function jsonFiles(directory: string): Promise<readonly string[]> {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -27,6 +27,7 @@ unique(NPCS.map((npc) => npc.id), "PNJ", errors);
 unique(QUESTS.map((quest) => quest.id), "Quêtes", errors);
 unique(WORLD_ZONES.map((zone) => zone.id), "Zones", errors);
 unique(INTERACTABLES.map((object) => object.id), "Interactables", errors);
+unique([...ENEMY_SPAWNS, ...CASTLE_ENEMY_SPAWNS].map((enemy) => enemy.id), "Ennemis", errors);
 
 const zoneIds = new Set(WORLD_ZONES.map((zone) => zone.id));
 for (const object of INTERACTABLES) if (!zoneIds.has(object.zone)) errors.push(`Interactable ${object.id}: zone ${object.zone} inconnue.`);

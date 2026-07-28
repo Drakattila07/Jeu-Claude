@@ -22,7 +22,8 @@ export class HUD {
     ctx.fillStyle = PALETTE.yellow;
     ctx.fillRect(52, 6, 7, 7);
     renderer.pixelText(String(player.rupees).padStart(3, "0"), 62, 5, PALETTE.cream);
-    renderer.pixelText(zoneName.slice(0, 16), 128, 5, PALETTE.grassLight, "center");
+    renderer.pixelText(player.isDemon ? "DEMI-DÉMON" : zoneName.slice(0, 16), 128, 5,
+      player.isDemon ? PALETTE.rose : PALETTE.grassLight, "center");
     renderer.pixelText(`${clock.weather === "rain" ? "R" : "·"} ${String(clock.hour).padStart(2, "0")}:${String(clock.minute).padStart(2, "0")}`,
       249, 5, PALETTE.cream, "right");
     if (objective) {

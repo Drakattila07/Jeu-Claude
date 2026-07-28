@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { createCottageMap, createHermitageMap, nearCottageExit } from "../world/CottageInterior";
+import {
+  createCastleMap,
+  createCottageMap,
+  createHermitageMap,
+  nearCottageExit,
+} from "../world/CottageInterior";
 import { TileMap } from "../world/TileMap";
 import { TileSet } from "../world/TileSet";
 import { createProceduralMap } from "../world/ZoneMapFactory";
@@ -30,6 +35,13 @@ describe("maison et lieux remarquables", () => {
     expect(room.isSolid(7, 12)).toBe(true);
   });
 
+  it("construit une grande salle de château praticable", () => {
+    const room = new TileMap(createCastleMap(), new TileSet());
+    expect(room.tileAt("ground", 8, 7)).toBe(31);
+    expect(room.isSolid(3, 3)).toBe(true);
+    expect(room.isSolid(8, 7)).toBe(false);
+  });
+
   it("fait réellement serpenter le fleuve", () => {
     const river = new TileMap(createProceduralMap(zone("riviere_gue")), new TileSet());
     const waterCenters = [2, 4, 8, 10].map((y) => {
@@ -52,5 +64,18 @@ describe("maison et lieux remarquables", () => {
     for (let y = 4; y <= 9; y += 1) {
       for (let x = 5; x <= 10; x += 1) expect(arena.isSolid(x, y)).toBe(false);
     }
+  });
+
+  it("dessine une façade fortifiée et sa porte au Château de Cendre", () => {
+    const castle = new TileMap(createProceduralMap(zone("portail_scelle")), new TileSet());
+    expect(castle.tileAt("terrain", 3, 3)).toBe(19);
+    expect(castle.tileAt("terrain", 7, 5)).toBe(14);
+    expect(castle.isSolid(7, 5)).toBe(true);
+  });
+
+  it("densifie la forêt avec des arbres sur le sentier et des contreforts rocheux", () => {
+    const forest = new TileMap(createProceduralMap(zone("lisiere_sentier")), new TileSet());
+    expect([forest.tileAt("terrain", 7, 4), forest.tileAt("terrain", 8, 4)]).toContain(6);
+    expect(forest.tileAt("terrain", 2, 2)).toBe(19);
   });
 });

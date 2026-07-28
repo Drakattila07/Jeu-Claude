@@ -87,6 +87,21 @@ export function createProceduralMap(zone: WorldZoneData): TiledMapData {
       if (x < 6 || x > 9) layers.decor_above[index(x, 1)] = zone.biome === "peaks" ? 24 : 6;
     }
   }
+  if (zone.biome === "forest") {
+    const upperTreeX = (seed & 1) === 0 ? 7 : 8;
+    const lowerTreeX = upperTreeX === 7 ? 8 : 7;
+    layers.terrain[index(upperTreeX, 4)] = 6;
+    layers.terrain[index(lowerTreeX, 9)] = 6;
+    layers.decor_above[index(upperTreeX, 3)] = 6;
+    layers.decor_above[index(lowerTreeX, 8)] = 6;
+    for (const [x, y] of [[2, 2], [3, 2], [12, 10], [13, 10]] as const) {
+      layers.terrain[index(x, y)] = 19;
+      if (x % 2 === 0) layers.decor_above[index(x, y - 1)] = 24;
+    }
+    for (const [x, y] of [[2, 5], [3, 5], [12, 6], [13, 6], [4, 10], [11, 3]] as const) {
+      if (!isMainPath(x, y)) layers.terrain[index(x, y)] = 6;
+    }
+  }
   if (zone.biome === "peaks") {
     for (const ridgeY of [3, 9]) {
       for (let x = 1; x < WIDTH - 1; x += 1) {
@@ -201,6 +216,35 @@ export function createProceduralMap(zone: WorldZoneData): TiledMapData {
       for (const [x, y] of [[5, 4], [10, 4], [5, 8], [10, 8], [3, 6], [12, 6]] as const) {
         layers.terrain[index(x, y)] = 29;
       }
+    }
+  }
+  if (zone.id === "portail_scelle") {
+    for (let y = 1; y <= 8; y += 1) {
+      for (let x = 2; x <= 13; x += 1) {
+        layers.terrain[index(x, y)] = 0;
+        layers.decor_below[index(x, y)] = 0;
+        layers.decor_above[index(x, y)] = 0;
+      }
+    }
+    for (let y = 2; y <= 6; y += 1) {
+      for (const x of [2, 3, 4, 11, 12, 13]) layers.terrain[index(x, y)] = 19;
+    }
+    for (const x of [2, 3, 4, 11, 12, 13]) layers.terrain[index(x, 1)] = 8;
+    for (let x = 5; x <= 10; x += 1) {
+      layers.terrain[index(x, 2)] = 8;
+      layers.terrain[index(x, 3)] = 8;
+      layers.terrain[index(x, 4)] = 9;
+      layers.terrain[index(x, 5)] = 9;
+    }
+    layers.terrain[index(7, 5)] = 14;
+    layers.terrain[index(8, 5)] = 14;
+    layers.decor_below[index(4, 6)] = 29;
+    layers.decor_below[index(11, 6)] = 29;
+    for (let y = 6; y < HEIGHT; y += 1) {
+      layers.ground[index(7, y)] = 31;
+      layers.ground[index(8, y)] = 31;
+      layers.terrain[index(7, y)] = 0;
+      layers.terrain[index(8, y)] = 0;
     }
   }
   if (zone.biome === "cliffs") {

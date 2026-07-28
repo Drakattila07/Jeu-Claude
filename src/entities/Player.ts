@@ -12,7 +12,7 @@ export class Player extends Entity {
   hearts = 6;
   maxHearts = 6;
   rupees = 12;
-  readonly speed = 1.5;
+  private demon = false;
   attackFrame = -1;
   invulnerabilityFrames = 0;
   flashFrames = 0;
@@ -24,6 +24,15 @@ export class Player extends Entity {
   }
 
   setMap(map: TileMap): void { this.map = map; }
+  setDemon(active: boolean): void { this.demon = active; }
+  toggleDemon(): boolean {
+    this.demon = !this.demon;
+    return this.demon;
+  }
+  get isDemon(): boolean { return this.demon; }
+  get speed(): number { return this.demon ? 2.35 : 1.5; }
+  get attackDamage(): number { return this.demon ? 2 : 1; }
+  get fireRadius(): number { return this.demon ? 36 : 0; }
 
   update(): void {
     if (this.invulnerabilityFrames > 0) this.invulnerabilityFrames -= 1;
@@ -96,17 +105,17 @@ export class Player extends Entity {
     ctx.fillRect(x + 3 + step, y + 12, 4, 4);
     ctx.fillRect(x + 9 - step, y + 12, 4, 4);
     ctx.fillRect(x + 2, y + 6 + bob, 12, 8);
-    ctx.fillStyle = PALETTE.pineDark;
+    ctx.fillStyle = this.demon ? PALETTE.purple : PALETTE.pineDark;
     ctx.fillRect(x + 3, y + 7 + bob, 10, 7);
-    ctx.fillStyle = PALETTE.leaf;
+    ctx.fillStyle = this.demon ? PALETTE.red : PALETTE.leaf;
     ctx.fillRect(x + 4, y + 7 + bob, 3, 6);
-    ctx.fillStyle = PALETTE.leafLight;
+    ctx.fillStyle = this.demon ? PALETTE.yellow : PALETTE.leafLight;
     ctx.fillRect(x + 5, y + 8 + bob, 1, 4);
 
     if (this.direction !== "up") {
       ctx.fillStyle = PALETTE.ink;
       ctx.fillRect(x + 4, y + 1 + bob, 9, 7);
-      ctx.fillStyle = PALETTE.sandLight;
+      ctx.fillStyle = this.demon ? PALETTE.rose : PALETTE.sandLight;
       ctx.fillRect(x + 5, y + 3 + bob, 7, 6);
       ctx.fillStyle = PALETTE.cream;
       ctx.fillRect(x + 6, y + 3 + bob, 4, 2);
@@ -122,12 +131,20 @@ export class Player extends Entity {
 
     ctx.fillStyle = PALETTE.ink;
     ctx.fillRect(x + 1, y + 2 + bob, 13, 4);
-    ctx.fillStyle = PALETTE.leaf;
+    ctx.fillStyle = this.demon ? PALETTE.roofDark : PALETTE.leaf;
     ctx.fillRect(x + 2, y + 1 + bob, 12, 4);
-    ctx.fillStyle = PALETTE.leafLight;
+    ctx.fillStyle = this.demon ? PALETTE.red : PALETTE.leafLight;
     ctx.fillRect(x + (this.direction === "left" ? 1 : 3), y + bob, 9, 2);
     ctx.fillStyle = PALETTE.pineDark;
     ctx.fillRect(x + 11, y + 4 + bob, 4, 3);
+    if (this.demon) {
+      ctx.fillStyle = PALETTE.cream;
+      ctx.fillRect(x + 2, y - 3 + bob, 2, 5);
+      ctx.fillRect(x + 13, y - 3 + bob, 2, 5);
+      ctx.fillStyle = PALETTE.yellow;
+      ctx.fillRect(x + 2, y - 4 + bob, 1, 2);
+      ctx.fillRect(x + 14, y - 4 + bob, 1, 2);
+    }
 
     ctx.fillStyle = PALETTE.ink;
     if (this.direction === "left") ctx.fillRect(x + 5, y + 6 + bob, 1, 1);

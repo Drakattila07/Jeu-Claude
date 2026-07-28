@@ -2,7 +2,7 @@ import { PALETTE } from "../data/palette";
 import type { Vec2 } from "../entities/Entity";
 import type { LayerName, TiledLayer, TiledMapData } from "./TileMap";
 
-export type InteriorKind = "cottage" | "hermitage";
+export type InteriorKind = "cottage" | "hermitage" | "castle";
 
 const WIDTH = 16;
 const HEIGHT = 14;
@@ -60,6 +60,15 @@ export function createHermitageMap(): TiledMapData {
   block(layers, 10, 3, 4, 2);
   block(layers, 6, 7, 4, 2);
   layers.decor_below[at(3, 8)] = 26;
+  return tiled(layers);
+}
+
+export function createCastleMap(): TiledMapData {
+  const layers = roomLayers(31, 19);
+  for (const [x, y] of [[3, 3], [12, 3], [3, 8], [12, 8]] as const) {
+    block(layers, x, y, 1, 2);
+  }
+  block(layers, 6, 2, 4, 2);
   return tiled(layers);
 }
 
@@ -175,6 +184,53 @@ export function drawHermitageInterior(ctx: CanvasRenderingContext2D, frame: numb
 
   ctx.globalAlpha = 0.07;
   rect(ctx, PALETTE.yellow, 158, 38, 81, 66);
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+export function drawCastleInterior(ctx: CanvasRenderingContext2D, frame: number): void {
+  ctx.save();
+  rect(ctx, PALETTE.roofDark, 101, 30, 55, 174);
+  rect(ctx, PALETTE.red, 106, 32, 45, 170);
+  rect(ctx, PALETTE.yellow, 110, 32, 4, 170);
+  rect(ctx, PALETTE.yellow, 143, 32, 4, 170);
+  for (let y = 47; y < 188; y += 28) {
+    rect(ctx, PALETTE.cream, 124, y, 9, 9);
+    rect(ctx, PALETTE.purple, 126, y + 2, 5, 5);
+  }
+
+  rect(ctx, PALETTE.woodDark, 94, 29, 69, 37);
+  rect(ctx, PALETTE.roofDark, 99, 24, 59, 36);
+  rect(ctx, PALETTE.roof, 105, 30, 47, 27);
+  rect(ctx, PALETTE.yellow, 111, 35, 35, 5);
+  rect(ctx, PALETTE.purple, 118, 41, 21, 15);
+  rect(ctx, PALETTE.yellow, 125, 44, 7, 8);
+
+  for (const x of [43, 194]) {
+    rect(ctx, PALETTE.stoneDark, x, 54, 20, 82);
+    rect(ctx, PALETTE.stone, x + 3, 50, 14, 82);
+    rect(ctx, PALETTE.stoneLight, x, 48, 20, 8);
+    rect(ctx, PALETTE.stoneDark, x - 2, 128, 24, 8);
+  }
+
+  for (const x of [73, 174]) {
+    rect(ctx, PALETTE.woodDark, x, 61, 4, 25);
+    const flicker = (Math.floor(frame / 8) + x) % 2;
+    rect(ctx, PALETTE.red, x - 5 + flicker, 53, 14 - flicker * 2, 12);
+    rect(ctx, PALETTE.yellow, x - 2, 55, 8, 8);
+  }
+
+  rect(ctx, PALETTE.ink, 24, 34, 35, 5);
+  rect(ctx, PALETTE.roof, 28, 39, 27, 36);
+  rect(ctx, PALETTE.yellow, 32, 44, 19, 4);
+  rect(ctx, PALETTE.purple, 37, 51, 9, 14);
+  rect(ctx, PALETTE.ink, 197, 34, 35, 5);
+  rect(ctx, PALETTE.roof, 201, 39, 27, 36);
+  rect(ctx, PALETTE.yellow, 205, 44, 19, 4);
+  rect(ctx, PALETTE.purple, 210, 51, 9, 14);
+
+  ctx.globalAlpha = 0.08;
+  rect(ctx, PALETTE.red, 64, 28, 128, 105);
   ctx.globalAlpha = 1;
   ctx.restore();
 }

@@ -63,8 +63,12 @@ export const QUESTS = [
     { id: "dette", type: "flag", target: "merchant_debt_paid", hint: "Il manque 200 rubis." }
   ], rewards: [{ type: "flag", id: "rare_stock" }], worldEffects: [] },
   { id: "carte_incomplete", title: "La Carte Incomplète", giver: "doyen_orme", prerequisites: [], steps: [
-    { id: "explorer", type: "collect", target: "zone_mapped", count: 44, hint: "Chaque écran compte." }
+    { id: "explorer", type: "collect", target: "zone_mapped", count: 56, hint: "Cartographiez les 56 régions de la vallée." }
   ], rewards: [{ type: "flag", id: "map_complete" }], worldEffects: [] },
+  { id: "chateau_cendre", title: "Le Crâne de Cendre", giver: "garde_ronan", prerequisites: ["act1_complete"], steps: [
+    { id: "relique", type: "flag", target: "half_demon_skull",
+      hint: "Château de Cendre : battez tous les défenseurs." }
+  ], rewards: [{ type: "flag", id: "castle_cleared" }], worldEffects: ["demon_relic_found"] },
   { id: "statues_regardent", title: "Les Statues qui Regardent", giver: "environnement", prerequisites: [], steps: [
     { id: "intersection", type: "flag", target: "statue_secret", hint: "Leurs regards convergent." }
   ], rewards: [{ type: "flag", id: "statue_relic" }], worldEffects: [] },

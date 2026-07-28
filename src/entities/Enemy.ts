@@ -71,7 +71,44 @@ export class Enemy extends Entity {
     ctx.fillStyle = PALETTE.ink;
     ctx.fillRect(x + 3, y + 13, 10, 2);
     ctx.fillStyle = this.flashFrames > 0 ? PALETTE.white : PALETTE[this.definition.color];
-    if (this.spawn.type === "wolf") {
+    if (this.spawn.type === "castle_guard") {
+      const stride = Math.floor(this.aiFrame / 8) % 2;
+      ctx.fillStyle = PALETTE.ink;
+      ctx.fillRect(x + 3, y + 2, 11, 13);
+      ctx.fillStyle = this.flashFrames > 0 ? PALETTE.white : PALETTE.stoneDark;
+      ctx.fillRect(x + 4, y + 3, 9, 5);
+      ctx.fillStyle = PALETTE.roof;
+      ctx.fillRect(x + 4, y + 8, 9, 6);
+      ctx.fillStyle = PALETTE.stoneLight;
+      ctx.fillRect(x + 5, y + 4, 7, 2);
+      ctx.fillStyle = PALETTE.yellow;
+      ctx.fillRect(x + 8, y + 5, 2, 2);
+      ctx.fillStyle = PALETTE.woodDark;
+      ctx.fillRect(x + 14, y, 2, 16);
+      ctx.fillStyle = PALETTE.stoneLight;
+      ctx.fillRect(x + 13, y, 4, 3);
+      ctx.fillStyle = PALETTE.woodDark;
+      ctx.fillRect(x + 3 + stride, y + 13, 3, 3);
+      ctx.fillRect(x + 10 - stride, y + 13, 3, 3);
+    } else if (this.spawn.type === "ember_mage") {
+      const flame = Math.floor(this.aiFrame / 9) % 2;
+      ctx.fillStyle = PALETTE.ink;
+      ctx.fillRect(x + 3, y + 5, 11, 11);
+      ctx.fillStyle = this.flashFrames > 0 ? PALETTE.white : PALETTE.purple;
+      ctx.fillRect(x + 4, y + 4, 9, 11);
+      ctx.fillStyle = PALETTE.roofDark;
+      ctx.fillRect(x + 2, y + 2, 13, 4);
+      ctx.fillRect(x + 6, y, 5, 4);
+      ctx.fillStyle = PALETTE.red;
+      ctx.fillRect(x + 6, y + 6, 2, 2);
+      ctx.fillRect(x + 11, y + 6, 2, 2);
+      ctx.fillStyle = PALETTE.woodLight;
+      ctx.fillRect(x + 15, y + 1, 2, 15);
+      ctx.fillStyle = PALETTE.red;
+      ctx.fillRect(x + 13 + flame, y - 2, 6 - flame, 6);
+      ctx.fillStyle = PALETTE.yellow;
+      ctx.fillRect(x + 15, y - 1, 2, 4);
+    } else if (this.spawn.type === "wolf") {
       const stride = Math.floor(this.aiFrame / 7) % 2;
       ctx.fillStyle = PALETTE.ink;
       ctx.fillRect(x + 1, y + 6, 14, 8);

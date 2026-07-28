@@ -176,6 +176,16 @@
 - Cimes, terrasses rocheuses, ruines et arène finale entièrement restructurées
 - Intérieur distinct et accessible pour l'ermitage de Gorm
 
+## Château de Cendre et forme demi-démon ✅
+
+- Nouvelle forteresse extérieure et grande salle intérieure avec trône et braseros
+- Trois Gardes de Cendre et un Mage des Braises
+- Crâne du Demi-Démon remis après la victoire et conservé dans l'inventaire
+- Transformation activable avec Maj, vitesse accrue et dégâts doublés
+- Onde de feu autour du joueur et boule de feu à chaque attaque
+- Incendies sur les arbres, maisons, clôtures, ponts et éléments en bois
+- Forêts densifiées avec arbres sur les sentiers et contreforts montagneux
+
 ## État final
 
 Les vingt tickets sont implémentés, compilés, testés et versionnés

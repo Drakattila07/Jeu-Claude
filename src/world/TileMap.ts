@@ -50,4 +50,9 @@ export class TileMap {
     return this.tileSet.properties(this.tileAt("terrain", x, y)).solid === true
       || this.tileSet.properties(this.tileAt("decor_below", x, y)).solid === true;
   }
+
+  isBurnable(x: number, y: number): boolean {
+    const layers: readonly LayerName[] = ["decor_above", "terrain", "decor_below", "ground"];
+    return layers.some((layer) => this.tileSet.properties(this.tileAt(layer, x, y)).burnable === true);
+  }
 }

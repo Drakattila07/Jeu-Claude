@@ -18,24 +18,30 @@ export interface TileProperties {
   readonly slow?: number;
   readonly cuttable?: boolean;
   readonly ledge?: boolean;
+  readonly burnable?: boolean;
 }
 
 const TILES: readonly TileProperties[] = [
   { kind: "empty" }, { kind: "grass" }, { kind: "grass_alt" },
   { kind: "path" }, { kind: "stone", solid: true }, { kind: "water", water: true, slow: 0.6 },
-  { kind: "tree_crown", solid: true }, { kind: "tree_trunk", solid: true },
-  { kind: "roof", solid: true }, { kind: "wall", solid: true }, { kind: "well", solid: true },
-  { kind: "flowers" }, { kind: "fence", solid: true }, { kind: "bush", solid: true, cuttable: true },
-  { kind: "door", solid: true }, { kind: "sign", solid: true }, { kind: "stairs", ledge: true },
+  { kind: "tree_crown", solid: true, burnable: true }, { kind: "tree_trunk", solid: true, burnable: true },
+  { kind: "roof", solid: true, burnable: true }, { kind: "wall", solid: true, burnable: true }, { kind: "well", solid: true },
+  { kind: "flowers" }, { kind: "fence", solid: true, burnable: true },
+  { kind: "bush", solid: true, cuttable: true, burnable: true },
+  { kind: "door", solid: true, burnable: true }, { kind: "sign", solid: true, burnable: true },
+  { kind: "stairs", ledge: true },
   { kind: "forest_floor" }, { kind: "mud", slow: 0.82 }, { kind: "cliff", solid: true },
   { kind: "reeds", solid: true }, { kind: "rubble", solid: true }, { kind: "lilypad", water: true, slow: 0.6 },
-  { kind: "crop" }, { kind: "pine_crown", solid: true }, { kind: "stump", solid: true },
-  { kind: "mushroom" }, { kind: "deep_water", water: true, slow: 0.5 }, { kind: "bridge" },
+  { kind: "crop", burnable: true }, { kind: "pine_crown", solid: true, burnable: true },
+  { kind: "stump", solid: true, burnable: true },
+  { kind: "mushroom" }, { kind: "deep_water", water: true, slow: 0.5 },
+  { kind: "bridge", burnable: true },
   { kind: "moss_stone", solid: true }, { kind: "wildflowers" }, { kind: "cracked_path" },
-  { kind: "wood_floor" }, { kind: "interior_wall", solid: true }, { kind: "rug" },
-  { kind: "bed", solid: true }, { kind: "bookshelf", solid: true },
-  { kind: "table", solid: true }, { kind: "fireplace", solid: true },
-  { kind: "chair", solid: true }, { kind: "window", solid: true },
+  { kind: "wood_floor", burnable: true }, { kind: "interior_wall", solid: true, burnable: true },
+  { kind: "rug", burnable: true },
+  { kind: "bed", solid: true, burnable: true }, { kind: "bookshelf", solid: true, burnable: true },
+  { kind: "table", solid: true, burnable: true }, { kind: "fireplace", solid: true },
+  { kind: "chair", solid: true, burnable: true }, { kind: "window", solid: true, burnable: true },
   { kind: "interior_block", solid: true },
 ];
 

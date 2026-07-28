@@ -12,7 +12,8 @@ export const ITEMS = {
   blue_potion: { name: "Potion bleue", stack: 3 },
   eternal_lantern: { name: "Lanterne éternelle", stack: 1 },
   letter_truth: { name: "Secret de la lettre", stack: 1 },
-  lead_boots: { name: "Bottes de plomb", stack: 1 }
+  lead_boots: { name: "Bottes de plomb", stack: 1 },
+  half_demon_skull: { name: "Crâne du Demi-Démon", stack: 1 }
 } as const;
 
 export type ItemId = keyof typeof ITEMS;

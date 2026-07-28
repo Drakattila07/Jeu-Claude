@@ -11,8 +11,9 @@ import { ZoneRegistry } from "../world/Zone";
 import { INTERACTABLES } from "../data/interactables";
 import { Interactable, ZoneObjectState } from "../entities/Interactable";
 import { Combat, overlaps } from "../systems/Combat";
-import { ENEMY_SPAWNS } from "../data/enemies";
+import { CASTLE_ENEMY_SPAWNS, ENEMY_SPAWNS } from "../data/enemies";
 import { Enemy } from "../entities/Enemy";
+import { Fireball } from "../entities/Fireball";
 import { TextBox } from "../ui/TextBox";
 import { EventBus } from "./EventBus";
 import { Flags } from "../systems/Flags";
@@ -42,12 +43,15 @@ import { createProceduralMap } from "../world/ZoneMapFactory";
 import {
   COTTAGE_ENTRY,
   createCottageMap,
+  createCastleMap,
   createHermitageMap,
+  drawCastleInterior,
   drawCottageInterior,
   drawHermitageInterior,
   nearCottageExit,
   type InteriorKind,
 } from "../world/CottageInterior";
+import { BurningWorld } from "../world/BurningWorld";
 
 export const FIXED_STEP_MS = 1000 / 60;
 export const MAX_FRAME_DELTA_MS = 250;
@@ -110,6 +114,8 @@ export class Game {
   private readonly saveLoad = new SaveLoad(window.localStorage);
   private interior: InteriorKind | null = null;
   private exteriorReturnPosition = { x: 128, y: 72 };
+  private fireballs: Fireball[] = [];
+  private readonly burning = new BurningWorld();
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new Renderer(canvas);
@@ -157,6 +163,7 @@ export class Game {
     this.combat.update();
     this.clock.update();
     this.particles.update();
+    this.burning.update();
     if (this.input.wasPressed("A") || this.input.wasPressed("Attack")
       || this.input.wasPressed("B") || this.input.wasPressed("Start")) this.audio.unlock();
     const audioZone = this.zones.at(this.camera.zone)?.id ?? "village";
@@ -177,6 +184,23 @@ export class Game {
     }
     if (this.input.wasPressed("Start")) {
       this.menu.open();
+      this.input.endFrame();
+      return;
+    }
+    if (this.input.wasPressed("Select")) {
+      if (this.flags.has("half_demon_skull")) {
+        const active = this.player.toggleDemon();
+        this.notice = active
+          ? "Le Crâne s'éveille : forme DEMI-DÉMON activée."
+          : "La chaleur retombe : forme humaine restaurée.";
+        this.noticeFrames = 120;
+        this.particles.emit(this.player.position.x + 8, this.player.position.y + 8,
+          active ? "spark" : "smoke", 14);
+        this.audio.playSfx("secret");
+      } else {
+        this.notice = "Une force ancienne manque encore.";
+        this.noticeFrames = 80;
+      }
       this.input.endFrame();
       return;
     }
@@ -238,6 +262,7 @@ export class Game {
           }
         }
       }
+      this.updateFireballs();
       if (this.input.wasPressed("A")) {
         if (this.interior && nearCottageExit(this.player.position)) {
           this.leaveInterior();
@@ -272,7 +297,8 @@ export class Game {
           }
           this.events.publish({ type: "talk", id: nearestNpc.data.id, frame: this.frame });
         } else if (nearest?.data.kind === "door") {
-          this.enterInterior(nearest.data.id === "hermitage_door" ? "hermitage" : "cottage");
+          this.enterInterior(nearest.data.id === "hermitage_door" ? "hermitage"
+            : nearest.data.id === "castle_gate" ? "castle" : "cottage");
           this.input.endFrame();
           return;
         } else if (nearest) {
@@ -314,10 +340,19 @@ export class Game {
       if (this.input.wasPressed("Attack") && this.player.startAttack()) {
         this.combat.beginSwing();
         this.audio.playSfx("sword");
+        if (this.player.isDemon) {
+          this.fireballs.push(new Fireball(this.player.position, this.player.direction));
+          this.particles.emit(this.player.position.x + 8, this.player.position.y + 8, "spark", 12);
+          this.igniteAround(this.player.position.x + 8, this.player.position.y + 8);
+        }
       }
       if (this.player.swordActive) {
         const sword = this.player.attackHitbox();
-        if (this.boss?.active && overlaps(sword, this.boss.bounds) && this.combat.confirmHit("mother_tree", true)) {
+        const bossInWave = this.player.isDemon && this.boss?.active
+          && Math.hypot(this.boss.position.x + 32 - this.player.position.x,
+            this.boss.position.y + 40 - this.player.position.y) <= this.player.fireRadius + 24;
+        if (this.boss?.active && (overlaps(sword, this.boss.bounds) || bossInWave)
+          && this.combat.confirmHit("mother_tree", true)) {
           const defeated = this.boss.hit();
           this.audio.playSfx("hit");
           if (defeated) {
@@ -328,9 +363,12 @@ export class Game {
           }
         }
         for (const enemy of this.enemies) {
-          if (enemy.active && overlaps(sword, enemy.bounds) && this.combat.confirmHit(enemy.spawn.id,
+          const inDemonWave = this.player.isDemon
+            && Math.hypot(enemy.position.x - this.player.position.x,
+              enemy.position.y - this.player.position.y) <= this.player.fireRadius;
+          if (enemy.active && (overlaps(sword, enemy.bounds) || inDemonWave) && this.combat.confirmHit(enemy.spawn.id,
             enemy.spawn.type === "gargoyle")) {
-            const defeated = enemy.hit(1, this.player.position);
+            const defeated = enemy.hit(this.player.attackDamage, this.player.position);
             this.audio.playSfx("hit");
             if (defeated) {
               this.player.rupees += 3;
@@ -341,7 +379,10 @@ export class Game {
           }
         }
         for (const npc of this.npcs) {
-          if (overlaps(sword, npc.bounds) && this.combat.confirmHit(`npc:${npc.data.id}`)) {
+          const inDemonWave = this.player.isDemon
+            && Math.hypot(npc.position.x - this.player.position.x,
+              npc.position.y - this.player.position.y) <= this.player.fireRadius;
+          if ((overlaps(sword, npc.bounds) || inDemonWave) && this.combat.confirmHit(`npc:${npc.data.id}`)) {
             npc.provoke(this.player.position);
             for (const guard of this.npcs) if (guard.isGuard) guard.alert();
             this.flags.set("village_alarm");
@@ -364,6 +405,20 @@ export class Game {
             this.audio.playSfx("hit");
           }
         }
+      }
+      if (this.interior === "castle" && !this.flags.has("half_demon_skull")
+        && this.enemies.length > 0 && this.enemies.every((enemy) => !enemy.active)) {
+        this.flags.set("half_demon_skull");
+        this.inventory.add("half_demon_skull");
+        this.player.setDemon(true);
+        this.notice = "CRÂNE DU DEMI-DÉMON OBTENU · Maj pour changer de forme";
+        this.noticeFrames = 240;
+        this.textBox.open(
+          "Le dernier garde tombe. Son masque se fend et révèle le Crâne du Demi-Démon. "
+          + "Votre sang s'embrase : vitesse, onde de feu et projectiles sont éveillés.",
+          "RELIQUE DU CHÂTEAU",
+        );
+        this.audio.playSfx("secret");
       }
       const edge = this.interior ? null : this.camera.edgeFor(this.player.position);
       if (edge) {
@@ -397,12 +452,16 @@ export class Game {
     this.map.drawLayer(ctx, "decor_below", this.frame);
     if (this.interior === "cottage") drawCottageInterior(ctx, this.frame);
     else if (this.interior === "hermitage") drawHermitageInterior(ctx, this.frame);
+    else if (this.interior === "castle") drawCastleInterior(ctx, this.frame);
     for (const object of this.interactables) object.draw(ctx);
     for (const npc of this.npcs) npc.draw(ctx);
     for (const enemy of this.enemies) enemy.draw(ctx);
     this.boss?.draw(ctx);
     this.player.draw(ctx);
     this.map.drawLayer(ctx, "decor_above", this.frame);
+    const sceneId = this.currentSceneId();
+    this.burning.draw(ctx, sceneId, this.frame);
+    for (const fireball of this.fireballs) fireball.draw(ctx, this.frame);
     this.particles.draw(ctx);
     if (this.zones.at(this.camera.zone)?.id === "canal_entry") this.dungeon.drawWater(ctx);
     ctx.restore();
@@ -420,7 +479,8 @@ export class Game {
       flags: new Set(this.flags.snapshot()), isNight: this.clock.isNight,
     }) : "default";
     const interiorName = this.interior === "cottage" ? "MAISON DU DOYEN"
-      : this.interior === "hermitage" ? "ERMITAGE DE GORM" : null;
+      : this.interior === "hermitage" ? "ERMITAGE DE GORM"
+        : this.interior === "castle" ? "CHÂTEAU DE CENDRE" : null;
     this.hud.draw(this.renderer, this.player, this.clock, interiorName
       ?? `${zone?.name ?? "INCONNU"}${variant === "default" ? "" : ` ${variant}`}`,
     this.quests.activeObjective()?.hint);
@@ -469,19 +529,28 @@ export class Game {
 
   private enterInterior(kind: InteriorKind): void {
     if (this.transition.active || this.interior) return;
-    this.exteriorReturnPosition = kind === "cottage" ? { x: 128, y: 72 } : { x: 176, y: 88 };
+    this.exteriorReturnPosition = kind === "cottage" ? { x: 128, y: 72 }
+      : kind === "hermitage" ? { x: 176, y: 88 } : { x: 120, y: 104 };
     this.transition.start(() => {
       this.interior = kind;
-      this.map = new TileMap(kind === "cottage" ? createCottageMap() : createHermitageMap(), this.tileSet);
+      const interiorMap = kind === "cottage" ? createCottageMap()
+        : kind === "hermitage" ? createHermitageMap() : createCastleMap();
+      this.map = new TileMap(interiorMap, this.tileSet);
       this.player.setMap(this.map);
       this.player.position = { ...COTTAGE_ENTRY };
       this.interactables = [];
-      this.enemies = [];
+      this.enemies = kind === "castle" && !this.flags.has("half_demon_skull")
+        ? CASTLE_ENEMY_SPAWNS.map((spawn) => new Enemy(spawn, this.player))
+        : [];
       this.npcs = [];
       this.boss = null;
       this.notice = kind === "cottage"
         ? "Le tapis rouge et le feu rendent la pièce accueillante."
-        : "L'ermitage sent la pierre chaude, le bois et les cartes anciennes.";
+        : kind === "hermitage"
+          ? "L'ermitage sent la pierre chaude, le bois et les cartes anciennes."
+          : this.flags.has("half_demon_skull")
+            ? "Le château vaincu résonne encore de votre ancienne bataille."
+            : "Les Gardes de Cendre ferment les rangs devant le trône.";
       this.noticeFrames = 120;
     });
   }
@@ -492,7 +561,73 @@ export class Game {
       this.interior = null;
       this.loadZoneObjects();
       this.player.position = { ...this.exteriorReturnPosition };
+      this.fireballs = [];
     });
+  }
+
+  private currentSceneId(): string {
+    return this.interior ? `interior:${this.interior}` : (this.zones.at(this.camera.zone)?.id ?? "unknown");
+  }
+
+  private igniteAround(worldX: number, worldY: number): void {
+    const centerX = Math.floor(worldX / 16);
+    const centerY = Math.floor(worldY / 16);
+    const scene = this.currentSceneId();
+    for (let y = centerY - 1; y <= centerY + 1; y += 1) {
+      for (let x = centerX - 1; x <= centerX + 1; x += 1) {
+        if (this.map.isBurnable(x, y)) this.burning.ignite(scene, x, y);
+      }
+    }
+  }
+
+  private updateFireballs(): void {
+    for (const fireball of this.fireballs) {
+      fireball.update();
+      if (!fireball.active) continue;
+      if (this.boss?.active && overlaps(fireball.bounds, this.boss.bounds)) {
+        const defeated = this.boss.hit();
+        this.particles.emit(fireball.position.x, fireball.position.y, "spark", 12);
+        fireball.destroy();
+        if (defeated) {
+          this.flags.set("boss_defeated");
+          this.quests.notify("defeat", "mother_tree", this.frame);
+          this.endingPending = true;
+          this.textBox.open("L'Arbre-Mère s'agenouille. X : la libérer · C : l'enraciner.");
+        }
+      }
+      if (!fireball.active) continue;
+      for (const enemy of this.enemies) {
+        if (!enemy.active || !overlaps(fireball.bounds, enemy.bounds)) continue;
+        const defeated = enemy.hit(2, this.player.position);
+        this.particles.emit(enemy.position.x + 8, enemy.position.y + 8, "spark", 8);
+        if (defeated) {
+          this.player.rupees += 3;
+          this.quests.notify("defeat", enemy.spawn.type, this.frame);
+        }
+        fireball.destroy();
+        break;
+      }
+      if (!fireball.active) continue;
+      for (const npc of this.npcs) {
+        if (!overlaps(fireball.bounds, npc.bounds)) continue;
+        npc.provoke(this.player.position);
+        for (const guard of this.npcs) if (guard.isGuard) guard.alert();
+        this.flags.set("village_alarm");
+        this.notice = "La boule de feu déclenche l'alarme du village !";
+        this.noticeFrames = 120;
+        fireball.destroy();
+        break;
+      }
+      if (!fireball.active) continue;
+      const tileX = Math.floor(fireball.position.x / 16);
+      const tileY = Math.floor(fireball.position.y / 16);
+      if (this.map.isSolid(tileX, tileY)) {
+        this.igniteAround(fireball.position.x, fireball.position.y);
+        this.particles.emit(fireball.position.x, fireball.position.y, "smoke", 10);
+        fireball.destroy();
+      }
+    }
+    this.fireballs = this.fireballs.filter((fireball) => fireball.active);
   }
 
   private createSave(): SaveData {

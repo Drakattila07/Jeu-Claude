@@ -10,6 +10,7 @@ et comprendre pourquoi les arbres se sont mis à marcher.
 - Flèches ou WASD : marcher
 - X : parler et agir
 - Espace : utiliser l'épée
+- Maj : activer ou quitter la forme demi-démon après avoir obtenu le Crâne
 - C : objet / pêche
 - Entrée : sac, carte et quête
 
