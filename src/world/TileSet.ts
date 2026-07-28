@@ -7,7 +7,9 @@ export type TileKind =
   | "flowers" | "fence" | "bush" | "door" | "sign" | "stairs"
   | "forest_floor" | "mud" | "cliff" | "reeds" | "rubble" | "lilypad"
   | "crop" | "pine_crown" | "stump" | "mushroom" | "deep_water"
-  | "bridge" | "moss_stone" | "wildflowers" | "cracked_path";
+  | "bridge" | "moss_stone" | "wildflowers" | "cracked_path"
+  | "wood_floor" | "interior_wall" | "rug" | "bed" | "bookshelf"
+  | "table" | "fireplace" | "chair" | "window";
 
 export interface TileProperties {
   readonly kind: TileKind;
@@ -24,12 +26,16 @@ const TILES: readonly TileProperties[] = [
   { kind: "tree_crown", solid: true }, { kind: "tree_trunk", solid: true },
   { kind: "roof", solid: true }, { kind: "wall", solid: true }, { kind: "well", solid: true },
   { kind: "flowers" }, { kind: "fence", solid: true }, { kind: "bush", solid: true, cuttable: true },
-  { kind: "door" }, { kind: "sign", solid: true }, { kind: "stairs", ledge: true },
+  { kind: "door", solid: true }, { kind: "sign", solid: true }, { kind: "stairs", ledge: true },
   { kind: "forest_floor" }, { kind: "mud", slow: 0.82 }, { kind: "cliff", solid: true },
   { kind: "reeds", solid: true }, { kind: "rubble", solid: true }, { kind: "lilypad", water: true, slow: 0.6 },
   { kind: "crop" }, { kind: "pine_crown", solid: true }, { kind: "stump", solid: true },
   { kind: "mushroom" }, { kind: "deep_water", water: true, slow: 0.5 }, { kind: "bridge" },
   { kind: "moss_stone", solid: true }, { kind: "wildflowers" }, { kind: "cracked_path" },
+  { kind: "wood_floor" }, { kind: "interior_wall", solid: true }, { kind: "rug" },
+  { kind: "bed", solid: true }, { kind: "bookshelf", solid: true },
+  { kind: "table", solid: true }, { kind: "fireplace", solid: true },
+  { kind: "chair", solid: true }, { kind: "window", solid: true },
 ];
 
 function fill(ctx: CanvasRenderingContext2D, color: string, x: number, y: number,
@@ -289,6 +295,88 @@ export class TileSet {
           fill(ctx, PALETTE.stone, px, py + step, 16, 3);
           fill(ctx, PALETTE.stoneLight, px, py + step, 16, 1);
         }
+        break;
+      case "wood_floor":
+        fill(ctx, PALETTE.wood, px, py, 16, 16);
+        fill(ctx, PALETTE.woodLight, px, py + 1, 16, 2);
+        fill(ctx, PALETTE.woodDark, px, py + 14, 16, 2);
+        fill(ctx, PALETTE.woodDark, px + ((x * 7 + y * 3) % 12), py + 7, 4, 1);
+        fill(ctx, PALETTE.soil, px + 15, py, 1, 16);
+        break;
+      case "interior_wall":
+        fill(ctx, PALETTE.woodDark, px, py, 16, 16);
+        fill(ctx, PALETTE.sandLight, px + 1, py + 1, 14, 12);
+        fill(ctx, PALETTE.cream, px + 2, py + 2, 12, 2);
+        fill(ctx, PALETTE.roofDark, px, py + 12, 16, 4);
+        fill(ctx, PALETTE.roof, px + 1, py + 12, 14, 2);
+        if ((x + y) % 3 === 0) fill(ctx, PALETTE.sandDark, px + 5, py + 6, 2, 2);
+        break;
+      case "rug":
+        fill(ctx, PALETTE.roofDark, px, py, 16, 16);
+        fill(ctx, PALETTE.roof, px + 1, py + 1, 14, 14);
+        fill(ctx, PALETTE.yellow, px + 3, py + 3, 10, 2);
+        fill(ctx, PALETTE.cream, px + 5, py + 6, 6, 5);
+        fill(ctx, PALETTE.purple, px + 7, py + 7, 2, 3);
+        fill(ctx, PALETTE.yellow, px + 3, py + 12, 10, 2);
+        break;
+      case "bed":
+        shadow(ctx, px, py, 16);
+        fill(ctx, PALETTE.woodDark, px + 1, py + 2, 14, 14);
+        fill(ctx, PALETTE.cream, px + 2, py + 2, 12, 5);
+        fill(ctx, PALETTE.white, px + 3, py + 3, 5, 3);
+        fill(ctx, PALETTE.roofDark, px + 2, py + 7, 12, 8);
+        fill(ctx, PALETTE.roof, px + 3, py + 8, 10, 5);
+        fill(ctx, PALETTE.yellow, px + 4, py + 9, 2, 2);
+        break;
+      case "bookshelf":
+        fill(ctx, PALETTE.woodDark, px, py, 16, 16);
+        fill(ctx, PALETTE.wood, px + 2, py + 1, 12, 14);
+        for (let shelf = 4; shelf < 15; shelf += 5) {
+          fill(ctx, PALETTE.woodLight, px + 2, py + shelf, 12, 2);
+        }
+        fill(ctx, PALETTE.roof, px + 3, py + 2, 2, 3);
+        fill(ctx, PALETTE.leafDark, px + 6, py + 1, 2, 4);
+        fill(ctx, PALETTE.purple, px + 9, py + 2, 3, 3);
+        fill(ctx, PALETTE.water, px + 3, py + 7, 3, 3);
+        fill(ctx, PALETTE.yellow, px + 7, py + 6, 2, 4);
+        fill(ctx, PALETTE.cream, px + 10, py + 7, 2, 3);
+        break;
+      case "table":
+        shadow(ctx, px, py, 16);
+        fill(ctx, PALETTE.woodDark, px + 1, py + 6, 14, 8);
+        fill(ctx, PALETTE.woodLight, px + 2, py + 5, 12, 5);
+        fill(ctx, PALETTE.wood, px + 3, py + 7, 10, 2);
+        fill(ctx, PALETTE.cream, px + 6, py + 3, 5, 4);
+        fill(ctx, PALETTE.yellow, px + 7, py + 3, 3, 2);
+        fill(ctx, PALETTE.woodDark, px + 3, py + 12, 3, 4);
+        fill(ctx, PALETTE.woodDark, px + 11, py + 12, 3, 4);
+        break;
+      case "fireplace": {
+        const flame = Math.floor(frame / 10) % 2;
+        fill(ctx, PALETTE.stoneDark, px, py, 16, 16);
+        fill(ctx, PALETTE.stone, px + 1, py + 1, 14, 15);
+        fill(ctx, PALETTE.stoneLight, px + 2, py + 2, 12, 3);
+        fill(ctx, PALETTE.ink, px + 3, py + 6, 10, 10);
+        fill(ctx, PALETTE.woodDark, px + 4, py + 13, 8, 2);
+        fill(ctx, PALETTE.red, px + 5 + flame, py + 8, 6 - flame, 6);
+        fill(ctx, PALETTE.yellow, px + 7 - flame, py + 9, 3, 4);
+        fill(ctx, PALETTE.cream, px + 8, py + 10, 1, 2);
+        break;
+      }
+      case "chair":
+        shadow(ctx, px, py, 12);
+        fill(ctx, PALETTE.woodDark, px + 4, py + 2, 8, 14);
+        fill(ctx, PALETTE.woodLight, px + 5, py + 3, 6, 6);
+        fill(ctx, PALETTE.wood, px + 3, py + 9, 10, 4);
+        break;
+      case "window":
+        fill(ctx, PALETTE.woodDark, px, py, 16, 16);
+        fill(ctx, PALETTE.water, px + 2, py + 2, 12, 10);
+        fill(ctx, PALETTE.waterLight, px + 3, py + 3, 5, 4);
+        fill(ctx, PALETTE.cream, px + 3, py + 3, 3, 2);
+        fill(ctx, PALETTE.woodLight, px + 7, py + 2, 2, 10);
+        fill(ctx, PALETTE.woodLight, px + 2, py + 7, 12, 2);
+        fill(ctx, PALETTE.roof, px + 1, py + 12, 14, 3);
         break;
     }
     ctx.restore();

@@ -39,6 +39,12 @@ import { Audio } from "../systems/Audio";
 import { Particles } from "../ui/Particles";
 import { SaveLoad, type SaveData } from "../systems/SaveLoad";
 import { createProceduralMap } from "../world/ZoneMapFactory";
+import {
+  COTTAGE_ENTRY,
+  createCottageMap,
+  drawCottageWarmth,
+  nearCottageExit,
+} from "../world/CottageInterior";
 
 export const FIXED_STEP_MS = 1000 / 60;
 export const MAX_FRAME_DELTA_MS = 250;
@@ -99,6 +105,8 @@ export class Game {
   private readonly audio = new Audio();
   private readonly particles = new Particles();
   private readonly saveLoad = new SaveLoad(window.localStorage);
+  private insideCottage = false;
+  private exteriorReturnPosition = { x: 128, y: 72 };
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new Renderer(canvas);
@@ -217,6 +225,11 @@ export class Game {
         }
       }
       if (this.input.wasPressed("A")) {
+        if (this.insideCottage && nearCottageExit(this.player.position)) {
+          this.leaveCottage();
+          this.input.endFrame();
+          return;
+        }
         const nearest = this.interactables
           .filter((object) => object.distanceTo(this.player.position) <= 25)
           .sort((a, b) => a.distanceTo(this.player.position) - b.distanceTo(this.player.position))[0];
@@ -244,6 +257,10 @@ export class Game {
             this.quests.notify("talkTo", "nessa", this.frame);
           }
           this.events.publish({ type: "talk", id: nearestNpc.data.id, frame: this.frame });
+        } else if (nearest?.data.kind === "door") {
+          this.enterCottage();
+          this.input.endFrame();
+          return;
         } else if (nearest) {
           const result = nearest.data.kind === "cauldron"
             ? this.alchemy.brewFirst(this.inventory)
@@ -320,7 +337,7 @@ export class Game {
           }
         }
       }
-      const edge = this.camera.edgeFor(this.player.position);
+      const edge = this.insideCottage ? null : this.camera.edgeFor(this.player.position);
       if (edge) {
         const destination = this.camera.adjacent(edge);
         if (this.zones.canEnter(destination)) {
@@ -350,6 +367,7 @@ export class Game {
     this.map.drawLayer(ctx, "ground", this.frame);
     this.map.drawLayer(ctx, "terrain", this.frame);
     this.map.drawLayer(ctx, "decor_below", this.frame);
+    if (this.insideCottage) drawCottageWarmth(ctx, this.frame);
     for (const object of this.interactables) object.draw(ctx);
     for (const npc of this.npcs) npc.draw(ctx);
     for (const enemy of this.enemies) enemy.draw(ctx);
@@ -360,18 +378,26 @@ export class Game {
     if (this.zones.at(this.camera.zone)?.id === "canal_entry") this.dungeon.drawWater(ctx);
     ctx.restore();
     const zoneForLight = this.zones.at(this.camera.zone);
-    this.environment.draw(ctx, this.frame, this.player.position, {
-      night: this.clock.isNight,
-      dense: zoneForLight?.id === "lisiere_carrefour" && !this.flags.has("lantern"),
-      weather: this.clock.weather,
-      biome: zoneForLight?.biome,
-    });
+    if (!this.insideCottage) {
+      this.environment.draw(ctx, this.frame, this.player.position, {
+        night: this.clock.isNight,
+        dense: zoneForLight?.id === "lisiere_carrefour" && !this.flags.has("lantern"),
+        weather: this.clock.weather,
+        biome: zoneForLight?.biome,
+      });
+    }
     const zone = this.zones.at(this.camera.zone);
     const variant = zone ? this.variants.resolve(zone.id, {
       flags: new Set(this.flags.snapshot()), isNight: this.clock.isNight,
     }) : "default";
-    this.hud.draw(this.renderer, this.player, this.clock,
-      `${zone?.name ?? "INCONNU"}${variant === "default" ? "" : ` ${variant}`}`);
+    this.hud.draw(this.renderer, this.player, this.clock, this.insideCottage
+      ? "MAISON DU DOYEN"
+      : `${zone?.name ?? "INCONNU"}${variant === "default" ? "" : ` ${variant}`}`);
+    if (this.insideCottage && nearCottageExit(this.player.position) && !this.textBox.active) {
+      ctx.fillStyle = PALETTE.night;
+      ctx.fillRect(96, 188, 64, 17);
+      this.renderer.pixelText("X  SORTIR", 128, 191, PALETTE.cream, "center");
+    }
     if (this.noticeFrames > 0) {
       ctx.fillStyle = PALETTE.night;
       ctx.fillRect(8, 181, 240, 35);
@@ -408,6 +434,32 @@ export class Game {
       : [];
     this.boss = zone?.id === "boss_arena" && this.flags.has("mechanism_repaired")
       && !this.flags.has("boss_defeated") ? new MotherTreeBoss(this.player) : null;
+  }
+
+  private enterCottage(): void {
+    if (this.transition.active || this.insideCottage) return;
+    this.exteriorReturnPosition = { x: 128, y: 72 };
+    this.transition.start(() => {
+      this.insideCottage = true;
+      this.map = new TileMap(createCottageMap(), this.tileSet);
+      this.player.setMap(this.map);
+      this.player.position = { ...COTTAGE_ENTRY };
+      this.interactables = [];
+      this.enemies = [];
+      this.npcs = [];
+      this.boss = null;
+      this.notice = "Une chaleur de bois et de feu emplit la pièce.";
+      this.noticeFrames = 120;
+    });
+  }
+
+  private leaveCottage(): void {
+    if (this.transition.active || !this.insideCottage) return;
+    this.transition.start(() => {
+      this.insideCottage = false;
+      this.loadZoneObjects();
+      this.player.position = { ...this.exteriorReturnPosition };
+    });
   }
 
   private createSave(): SaveData {

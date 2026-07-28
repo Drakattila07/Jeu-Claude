@@ -88,15 +88,29 @@ export function createProceduralMap(zone: WorldZoneData): TiledMapData {
     }
   }
   if (zone.biome === "river") {
+    const curve = [7, 7, 6, 5, 5, 6, 7, 8, 9, 10, 9, 8, 8, 8] as const;
     for (let y = 1; y < HEIGHT - 1; y += 1) {
-      layers.ground[index(6, y)] = 27;
-      layers.ground[index(7, y)] = 5;
-      layers.ground[index(8, y)] = 5;
-      layers.ground[index(9, y)] = 27;
+      const center = curve[y]!;
+      layers.ground[index(center - 2, y)] = 27;
+      layers.ground[index(center - 1, y)] = 5;
+      layers.ground[index(center, y)] = 5;
+      layers.ground[index(center + 1, y)] = 5;
+      layers.ground[index(center + 2, y)] = 27;
+      for (let x = center - 2; x <= center + 2; x += 1) {
+        layers.terrain[index(x, y)] = 0;
+        layers.decor_below[index(x, y)] = 0;
+      }
+      if (y % 4 === 1) layers.decor_below[index(center + 2, y)] = 22;
     }
-    for (let x = 6; x <= 9; x += 1) {
-      layers.ground[index(x, 6)] = 28;
-      layers.ground[index(x, 7)] = 28;
+    for (let y = 6; y <= 7; y += 1) {
+      const center = curve[y]!;
+      for (let x = center - 2; x <= center + 2; x += 1) {
+        if (zone.id === "riviere_pont") layers.ground[index(x, y)] = 28;
+        else {
+          layers.ground[index(x, y)] = 5;
+          layers.decor_below[index(x, y)] = 16;
+        }
+      }
     }
   }
   if (zone.biome === "lake") {
@@ -133,6 +147,54 @@ export function createProceduralMap(zone: WorldZoneData): TiledMapData {
     layers.decor_below[index(9, 5)] = 16;
     layers.decor_below[index(6, 8)] = 16;
     layers.decor_below[index(9, 8)] = 16;
+  }
+  if (zone.biome === "cliffs") {
+    for (const ridgeY of [3, 9]) {
+      for (let x = 1; x < WIDTH - 1; x += 1) {
+        if (x >= 6 && x <= 9) continue;
+        layers.terrain[index(x, ridgeY)] = 19;
+        if (x % 3 === 1 && ridgeY + 1 < HEIGHT - 1) {
+          layers.decor_above[index(x, ridgeY + 1)] = 29;
+        }
+      }
+      layers.decor_below[index(7, ridgeY)] = 16;
+      layers.decor_below[index(8, ridgeY)] = 16;
+    }
+    for (let y = 1; y < HEIGHT - 1; y += 1) {
+      const trailX = y < 6 ? 7 : y < 10 ? 8 : 7;
+      layers.ground[index(trailX, y)] = 31;
+      layers.ground[index(trailX + 1, y)] = 31;
+      layers.terrain[index(trailX, y)] = 0;
+      layers.terrain[index(trailX + 1, y)] = 0;
+    }
+  }
+  if (zone.id === "ermitage_gorm") {
+    for (let y = 1; y <= 6; y += 1) {
+      for (let x = 8; x <= 14; x += 1) {
+        layers.terrain[index(x, y)] = 0;
+        layers.decor_below[index(x, y)] = 0;
+        layers.decor_above[index(x, y)] = 0;
+      }
+    }
+    for (let x = 9; x <= 13; x += 1) {
+      layers.terrain[index(x, 2)] = 8;
+      layers.terrain[index(x, 3)] = 8;
+      layers.terrain[index(x, 4)] = 9;
+    }
+    layers.terrain[index(11, 4)] = 14;
+    layers.terrain[index(13, 1)] = 4;
+    layers.decor_below[index(9, 5)] = 15;
+    layers.decor_below[index(13, 5)] = 25;
+    layers.decor_below[index(10, 6)] = 31;
+    layers.decor_below[index(11, 6)] = 31;
+    layers.decor_below[index(12, 6)] = 31;
+    for (let y = 5; y <= 8; y += 1) {
+      layers.ground[index(11, y)] = 31;
+      layers.ground[index(12, y)] = 31;
+    }
+    for (const [x, y] of [[2, 4], [3, 4], [2, 5], [4, 8], [3, 9]] as const) {
+      layers.terrain[index(x, y)] = 29;
+    }
   }
 
   const tiledLayers = (Object.keys(layers) as LayerName[]).map((name): TiledLayer => ({

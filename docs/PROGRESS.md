@@ -158,6 +158,14 @@
 - Balayage occasionnel, méditation, commerce, garde, repos et jeu de ballon
 - Particules atmosphériques adaptées à chaque région
 
+## Intérieurs et lieux remarquables ✅
+
+- Porte de la maison solide et ouverture uniquement avec le bouton d'action
+- Salle intérieure indépendante avec lit, tapis, bibliothèque, table et cheminée
+- Fleuve sinueux, gué en pierres et pont de bois clairement différenciés
+- Falaises en terrasses avec escaliers et sentiers lisibles
+- Ermitage de Gorm reconstruit autour d'une maison isolée dans les hauteurs
+
 ## État final
 
 Les vingt tickets sont implémentés, compilés, testés et versionnés
