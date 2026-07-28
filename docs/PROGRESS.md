@@ -103,7 +103,7 @@
 
 - HUD : cœurs, rubis, zone, heure et météo
 - Menu à onglets pour sac, carte et quête active
-- Carte 8×7 révélée par exploration et pourcentage sur 44 zones
+- Carte 8×7 entièrement jouable, révélée par exploration, sur 56 zones
 - Sylve reliée au HintSystem et aux secrets non trouvés
 
 ## T16 — Trame principale, Actes I à III ✅
@@ -140,6 +140,13 @@
 - Sauvegarde/soin au puits restauré et reprise automatique du slot principal
 - Validation de la palette, des JSON et des références
 - Capture headless déterministe après N frames
+
+## Extension de la vallée ✅
+
+- Grille complète de 8×7 écrans, soit 56 zones explorables
+- Cartes procédurales déterministes adaptées aux biomes
+- Passage continu entre toutes les zones voisines
+- Limites extérieures bloquantes, sans retour façon Pac-Man
 
 ## État final
 

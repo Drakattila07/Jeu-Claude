@@ -8,6 +8,6 @@ describe("carte", () => {
     map.reveal({ x: 3, y: 3 });
     map.reveal({ x: 2, y: 3 });
     expect(map.exploredCount).toBe(2);
-    expect(map.completion).toBe(5);
+    expect(map.completion).toBe(4);
   });
 });

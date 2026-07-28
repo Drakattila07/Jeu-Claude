@@ -38,6 +38,7 @@ import { epilogueLine } from "../data/epilogues";
 import { Audio } from "../systems/Audio";
 import { Particles } from "../ui/Particles";
 import { SaveLoad, type SaveData } from "../systems/SaveLoad";
+import { createProceduralMap } from "../world/ZoneMapFactory";
 
 export const FIXED_STEP_MS = 1000 / 60;
 export const MAX_FRAME_DELTA_MS = 250;
@@ -62,7 +63,8 @@ export class Game {
   private previousTimeMs = 0;
   private running = false;
   private frame = 0;
-  private readonly map = new TileMap(mapData as TiledMapData, new TileSet());
+  private readonly tileSet = new TileSet();
+  private map = new TileMap(mapData as TiledMapData, this.tileSet);
   private readonly player: Player;
   private readonly camera = new Camera();
   private readonly transition = new Transition();
@@ -329,7 +331,7 @@ export class Game {
             this.mapScreen.reveal(this.camera.zone);
           });
         } else {
-          this.player.position = this.camera.enterPosition(edge, this.player.position);
+          this.player.position = this.camera.blockedPosition(edge, this.player.position);
         }
       }
     }
@@ -385,6 +387,13 @@ export class Game {
 
   private loadZoneObjects(): void {
     const zone = this.zones.at(this.camera.zone);
+    if (zone) {
+      const nextMap = zone.map === "hamlet_well"
+        ? mapData as TiledMapData
+        : createProceduralMap(zone);
+      this.map = new TileMap(nextMap, this.tileSet);
+      this.player.setMap(this.map);
+    }
     this.interactables = zone
       ? INTERACTABLES.filter((data) => data.zone === zone.id).map((data) => new Interactable(data, this.objectState))
       : [];

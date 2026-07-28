@@ -29,4 +29,11 @@ export class Camera {
     if (edge === "north") return { x: current.x, y: VIEW_HEIGHT - 32 };
     return { x: current.x, y: 32 };
   }
+
+  blockedPosition(edge: Edge, current: Readonly<Vec2>): Vec2 {
+    if (edge === "west") return { x: 0, y: current.y };
+    if (edge === "east") return { x: VIEW_WIDTH - 16, y: current.y };
+    if (edge === "north") return { x: current.x, y: 0 };
+    return { x: current.x, y: VIEW_HEIGHT - 16 };
+  }
 }

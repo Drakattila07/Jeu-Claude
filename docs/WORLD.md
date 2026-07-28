@@ -4,10 +4,10 @@ La vallée forme une grille de 8×7 zones de 16×14 tuiles. Le Hameau de Bruyèr
 le point de départ. La forêt se trouve au nord-ouest, les Marches de Pierre au
 nord-est, le Lac Miroir au sud et le Canal Tari au sud-est.
 
-La version jouable relie directement les lieux structurants : Place du Puits,
-Hameau Nord et Sud, Quai, Carrefour Creux, Bosquet des Souches, Clairière des
-Cimes, Ruines Basses, Canal Tari et Cime Errante. Le registre de données conserve
-la grille 8×7 et les variantes prévues pour les 44 écrans accessibles.
+La version jouable couvre désormais les 56 écrans de la grille 8×7 : Cimes,
+Lisière, Hameau, Marais, Rivière, Champs, Marches, Falaises, Lac, Roseaux et
+Canal Tari. Chaque écran possède un biome et une disposition déterministe
+distincte, avec quatre sorties compatibles avec les zones voisines.
 
 Les changements majeurs sont persistants : retour de la source, rivière en eau,
 forêt reconfigurée, passage vers les Marches, trois sceaux, niveau haut du lac,

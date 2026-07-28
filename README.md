@@ -19,3 +19,7 @@ source. Trois slots sont pris en charge par le moteur de sauvegarde.
 
 `npm run dev` lance le jeu. `npm test`, `npm run build`,
 `npm run validate:data` et `npm run screenshot -- 180` assurent la validation.
+
+La vallée occupe toute une grille de 8×7 écrans, soit 56 zones explorables.
+Les limites extérieures bloquent le personnage au lieu de le téléporter de
+l'autre côté.

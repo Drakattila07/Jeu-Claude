@@ -1,13 +1,14 @@
 import { PALETTE } from "../data/palette";
 import type { Renderer } from "../core/Renderer";
 import type { ZoneCoord } from "../core/Camera";
+import { WORLD_ZONES } from "../data/world";
 
 export class MapScreen {
   private readonly explored = new Set<string>();
   reveal(coord: ZoneCoord): void { this.explored.add(`${coord.x},${coord.y}`); }
   has(coord: ZoneCoord): boolean { return this.explored.has(`${coord.x},${coord.y}`); }
   get exploredCount(): number { return this.explored.size; }
-  get completion(): number { return Math.min(100, Math.round((this.explored.size / 44) * 100)); }
+  get completion(): number { return Math.min(100, Math.round((this.explored.size / WORLD_ZONES.length) * 100)); }
   snapshot(): readonly string[] { return [...this.explored].sort(); }
   restore(entries: readonly string[]): void {
     this.explored.clear();
