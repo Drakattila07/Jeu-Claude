@@ -126,3 +126,10 @@
 - Dix-huit points de vie, projectiles et impacts lourds
 - Choix final Libérer / Enraciner
 - Deux jeux complets de dialogues post-game et Chasse aux Secrets
+
+## T19 — Audio et polish visuel ✅
+
+- Synthétiseur WebAudio pur pour musique chiptune adaptative
+- Épée, impact, texte, plouf, enclume et secret
+- Bips toutes les quatre lettres du typewriter
+- Particules de feuilles, étincelles, bulles et fumée

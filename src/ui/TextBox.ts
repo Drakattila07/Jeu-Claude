@@ -31,6 +31,9 @@ export class TextBox {
   private visibleCharacters = 0;
   private frame = 0;
   private speaker = "";
+  private beep: () => void = () => undefined;
+
+  setBeep(callback: () => void): void { this.beep = callback; }
 
   open(text: string, speaker = ""): void {
     this.pages = paginateText(text);
@@ -47,7 +50,10 @@ export class TextBox {
     const target = this.pages[this.page]?.join("\n").length ?? 0;
     if (this.visibleCharacters < target) {
       const rate = input.isDown("A") ? 1 : 2;
-      if (this.frame % rate === 0) this.visibleCharacters += 1;
+      if (this.frame % rate === 0) {
+        this.visibleCharacters += 1;
+        if (this.visibleCharacters % 4 === 0) this.beep();
+      }
       if (input.wasPressed("A")) this.visibleCharacters = target;
       return;
     }

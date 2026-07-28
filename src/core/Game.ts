@@ -35,6 +35,8 @@ import { SideActivities } from "../systems/SideActivities";
 import { Fishing } from "../systems/Fishing";
 import { MotherTreeBoss } from "../entities/Boss";
 import { epilogueLine } from "../data/epilogues";
+import { Audio } from "../systems/Audio";
+import { Particles } from "../ui/Particles";
 
 export const FIXED_STEP_MS = 1000 / 60;
 export const MAX_FRAME_DELTA_MS = 250;
@@ -91,6 +93,8 @@ export class Game {
   private readonly fishing = new Fishing();
   private boss: MotherTreeBoss | null = null;
   private endingPending = false;
+  private readonly audio = new Audio();
+  private readonly particles = new Particles();
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new Renderer(canvas);
@@ -102,6 +106,7 @@ export class Game {
     this.inventory.add("well_water");
     this.inventory.add("apple");
     this.mapScreen.reveal(this.camera.zone);
+    this.textBox.setBeep(() => this.audio.playSfx("text"));
   }
 
   start(): void {
@@ -125,6 +130,14 @@ export class Game {
     this.frame += 1;
     this.combat.update();
     this.clock.update();
+    this.particles.update();
+    if (this.input.wasPressed("A") || this.input.wasPressed("B") || this.input.wasPressed("Start")) this.audio.unlock();
+    const audioZone = this.zones.at(this.camera.zone)?.id ?? "village";
+    const mood = audioZone === "boss_arena" ? "boss"
+      : audioZone === "canal_entry" ? "dungeon"
+        : ["lisiere_carrefour", "bosquet_souches", "clairiere_cimes"].includes(audioZone) ? "forest"
+          : "village";
+    this.audio.update(this.frame, mood);
     if (this.textBox.active) {
       this.textBox.update(this.input);
       this.input.endFrame();
@@ -207,6 +220,7 @@ export class Game {
           const campaignLine = nearestNpc.data.id === "bram"
             ? this.campaign.trigger("bram_sword", this.frame)
             : null;
+          if (nearestNpc.data.id === "bram") this.audio.playSfx("anvil");
           this.textBox.open(campaignLine ?? line, nearestNpc.data.name);
           this.affinity.add(nearestNpc.data.id, 1);
           this.quests.notify("talkTo", nearestNpc.data.id, this.frame);
@@ -235,16 +249,24 @@ export class Game {
           this.notice = campaignMessage ?? sideMessage ?? result.message;
           this.noticeFrames = 150;
           this.textBox.open(campaignMessage ?? sideMessage ?? result.message);
+          if (nearest.data.kind === "cauldron" || nearest.data.kind === "valve") {
+            this.audio.playSfx("splash");
+            this.particles.emit(nearest.position.x + 8, nearest.position.y + 8,
+              nearest.data.kind === "cauldron" ? "smoke" : "bubble");
+          }
+          if (sideMessage) this.audio.playSfx("secret");
           if ("result" in result && result.result === "eternal_lantern") this.flags.set("lantern");
           this.events.publish({ type: "interact", id: nearest.data.id, frame: this.frame });
         } else if (this.player.startAttack()) {
           this.combat.beginSwing();
+          this.audio.playSfx("sword");
         }
       }
       if (this.player.swordActive) {
         const sword = this.player.attackHitbox();
         if (this.boss?.active && overlaps(sword, this.boss.bounds) && this.combat.confirmHit("mother_tree", true)) {
           const defeated = this.boss.hit();
+          this.audio.playSfx("hit");
           if (defeated) {
             this.flags.set("boss_defeated");
             this.quests.notify("defeat", "mother_tree", this.frame);
@@ -256,6 +278,7 @@ export class Game {
           if (enemy.active && overlaps(sword, enemy.bounds) && this.combat.confirmHit(enemy.spawn.id,
             enemy.spawn.type === "gargoyle")) {
             const defeated = enemy.hit(1, this.player.position);
+            this.audio.playSfx("hit");
             if (defeated) {
               this.player.rupees += 3;
               this.notice = `${enemy.definition.name} vaincu · +3 rubis`;
@@ -271,6 +294,8 @@ export class Game {
             const campaignMessage = result.changed ? this.campaign.trigger(object.data.id, this.frame) : null;
             this.notice = campaignMessage ?? "FSSSH ! Des feuilles tourbillonnent.";
             this.noticeFrames = 90;
+            this.particles.emit(object.position.x + 8, object.position.y + 8, "leaf", 12);
+            this.audio.playSfx("hit");
           }
         }
       }
@@ -310,6 +335,7 @@ export class Game {
     this.boss?.draw(ctx);
     this.player.draw(ctx);
     this.map.drawLayer(ctx, "decor_above");
+    this.particles.draw(ctx);
     if (this.zones.at(this.camera.zone)?.id === "canal_entry") this.dungeon.drawWater(ctx);
     ctx.restore();
     const zoneForLight = this.zones.at(this.camera.zone);
