@@ -26,6 +26,10 @@ import { ZoneVariants } from "../world/ZoneVariants";
 import { Inventory } from "../systems/Inventory";
 import { Alchemy } from "../systems/Alchemy";
 import { Dungeon } from "../systems/Dungeon";
+import { HUD } from "../ui/HUD";
+import { Menu } from "../ui/Menu";
+import { MapScreen } from "../ui/MapScreen";
+import { HintSystem } from "../systems/HintSystem";
 
 export const FIXED_STEP_MS = 1000 / 60;
 export const MAX_FRAME_DELTA_MS = 250;
@@ -73,6 +77,10 @@ export class Game {
   private readonly inventory = new Inventory();
   private readonly alchemy = new Alchemy();
   private readonly dungeon = new Dungeon();
+  private readonly hud = new HUD();
+  private readonly menu = new Menu();
+  private readonly mapScreen = new MapScreen();
+  private readonly hints = new HintSystem(this.flags, this.quests);
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new Renderer(canvas);
@@ -83,6 +91,7 @@ export class Game {
     this.inventory.add("bitter_root", 2);
     this.inventory.add("well_water");
     this.inventory.add("apple");
+    this.mapScreen.reveal(this.camera.zone);
   }
 
   start(): void {
@@ -108,6 +117,16 @@ export class Game {
     this.clock.update();
     if (this.textBox.active) {
       this.textBox.update(this.input);
+      this.input.endFrame();
+      return;
+    }
+    if (this.menu.active) {
+      this.menu.update(this.input);
+      this.input.endFrame();
+      return;
+    }
+    if (this.input.wasPressed("Start")) {
+      this.menu.open();
       this.input.endFrame();
       return;
     }
@@ -138,7 +157,10 @@ export class Game {
           .filter((npc) => npc.distanceTo(this.player.position) <= 25)
           .sort((a, b) => a.distanceTo(this.player.position) - b.distanceTo(this.player.position))[0];
         if (nearestNpc && (!nearest || nearestNpc.distanceTo(this.player.position) < nearest.distanceTo(this.player.position))) {
-          this.textBox.open(nearestNpc.talk(this.events), nearestNpc.data.name);
+          const line = nearestNpc.data.id === "sylve"
+            ? this.hints.hint(this.camera.zone)
+            : nearestNpc.talk(this.events);
+          this.textBox.open(line, nearestNpc.data.name);
           this.affinity.add(nearestNpc.data.id, 1);
           this.quests.notify("talkTo", nearestNpc.data.id, this.frame);
           this.events.publish({ type: "talk", id: nearestNpc.data.id, frame: this.frame });
@@ -189,6 +211,7 @@ export class Game {
             this.camera.zone = destination;
             this.player.position = this.camera.enterPosition(edge, this.player.position);
             this.loadZoneObjects();
+            this.mapScreen.reveal(this.camera.zone);
           });
         } else {
           this.player.position = this.camera.enterPosition(edge, this.player.position);
@@ -223,17 +246,12 @@ export class Game {
       dense: zoneForLight?.id === "lisiere_carrefour" && !this.flags.has("lantern"),
       weather: this.clock.weather,
     });
-    ctx.fillStyle = PALETTE.night;
-    ctx.fillRect(4, 4, 74, 13);
     const zone = this.zones.at(this.camera.zone);
     const variant = zone ? this.variants.resolve(zone.id, {
       flags: new Set(this.flags.snapshot()), isNight: this.clock.isNight,
     }) : "default";
-    this.renderer.pixelText(`${zone?.name ?? "VALLÉE INCONNUE"} ${variant === "default" ? "" : variant.toUpperCase()}`,
-      8, 6, PALETTE.cream);
-    this.renderer.pixelText(
-      `${String(this.clock.hour).padStart(2, "0")}:${String(this.clock.minute).padStart(2, "0")} ${this.clock.weather === "rain" ? "PLUIE" : ""}`,
-      250, 6, PALETTE.cream, "right");
+    this.hud.draw(this.renderer, this.player, this.clock,
+      `${zone?.name ?? "INCONNU"}${variant === "default" ? "" : ` ${variant}`}`);
     if (this.noticeFrames > 0) {
       ctx.fillStyle = PALETTE.night;
       ctx.fillRect(8, 181, 240, 35);
@@ -243,6 +261,7 @@ export class Game {
       this.renderer.pixelText(this.notice.slice(38, 76), 16, 202, PALETTE.cream);
     }
     this.textBox.draw(this.renderer);
+    this.menu.draw(this.renderer, this.inventory, this.mapScreen, this.quests, this.camera.zone);
     this.transition.draw(ctx);
   }
 

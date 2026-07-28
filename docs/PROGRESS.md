@@ -98,3 +98,10 @@
 - Quatre vannes à trois positions et propagation des niveaux d'eau
 - Eau basse/moyenne/haute, blocs flottants et courants décrits
 - Mini-boss Sangsue de Pierre et Bottes de Plomb
+
+## T15 — HUD, inventaire, carte et menus ✅
+
+- HUD : cœurs, rubis, zone, heure et météo
+- Menu à onglets pour sac, carte et quête active
+- Carte 8×7 révélée par exploration et pourcentage sur 44 zones
+- Sylve reliée au HintSystem et aux secrets non trouvés
