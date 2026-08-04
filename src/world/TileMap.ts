@@ -1,6 +1,10 @@
+import { TILE_SIZE } from "../core/Renderer";
+import type { Camera } from "../core/Camera";
 import type { TileSet } from "./TileSet";
 
 export type LayerName = "ground" | "terrain" | "decor_below" | "decor_above";
+
+export const LAYER_ORDER: readonly LayerName[] = ["ground", "terrain", "decor_below", "decor_above"];
 
 export interface TiledLayer {
   readonly name: LayerName;
@@ -17,19 +21,64 @@ export interface TiledMapData {
   readonly layers: readonly TiledLayer[];
 }
 
+interface AnimatedTile { readonly layer: LayerName; readonly x: number; readonly y: number }
+
+/**
+ * Une carte de zone et son rendu.
+ *
+ * Le rendu redessinait chaque tuile de chaque couche à chaque image : une zone
+ * de 32×28 en quatre couches, c'est 3 584 tuiles et plusieurs dizaines de
+ * milliers d'appels canvas par frame. Les couches fixes sont désormais
+ * composées une seule fois dans un tampon hors écran, puis recopiées par
+ * rectangle ; seules les tuiles réellement animées (eau, flammes) sont
+ * repeintes.
+ */
 export class TileMap {
   readonly width: number;
   readonly height: number;
+  readonly pixelWidth: number;
+  readonly pixelHeight: number;
   private readonly byName = new Map<LayerName, TiledLayer>();
+  private readonly solidMask: Uint8Array;
+  private readonly waterMask: Uint8Array;
+  private readonly slowMask: Float32Array;
+
+  private baseCanvas: HTMLCanvasElement | null = null;
+  private overCanvas: HTMLCanvasElement | null = null;
+  private animated: readonly AnimatedTile[] = [];
 
   constructor(readonly data: TiledMapData, readonly tileSet: TileSet) {
     this.width = data.width;
     this.height = data.height;
+    this.pixelWidth = this.width * TILE_SIZE;
+    this.pixelHeight = this.height * TILE_SIZE;
     for (const layer of data.layers) {
       if (layer.data.length !== this.width * this.height) {
         throw new Error(`Couche ${layer.name} invalide: ${layer.data.length} tuiles.`);
       }
       this.byName.set(layer.name, layer);
+    }
+
+    const count = this.width * this.height;
+    this.solidMask = new Uint8Array(count);
+    this.waterMask = new Uint8Array(count);
+    this.slowMask = new Float32Array(count).fill(1);
+    for (let index = 0; index < count; index += 1) {
+      const x = index % this.width;
+      const y = Math.floor(index / this.width);
+      let solid = false;
+      let water = false;
+      let slow = 1;
+      for (const name of LAYER_ORDER) {
+        if (name === "decor_above") continue;
+        const properties = tileSet.properties(this.tileAt(name, x, y));
+        if (properties.solid) solid = true;
+        if (properties.water) water = true;
+        if (properties.slow !== undefined) slow = Math.min(slow, properties.slow);
+      }
+      this.solidMask[index] = solid ? 1 : 0;
+      this.waterMask[index] = water ? 1 : 0;
+      this.slowMask[index] = slow;
     }
   }
 
@@ -38,21 +87,123 @@ export class TileMap {
     return this.byName.get(layerName)?.data[y * this.width + x] ?? 0;
   }
 
+  isSolid(x: number, y: number): boolean {
+    // Hors carte = libre, volontairement. Chaque zone porte une ceinture de
+    // décor plein percée seulement à ses passages : c'est elle qui contient le
+    // joueur. Rendre l'extérieur bloquant l'empêchait de poser le pied sur la
+    // dernière colonne, donc de franchir la frontière — le changement de zone
+    // ne se déclenchait jamais tout à fait.
+    if (x < 0 || y < 0 || x >= this.width || y >= this.height) return false;
+    return this.solidMask[y * this.width + x] === 1;
+  }
+
+  isWater(x: number, y: number): boolean {
+    if (x < 0 || y < 0 || x >= this.width || y >= this.height) return false;
+    return this.waterMask[y * this.width + x] === 1;
+  }
+
+  /** Facteur de vitesse du sol : la boue et la neige freinent, l'eau davantage. */
+  slowAt(x: number, y: number): number {
+    if (x < 0 || y < 0 || x >= this.width || y >= this.height) return 1;
+    return this.slowMask[y * this.width + x]!;
+  }
+
+  slowAtPixel(px: number, py: number): number {
+    return this.slowAt(Math.floor(px / TILE_SIZE), Math.floor(py / TILE_SIZE));
+  }
+
+  isBurnable(x: number, y: number): boolean {
+    return LAYER_ORDER.some((layer) => this.tileSet.properties(this.tileAt(layer, x, y)).burnable === true);
+  }
+
+  /**
+   * Masque des voisins partageant une propriété, dans l'ordre N/E/S/O.
+   * Sert au raccord des rives et au liseré d'ombre des falaises.
+   */
+  neighbourMask(x: number, y: number, match: (tileX: number, tileY: number) => boolean): number {
+    return (match(x, y - 1) ? 1 : 0)
+      | (match(x + 1, y) ? 2 : 0)
+      | (match(x, y + 1) ? 4 : 0)
+      | (match(x - 1, y) ? 8 : 0);
+  }
+
+  /** Dessine les couches situées sous les entités. */
+  drawBase(ctx: CanvasRenderingContext2D, camera: Camera, frame: number): void {
+    this.ensurePrerender();
+    if (this.baseCanvas) ctx.drawImage(this.baseCanvas, 0, 0);
+    for (const tile of this.animated) {
+      if (tile.layer === "decor_above") continue;
+      if (!camera.isVisible(tile.x * TILE_SIZE, tile.y * TILE_SIZE, TILE_SIZE, TILE_SIZE, TILE_SIZE)) continue;
+      this.tileSet.draw(ctx, this.tileAt(tile.layer, tile.x, tile.y), tile.x, tile.y, frame, this);
+    }
+  }
+
+  /** Dessine la canopée et tout ce qui passe devant les entités. */
+  drawOver(ctx: CanvasRenderingContext2D, camera: Camera, frame: number): void {
+    this.ensurePrerender();
+    if (this.overCanvas) ctx.drawImage(this.overCanvas, 0, 0);
+    for (const tile of this.animated) {
+      if (tile.layer !== "decor_above") continue;
+      if (!camera.isVisible(tile.x * TILE_SIZE, tile.y * TILE_SIZE, TILE_SIZE, TILE_SIZE, TILE_SIZE)) continue;
+      this.tileSet.draw(ctx, this.tileAt(tile.layer, tile.x, tile.y), tile.x, tile.y, frame, this);
+    }
+  }
+
+  /** Rendu ancien format, conservé pour les outils et les tests. */
   drawLayer(ctx: CanvasRenderingContext2D, layerName: LayerName, frame = 0): void {
     for (let y = 0; y < this.height; y += 1) {
       for (let x = 0; x < this.width; x += 1) {
-        this.tileSet.draw(ctx, this.tileAt(layerName, x, y), x, y, frame);
+        this.tileSet.draw(ctx, this.tileAt(layerName, x, y), x, y, frame, this);
       }
     }
   }
 
-  isSolid(x: number, y: number): boolean {
-    return this.tileSet.properties(this.tileAt("terrain", x, y)).solid === true
-      || this.tileSet.properties(this.tileAt("decor_below", x, y)).solid === true;
+  private ensurePrerender(): void {
+    if (this.baseCanvas || typeof document === "undefined") return;
+    const animated: AnimatedTile[] = [];
+    this.baseCanvas = this.composite(["ground", "terrain", "decor_below"], animated);
+    this.overCanvas = this.composite(["decor_above"], animated);
+    this.animated = animated;
   }
 
-  isBurnable(x: number, y: number): boolean {
-    const layers: readonly LayerName[] = ["decor_above", "terrain", "decor_below", "ground"];
-    return layers.some((layer) => this.tileSet.properties(this.tileAt(layer, x, y)).burnable === true);
+  private composite(layers: readonly LayerName[], animated: AnimatedTile[]): HTMLCanvasElement {
+    const canvas = document.createElement("canvas");
+    canvas.width = this.pixelWidth;
+    canvas.height = this.pixelHeight;
+    const ctx = canvas.getContext("2d")!;
+    ctx.imageSmoothingEnabled = false;
+    for (const layer of layers) {
+      for (let y = 0; y < this.height; y += 1) {
+        for (let x = 0; x < this.width; x += 1) {
+          const id = this.tileAt(layer, x, y);
+          if (id === 0) continue;
+          this.tileSet.draw(ctx, id, x, y, 0, this);
+          if (this.tileSet.isAnimated(id)) animated.push({ layer, x, y });
+        }
+      }
+    }
+    if (layers.includes("terrain")) this.bakeContactShadows(ctx);
+    return canvas;
+  }
+
+  /**
+   * Ombre de contact sous les reliefs pleins. Un simple dégradé posé au pied
+   * des murs et des arbres suffit à décoller le décor du sol — c'est ce qui
+   * manquait le plus à l'image d'origine, plate comme une nappe.
+   */
+  private bakeContactShadows(ctx: CanvasRenderingContext2D): void {
+    ctx.save();
+    ctx.globalAlpha = 0.2;
+    ctx.fillStyle = "#0a0810";
+    for (let y = 0; y < this.height; y += 1) {
+      for (let x = 0; x < this.width; x += 1) {
+        if (!this.isSolid(x, y) || this.isSolid(x, y + 1)) continue;
+        const px = x * TILE_SIZE;
+        const py = (y + 1) * TILE_SIZE;
+        ctx.fillRect(px, py, TILE_SIZE, 3);
+        ctx.fillRect(px + 2, py + 3, TILE_SIZE - 4, 2);
+      }
+    }
+    ctx.restore();
   }
 }

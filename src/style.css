@@ -1,9 +1,12 @@
-@import url("https://fonts.googleapis.com/css2?family=Germania+One&family=VT323&display=swap");
-
+/*
+ * L'habillage de la page reste volontairement discret : tout le jeu, titre
+ * compris, se dessine désormais dans le canvas. La page n'apporte plus qu'un
+ * cadre et un rappel des touches.
+ */
 :root {
-  color: #f8e7aa;
-  background: #0b1818;
-  font-family: "VT323", monospace;
+  color: #f4efe1;
+  background: #070a11;
+  font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
   font-synthesis: none;
   --scale: 3;
 }
@@ -16,57 +19,59 @@ body {
   min-height: 100vh;
   overflow: hidden;
   background:
-    radial-gradient(circle at 50% 32%, rgba(49, 91, 72, 0.34), transparent 42%),
-    repeating-linear-gradient(45deg, rgba(255,255,255,.012) 0 1px, transparent 1px 5px),
-    #0b1818;
+    radial-gradient(ellipse at 50% 18%, rgba(70, 96, 128, 0.28), transparent 58%),
+    radial-gradient(ellipse at 50% 96%, rgba(28, 52, 44, 0.32), transparent 62%),
+    #070a11;
 }
-.game-shell { display: grid; justify-items: center; gap: 10px; }
-.title-card { text-align: center; text-shadow: 0 2px #351f29; }
-.kicker { color: #98b966; font-size: 14px; letter-spacing: .18em; }
-h1 {
-  margin: -2px 0 0;
-  color: #f8e7aa;
-  font-family: "Germania One", serif;
-  font-size: clamp(28px, 5vw, 42px);
-  font-weight: 400;
-  letter-spacing: .04em;
-}
+
+.game-shell { display: grid; justify-items: center; gap: 14px; }
+
 .game-frame {
   position: relative;
   line-height: 0;
-  border: 4px solid #d2ae5d;
-  box-shadow: 0 0 0 4px #51352a, 0 0 0 8px #1b3934, 0 16px 45px #000c;
-  background: #101f20;
+  border: 3px solid #2b3346;
+  border-radius: 3px;
+  box-shadow:
+    0 0 0 1px #0a0d15,
+    0 0 44px rgba(96, 140, 180, 0.14),
+    0 22px 60px rgba(0, 0, 0, 0.72);
+  background: #0d1420;
 }
+
 canvas {
   display: block;
-  width: calc(256px * var(--scale));
-  height: calc(224px * var(--scale));
+  width: calc(384px * var(--scale));
+  height: calc(216px * var(--scale));
   image-rendering: pixelated;
   image-rendering: crisp-edges;
   outline: none;
 }
+
 .controls {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 8px 18px;
-  margin: 5px 0 0;
-  color: #91aa88;
-  font-size: 18px;
+  gap: 6px 16px;
+  margin: 0;
+  color: #7f8ea0;
+  font-size: 12px;
+  letter-spacing: 0.02em;
 }
+
 kbd {
   display: inline-block;
-  min-width: 20px;
-  padding: 0 4px;
-  border: 1px solid #6f815d;
+  min-width: 18px;
+  padding: 1px 5px;
+  border: 1px solid #3a4557;
   border-bottom-width: 2px;
-  border-radius: 2px;
-  color: #f8e7aa;
-  background: #1b3934;
+  border-radius: 3px;
+  color: #cfd8e6;
+  background: #161d2b;
   font: inherit;
+  font-size: 11px;
   text-align: center;
 }
-@media (max-height: 560px) {
-  .title-card, .controls { display: none; }
+
+@media (max-height: 620px) {
+  .controls { display: none; }
 }

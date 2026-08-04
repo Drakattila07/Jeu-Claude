@@ -1,10 +1,24 @@
 import { PALETTE } from "../data/palette";
 import type { Input } from "../core/Input";
 import type { TileMap } from "../world/TileMap";
-import { moveOnGrid } from "../world/Collision";
-import { Entity } from "./Entity";
+import { moveOnGrid, resolveOverlap } from "../world/Collision";
+import { Entity, type Rect, type Vec2 } from "./Entity";
 
 export type Direction = "up" | "down" | "left" | "right";
+
+/** Durée du recul encaissé par le joueur, en frames. */
+export const KNOCKBACK_FRAMES = 8;
+/** Durée totale d'une esquive roulée. */
+export const ROLL_FRAMES = 18;
+/** Frames d'invincibilité offertes par une esquive bien placée. */
+export const ROLL_INVULNERABILITY = 13;
+/** Repos imposé entre deux esquives. */
+export const ROLL_COOLDOWN = 16;
+/** Endurance maximale, et coût d'une esquive. */
+export const MAX_STAMINA = 100;
+export const ROLL_COST = 34;
+
+const HITBOX: Rect = { x: 3, y: 9, width: 10, height: 7 };
 
 export class Player extends Entity {
   direction: Direction = "down";
@@ -12,14 +26,27 @@ export class Player extends Entity {
   hearts = 6;
   maxHearts = 6;
   rupees = 12;
+  /** Bonus d'attaque cumulé via les récompenses de quête. */
+  swordBonus = 0;
+  stamina = MAX_STAMINA;
   private demon = false;
   attackFrame = -1;
+  /** Frames de charge accumulées avant de relâcher le coup tournoyant. */
+  chargeFrames = 0;
+  spinFrames = -1;
   invulnerabilityFrames = 0;
   flashFrames = 0;
   knockbackFrames = 0;
+  rollFrames = 0;
+  rollCooldown = 0;
+  /** Position de la dernière éclaboussure, pour que le jeu l'affiche. */
+  splashed = false;
+  private rollDirection = { x: 0, y: 1 };
+  private knockback = { x: 0, y: 0 };
+  private staminaLock = 0;
 
   constructor(private readonly input: Input, private map: TileMap) {
-    super({ x: 120, y: 168 }, { x: 3, y: 7, width: 10, height: 9 });
+    super({ x: 240, y: 336 }, HITBOX);
     this.depth = 10;
   }
 
@@ -30,76 +57,198 @@ export class Player extends Entity {
     return this.demon;
   }
   get isDemon(): boolean { return this.demon; }
-  get speed(): number { return this.demon ? 2.35 : 1.5; }
-  get attackDamage(): number { return this.demon ? 2 : 1; }
-  get fireRadius(): number { return this.demon ? 36 : 0; }
+  get speed(): number { return this.demon ? 2.6 : 1.85; }
+  get attackDamage(): number { return (this.demon ? 2 : 1) + this.swordBonus; }
+  get fireRadius(): number { return this.demon ? 40 : 0; }
+  get isRolling(): boolean { return this.rollFrames > 0; }
+  get isCharging(): boolean { return this.chargeFrames > 0 && this.attackFrame < 0; }
+  /** Le coup tournoyant se déclenche à partir de 42 frames de charge. */
+  get chargeReady(): boolean { return this.chargeFrames >= 42; }
+
+  /** Annule recul, roulade et invulnérabilité (renaissance, chargement). */
+  clearImpact(): void {
+    this.invulnerabilityFrames = 0;
+    this.flashFrames = 0;
+    this.knockbackFrames = 0;
+    this.rollFrames = 0;
+    this.rollCooldown = 0;
+    this.chargeFrames = 0;
+    this.spinFrames = -1;
+    this.attackFrame = -1;
+    this.knockback = { x: 0, y: 0 };
+    this.stamina = MAX_STAMINA;
+  }
+
+  /** Replace le personnage sur une case praticable de la carte courante. */
+  unstick(): void {
+    this.position = resolveOverlap(this.position, this.hitbox,
+      (tileX, tileY) => this.map.isSolid(tileX, tileY),
+      { width: this.map.pixelWidth, height: this.map.pixelHeight });
+  }
 
   update(): void {
+    this.splashed = false;
     if (this.invulnerabilityFrames > 0) this.invulnerabilityFrames -= 1;
     if (this.flashFrames > 0) this.flashFrames -= 1;
+    if (this.rollCooldown > 0) this.rollCooldown -= 1;
+    if (this.staminaLock > 0) this.staminaLock -= 1;
+    else if (this.stamina < MAX_STAMINA) this.stamina = Math.min(MAX_STAMINA, this.stamina + 0.85);
+
     if (this.attackFrame >= 0) {
       this.attackFrame += 1;
-      if (this.attackFrame >= 18) this.attackFrame = -1;
+      if (this.attackFrame >= (this.spinFrames >= 0 ? 30 : 18)) {
+        this.attackFrame = -1;
+        this.spinFrames = -1;
+      }
     }
-    let dx = (this.input.isDown("Right") ? 1 : 0) - (this.input.isDown("Left") ? 1 : 0);
-    let dy = (this.input.isDown("Down") ? 1 : 0) - (this.input.isDown("Up") ? 1 : 0);
-    if (this.attackFrame >= 0 && this.attackFrame <= 4) { dx = 0; dy = 0; }
-    if (dx !== 0 && dy !== 0) {
-      const diagonal = Math.SQRT1_2;
-      dx *= diagonal;
-      dy *= diagonal;
+
+    // Le recul prend la main sur les commandes : on subit le coup avant de repartir.
+    if (this.knockbackFrames > 0) {
+      const factor = this.knockbackFrames / KNOCKBACK_FRAMES;
+      this.slide(this.knockback.x * factor, this.knockback.y * factor);
+      this.knockbackFrames -= 1;
+      this.walkFrame = 0;
+      return;
     }
+
+    if (this.rollFrames > 0) {
+      // Une roulade décélère : la fin du mouvement se sent, elle n'est pas
+      // coupée net.
+      const progress = 1 - this.rollFrames / ROLL_FRAMES;
+      const power = 3.4 * (1 - progress * progress * 0.85);
+      this.slide(this.rollDirection.x * power, this.rollDirection.y * power);
+      this.rollFrames -= 1;
+      if (this.rollFrames <= 0) this.rollCooldown = ROLL_COOLDOWN;
+      this.walkFrame = (this.walkFrame + 2) % 32;
+      return;
+    }
+
+    const wanted = this.input.direction();
+    if (this.input.wasPressed("Dash")) this.tryRoll(wanted);
+    if (this.rollFrames > 0) return;
+
+    let { x: dx, y: dy } = wanted;
+    // Pendant l'élan de l'épée, on reste planté : le coup a du poids.
+    if (this.attackFrame >= 0 && this.attackFrame <= 5) { dx = 0; dy = 0; }
+    if (this.isCharging) { dx *= 0.42; dy *= 0.42; }
+
     if (Math.abs(dx) > Math.abs(dy) && dx !== 0) this.direction = dx > 0 ? "right" : "left";
     else if (dy !== 0) this.direction = dy > 0 ? "down" : "up";
-    this.velocity = { x: dx * this.speed, y: dy * this.speed };
-    this.position = moveOnGrid(this.position, this.velocity, this.hitbox,
+
+    const terrain = this.map.slowAtPixel(this.position.x + 8, this.position.y + 12);
+    const speed = this.speed * terrain;
+    this.velocity = { x: dx * speed, y: dy * speed };
+    this.slide(this.velocity.x, this.velocity.y);
+    if (dx !== 0 || dy !== 0) {
+      this.walkFrame = (this.walkFrame + 1) % 32;
+      if (terrain < 0.7 && this.walkFrame % 10 === 0) this.splashed = true;
+    } else this.walkFrame = 0;
+  }
+
+  private slide(dx: number, dy: number): void {
+    this.position = moveOnGrid(this.position, { x: dx, y: dy }, this.hitbox,
       (tileX, tileY) => this.map.isSolid(tileX, tileY));
-    if (dx !== 0 || dy !== 0) this.walkFrame = (this.walkFrame + 1) % 32;
-    else this.walkFrame = 0;
+  }
+
+  private tryRoll(wanted: Readonly<Vec2>): void {
+    if (this.rollCooldown > 0 || this.stamina < ROLL_COST) return;
+    const facing = wanted.x !== 0 || wanted.y !== 0 ? wanted : this.facingVector();
+    this.rollDirection = facing;
+    this.rollFrames = ROLL_FRAMES;
+    this.invulnerabilityFrames = Math.max(this.invulnerabilityFrames, ROLL_INVULNERABILITY);
+    this.stamina -= ROLL_COST;
+    this.staminaLock = 26;
+    this.attackFrame = -1;
+    this.chargeFrames = 0;
+  }
+
+  facingVector(): Vec2 {
+    if (this.direction === "up") return { x: 0, y: -1 };
+    if (this.direction === "down") return { x: 0, y: 1 };
+    if (this.direction === "left") return { x: -1, y: 0 };
+    return { x: 1, y: 0 };
+  }
+
+  /** Accumule la charge tant que le bouton d'attaque reste enfoncé. */
+  updateCharge(): void {
+    if (this.attackFrame >= 0 || this.rollFrames > 0) return;
+    if (this.input.isDown("Attack")) this.chargeFrames = Math.min(90, this.chargeFrames + 1);
   }
 
   startAttack(): boolean {
-    if (this.attackFrame >= 0) return false;
+    if (this.attackFrame >= 0 || this.rollFrames > 0) return false;
     this.attackFrame = 0;
+    this.spinFrames = -1;
     return true;
   }
 
-  get swordActive(): boolean { return this.attackFrame >= 4 && this.attackFrame < 12; }
+  /** Relâche la charge : coup tournoyant si elle est complète. */
+  releaseCharge(): "spin" | "none" {
+    if (!this.chargeReady || this.attackFrame >= 0 || this.rollFrames > 0) {
+      this.chargeFrames = 0;
+      return "none";
+    }
+    this.chargeFrames = 0;
+    this.attackFrame = 0;
+    this.spinFrames = 0;
+    return "spin";
+  }
 
-  attackHitbox(): { x: number; y: number; width: number; height: number } {
+  get swordActive(): boolean {
+    if (this.spinFrames >= 0) return this.attackFrame >= 3 && this.attackFrame < 26;
+    return this.attackFrame >= 4 && this.attackFrame < 12;
+  }
+
+  get isSpinning(): boolean { return this.spinFrames >= 0 && this.attackFrame >= 0; }
+
+  attackHitbox(): Rect {
     const x = this.position.x;
     const y = this.position.y;
-    if (this.direction === "up") return { x: x + 2, y: y - 12, width: 12, height: 16 };
-    if (this.direction === "down") return { x: x + 2, y: y + 12, width: 12, height: 16 };
-    if (this.direction === "left") return { x: x - 12, y: y + 2, width: 16, height: 12 };
-    return { x: x + 12, y: y + 2, width: 16, height: 12 };
+    if (this.isSpinning) return { x: x - 18, y: y - 16, width: 52, height: 50 };
+    if (this.direction === "up") return { x: x + 1, y: y - 14, width: 14, height: 18 };
+    if (this.direction === "down") return { x: x + 1, y: y + 12, width: 14, height: 18 };
+    if (this.direction === "left") return { x: x - 14, y: y + 1, width: 18, height: 14 };
+    return { x: x + 12, y: y + 1, width: 18, height: 14 };
   }
 
-  takeDamage(hearts: number, direction: Readonly<{ x: number; y: number }>): boolean {
+  takeDamage(hearts: number, direction: Readonly<Vec2>): boolean {
     if (this.invulnerabilityFrames > 0) return false;
     this.hearts = Math.max(0, this.hearts - hearts);
-    this.invulnerabilityFrames = 40;
-    this.flashFrames = 4;
-    this.knockbackFrames = 8;
-    this.position.x += direction.x * 4;
-    this.position.y += direction.y * 4;
+    this.invulnerabilityFrames = 44;
+    this.flashFrames = 5;
+    this.knockbackFrames = KNOCKBACK_FRAMES;
+    this.knockback = { x: direction.x * 3.4, y: direction.y * 3.4 };
+    this.chargeFrames = 0;
     return true;
   }
 
+  get isDead(): boolean { return this.hearts <= 0; }
+
   draw(ctx: CanvasRenderingContext2D): void {
-    if (this.invulnerabilityFrames > 0 && Math.floor(this.invulnerabilityFrames / 4) % 2 === 0) return;
+    if (this.invulnerabilityFrames > 0 && this.rollFrames <= 0
+      && Math.floor(this.invulnerabilityFrames / 4) % 2 === 0) return;
     const x = Math.round(this.position.x);
     const y = Math.round(this.position.y);
     const step = Math.floor(this.walkFrame / 8) % 2;
     const walking = this.walkFrame > 0;
+    const rolling = this.rollFrames > 0;
     const bob = walking && step === 1 ? -1 : 0;
+
     ctx.save();
 
-    ctx.globalAlpha = 0.32;
+    // Ombre portée : elle se resserre pendant la roulade, comme un saut.
+    ctx.globalAlpha = 0.34;
     ctx.fillStyle = PALETTE.ink;
-    ctx.fillRect(x + 2, y + 14, 12, 2);
-    ctx.fillRect(x + 4, y + 16, 8, 1);
+    const shadowShrink = rolling ? 3 : 0;
+    ctx.fillRect(x + 2 + shadowShrink, y + 14, 12 - shadowShrink * 2, 2);
+    ctx.fillRect(x + 4 + shadowShrink, y + 16, 8 - shadowShrink * 2, 1);
     ctx.globalAlpha = 1;
+
+    if (rolling) {
+      this.drawRoll(ctx, x, y);
+      ctx.restore();
+      return;
+    }
 
     ctx.fillStyle = PALETTE.ink;
     ctx.fillRect(x + 3 + step, y + 12, 4, 4);
@@ -158,28 +307,90 @@ export class Player extends Entity {
     ctx.fillRect(x + 4 + step, y + 13, 3, 3);
     ctx.fillRect(x + 10 - step, y + 13, 3, 3);
 
-    if (this.attackFrame >= 0) {
-      const blade = this.attackHitbox();
-      ctx.fillStyle = PALETTE.ink;
-      if (this.direction === "up" || this.direction === "down") {
-        ctx.fillRect(Math.round(blade.x + 5), Math.round(blade.y), 4, blade.height);
-      } else {
-        ctx.fillRect(Math.round(blade.x), Math.round(blade.y + 5), blade.width, 4);
-      }
-      ctx.fillStyle = this.flashFrames > 0 ? PALETTE.white : PALETTE.stoneLight;
-      if (this.direction === "up" || this.direction === "down") {
-        ctx.fillRect(Math.round(blade.x + 6), Math.round(blade.y), 2, blade.height - 2);
-      } else {
-        ctx.fillRect(Math.round(blade.x), Math.round(blade.y + 6), blade.width - 2, 2);
-      }
-      ctx.fillStyle = PALETTE.yellow;
-      ctx.fillRect(x + 5, y + 8 + bob, 7, 2);
-      ctx.fillStyle = PALETTE.white;
-      if (this.attackFrame >= 4 && this.attackFrame < 10) {
-        ctx.fillRect(x - 2, y + 2, 2, 2);
-        ctx.fillRect(x + 16, y + 10, 1, 2);
-      }
-    }
+    if (this.isCharging) this.drawCharge(ctx, x, y);
+    if (this.attackFrame >= 0) this.drawBlade(ctx, x, y, bob);
     ctx.restore();
+  }
+
+  private drawRoll(ctx: CanvasRenderingContext2D, x: number, y: number): void {
+    const spin = Math.floor((ROLL_FRAMES - this.rollFrames) / 3) % 4;
+    ctx.translate(x + 8, y + 8);
+    ctx.rotate((spin * Math.PI) / 2);
+    ctx.fillStyle = PALETTE.ink;
+    ctx.fillRect(-7, -6, 14, 12);
+    ctx.fillStyle = this.demon ? PALETTE.purple : PALETTE.pineDark;
+    ctx.fillRect(-6, -5, 12, 10);
+    ctx.fillStyle = this.demon ? PALETTE.red : PALETTE.leaf;
+    ctx.fillRect(-5, -4, 5, 8);
+    ctx.fillStyle = PALETTE.sandLight;
+    ctx.fillRect(1, -3, 4, 4);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+
+  private drawCharge(ctx: CanvasRenderingContext2D, x: number, y: number): void {
+    const ready = this.chargeReady;
+    const pulse = Math.floor(this.chargeFrames / 3) % 2;
+    ctx.globalAlpha = ready ? 0.85 : 0.4 + (this.chargeFrames / 42) * 0.4;
+    ctx.fillStyle = ready ? PALETTE.white : PALETTE.waterLight;
+    for (let spark = 0; spark < 4; spark += 1) {
+      const angle = (this.chargeFrames / 6) + (spark * Math.PI) / 2;
+      const radius = ready ? 13 : 9;
+      ctx.fillRect(
+        Math.round(x + 8 + Math.cos(angle) * radius),
+        Math.round(y + 9 + Math.sin(angle) * radius * 0.7),
+        2, 2,
+      );
+    }
+    if (ready && pulse === 0) {
+      ctx.globalAlpha = 0.32;
+      ctx.fillStyle = PALETTE.cream;
+      ctx.fillRect(x - 2, y - 1, 20, 20);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  private drawBlade(ctx: CanvasRenderingContext2D, x: number, y: number, bob: number): void {
+    if (this.isSpinning) {
+      const angle = (this.attackFrame / 26) * Math.PI * 2.4;
+      ctx.save();
+      ctx.translate(x + 8, y + 9);
+      ctx.rotate(angle);
+      ctx.fillStyle = PALETTE.ink;
+      ctx.fillRect(6, -3, 20, 6);
+      ctx.fillStyle = PALETTE.white;
+      ctx.fillRect(6, -2, 19, 3);
+      ctx.fillStyle = PALETTE.yellow;
+      ctx.fillRect(4, -2, 3, 4);
+      ctx.restore();
+      ctx.globalAlpha = 0.22;
+      ctx.fillStyle = PALETTE.cream;
+      ctx.beginPath();
+      ctx.arc(x + 8, y + 9, 24, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      return;
+    }
+
+    const blade = this.attackHitbox();
+    ctx.fillStyle = PALETTE.ink;
+    if (this.direction === "up" || this.direction === "down") {
+      ctx.fillRect(Math.round(blade.x + 5), Math.round(blade.y), 4, blade.height);
+    } else {
+      ctx.fillRect(Math.round(blade.x), Math.round(blade.y + 5), blade.width, 4);
+    }
+    ctx.fillStyle = this.flashFrames > 0 ? PALETTE.white : PALETTE.stoneLight;
+    if (this.direction === "up" || this.direction === "down") {
+      ctx.fillRect(Math.round(blade.x + 6), Math.round(blade.y), 2, blade.height - 2);
+    } else {
+      ctx.fillRect(Math.round(blade.x), Math.round(blade.y + 6), blade.width - 2, 2);
+    }
+    ctx.fillStyle = PALETTE.yellow;
+    ctx.fillRect(x + 5, y + 8 + bob, 7, 2);
+    if (this.swordActive) {
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = PALETTE.white;
+      ctx.fillRect(Math.round(blade.x), Math.round(blade.y), blade.width, blade.height);
+      ctx.globalAlpha = 1;
+    }
   }
 }

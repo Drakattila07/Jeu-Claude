@@ -88,7 +88,9 @@ export class Npc extends Entity {
     const dx = targetX - this.position.x;
     const dy = targetY - this.position.y;
     const distance = Math.hypot(dx, dy);
-    const speed = 0.58;
+    // Les zones font désormais le double : à l'ancienne allure, traverser une
+    // place prenait une minute de temps réel.
+    const speed = 0.95;
     if (distance <= speed) {
       this.position.x = targetX;
       this.position.y = targetY;
@@ -258,7 +260,7 @@ export class Npc extends Entity {
     else if (activity === "inspect") this.drawInspect(ctx, x, y);
     else if (activity === "meditate") this.drawMeditate(ctx, x, y);
     else if (activity === "rest") this.drawRest(ctx, x, y);
-    else if (activity === "ball" && this.data.id === "ryn") this.drawBall(ctx);
+    else if (activity === "ball" && this.data.id === "ryn") this.drawBall(ctx, x, y);
   }
 
   private drawBroom(ctx: CanvasRenderingContext2D, x: number, y: number): void {
@@ -412,13 +414,18 @@ export class Npc extends Entity {
     ctx.fillRect(x + 10, y + 6, 2, 1);
   }
 
-  private drawBall(ctx: CanvasRenderingContext2D): void {
+  /**
+   * La balle rebondissait à une position absolue héritée de l'ancien écran
+   * fixe : elle apparaissait à l'autre bout de la carte. Elle joue désormais
+   * devant l'enfant, où qu'il soit.
+   */
+  private drawBall(ctx: CanvasRenderingContext2D, x: number, y: number): void {
     const travel = Math.sin(this.frame / 18);
-    const ballX = 112 + Math.round(travel * 18);
-    const ballY = 112 - Math.round(Math.abs(Math.sin(this.frame / 9)) * 7);
+    const ballX = x + 20 + Math.round(travel * 16);
+    const ballY = y + 10 - Math.round(Math.abs(Math.sin(this.frame / 9)) * 7);
     ctx.globalAlpha = 0.25;
     ctx.fillStyle = PALETTE.ink;
-    ctx.fillRect(ballX - 3, 113, 7, 2);
+    ctx.fillRect(ballX - 3, y + 12, 7, 2);
     ctx.globalAlpha = 1;
     ctx.fillStyle = PALETTE.ink;
     ctx.fillRect(ballX - 3, ballY - 2, 7, 6);

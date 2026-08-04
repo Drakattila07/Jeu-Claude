@@ -101,7 +101,17 @@ export class QuestSystem {
 
   private complete(quest: QuestDefinition, record: QuestRecord, frame: number): void {
     record.status = "complete";
-    for (const reward of quest.rewards) if (reward.type === "flag") this.flags.set(reward.id);
+    for (const reward of quest.rewards) {
+      if (reward.type === "flag") this.flags.set(reward.id);
+      // Les primes en rubis et en affinité étaient déclarées mais jamais
+      // versées : on les publie pour que le jeu les applique.
+      else {
+        this.events.publish({
+          type: "quest_reward", id: quest.id, frame,
+          payload: { reward: reward.type, target: reward.id, amount: reward.amount ?? 0 },
+        });
+      }
+    }
     for (const flag of quest.worldEffects) this.flags.set(flag);
     this.events.publish({ type: "quest_complete", id: quest.id, frame });
   }

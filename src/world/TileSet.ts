@@ -1,5 +1,6 @@
 import { PALETTE } from "../data/palette";
 import { TILE_SIZE } from "../core/Renderer";
+import type { TileMap } from "./TileMap";
 
 export type TileKind =
   | "empty" | "grass" | "grass_alt" | "path" | "stone" | "water"
@@ -9,7 +10,16 @@ export type TileKind =
   | "crop" | "pine_crown" | "stump" | "mushroom" | "deep_water"
   | "bridge" | "moss_stone" | "wildflowers" | "cracked_path"
   | "wood_floor" | "interior_wall" | "rug" | "bed" | "bookshelf"
-  | "table" | "fireplace" | "chair" | "window" | "interior_block";
+  | "table" | "fireplace" | "chair" | "window" | "interior_block"
+  | "scree" | "snow" | "alpine_grass" | "heather" | "boulder" | "gravel"
+  | "cobble" | "dry_grass" | "marsh_grass" | "snow_pine" | "crag"
+  // Vocabulaire ajouté avec le nouveau générateur : de quoi habiller une zone
+  // quatre fois plus grande sans répéter six motifs en boucle.
+  | "tall_grass" | "shore_sand" | "flower_patch" | "log" | "fern" | "pebbles"
+  | "snowdrift" | "cattail" | "dock" | "barrel" | "crate" | "hedge"
+  | "ruin_column" | "dead_tree" | "lantern_post" | "wheat" | "ice"
+  | "vines" | "grave" | "banner" | "arch_top" | "canopy" | "cliff_top"
+  | "brazier" | "market_stall" | "haystack" | "chimney" | "shrine_stone";
 
 export interface TileProperties {
   readonly kind: TileKind;
@@ -19,31 +29,119 @@ export interface TileProperties {
   readonly cuttable?: boolean;
   readonly ledge?: boolean;
   readonly burnable?: boolean;
+  /** Lumière émise par la tuile : rayon en pixels et teinte. */
+  readonly light?: { readonly radius: number; readonly color: string };
 }
 
 const TILES: readonly TileProperties[] = [
-  { kind: "empty" }, { kind: "grass" }, { kind: "grass_alt" },
-  { kind: "path" }, { kind: "stone", solid: true }, { kind: "water", water: true, slow: 0.6 },
-  { kind: "tree_crown", solid: true, burnable: true }, { kind: "tree_trunk", solid: true, burnable: true },
-  { kind: "roof", solid: true, burnable: true }, { kind: "wall", solid: true, burnable: true }, { kind: "well", solid: true },
-  { kind: "flowers" }, { kind: "fence", solid: true, burnable: true },
-  { kind: "bush", solid: true, cuttable: true, burnable: true },
-  { kind: "door", solid: true, burnable: true }, { kind: "sign", solid: true, burnable: true },
-  { kind: "stairs", ledge: true },
-  { kind: "forest_floor" }, { kind: "mud", slow: 0.82 }, { kind: "cliff", solid: true },
-  { kind: "reeds", solid: true }, { kind: "rubble", solid: true }, { kind: "lilypad", water: true, slow: 0.6 },
-  { kind: "crop", burnable: true }, { kind: "pine_crown", solid: true, burnable: true },
-  { kind: "stump", solid: true, burnable: true },
-  { kind: "mushroom" }, { kind: "deep_water", water: true, slow: 0.5 },
-  { kind: "bridge", burnable: true },
-  { kind: "moss_stone", solid: true }, { kind: "wildflowers" }, { kind: "cracked_path" },
-  { kind: "wood_floor", burnable: true }, { kind: "interior_wall", solid: true, burnable: true },
-  { kind: "rug", burnable: true },
-  { kind: "bed", solid: true, burnable: true }, { kind: "bookshelf", solid: true, burnable: true },
-  { kind: "table", solid: true, burnable: true }, { kind: "fireplace", solid: true },
-  { kind: "chair", solid: true, burnable: true }, { kind: "window", solid: true, burnable: true },
-  { kind: "interior_block", solid: true },
+  /*  0 */ { kind: "empty" },
+  /*  1 */ { kind: "grass" },
+  /*  2 */ { kind: "grass_alt" },
+  /*  3 */ { kind: "path" },
+  /*  4 */ { kind: "stone", solid: true },
+  /*  5 */ { kind: "water", water: true, slow: 0.6 },
+  /*  6 */ { kind: "tree_crown", solid: true, burnable: true },
+  /*  7 */ { kind: "tree_trunk", solid: true, burnable: true },
+  /*  8 */ { kind: "roof", solid: true, burnable: true },
+  /*  9 */ { kind: "wall", solid: true, burnable: true },
+  /* 10 */ { kind: "well", solid: true },
+  /* 11 */ { kind: "flowers" },
+  /* 12 */ { kind: "fence", solid: true, burnable: true },
+  /* 13 */ { kind: "bush", solid: true, cuttable: true, burnable: true },
+  /* 14 */ { kind: "door", solid: true, burnable: true },
+  /* 15 */ { kind: "sign", solid: true, burnable: true },
+  /* 16 */ { kind: "stairs", ledge: true },
+  /* 17 */ { kind: "forest_floor" },
+  /* 18 */ { kind: "mud", slow: 0.82 },
+  /* 19 */ { kind: "cliff", solid: true },
+  /* 20 */ { kind: "reeds", solid: true },
+  /* 21 */ { kind: "rubble", solid: true },
+  /* 22 */ { kind: "lilypad", water: true, slow: 0.6 },
+  /* 23 */ { kind: "crop", burnable: true },
+  /* 24 */ { kind: "pine_crown", solid: true, burnable: true },
+  /* 25 */ { kind: "stump", solid: true, burnable: true },
+  /* 26 */ { kind: "mushroom" },
+  /* 27 */ { kind: "deep_water", water: true, slow: 0.5 },
+  /* 28 */ { kind: "bridge", burnable: true },
+  /* 29 */ { kind: "moss_stone", solid: true },
+  /* 30 */ { kind: "wildflowers" },
+  /* 31 */ { kind: "cracked_path" },
+  /* 32 */ { kind: "wood_floor", burnable: true },
+  /* 33 */ { kind: "interior_wall", solid: true, burnable: true },
+  /* 34 */ { kind: "rug", burnable: true },
+  /* 35 */ { kind: "bed", solid: true, burnable: true },
+  /* 36 */ { kind: "bookshelf", solid: true, burnable: true },
+  /* 37 */ { kind: "table", solid: true, burnable: true },
+  /* 38 */ { kind: "fireplace", solid: true, light: { radius: 74, color: "#ffb055" } },
+  /* 39 */ { kind: "chair", solid: true, burnable: true },
+  /* 40 */ { kind: "window", solid: true, burnable: true, light: { radius: 40, color: "#9fd6e6" } },
+  /* 41 */ { kind: "interior_block", solid: true },
+  /* 42 */ { kind: "scree", slow: 0.88 },
+  /* 43 */ { kind: "snow", slow: 0.8 },
+  /* 44 */ { kind: "alpine_grass" },
+  /* 45 */ { kind: "heather" },
+  /* 46 */ { kind: "boulder", solid: true },
+  /* 47 */ { kind: "gravel" },
+  /* 48 */ { kind: "cobble" },
+  /* 49 */ { kind: "dry_grass" },
+  /* 50 */ { kind: "marsh_grass", slow: 0.9 },
+  /* 51 */ { kind: "snow_pine", solid: true, burnable: true },
+  /* 52 */ { kind: "crag", solid: true },
+  /* 53 */ { kind: "tall_grass", cuttable: true, burnable: true, slow: 0.92 },
+  /* 54 */ { kind: "shore_sand" },
+  /* 55 */ { kind: "flower_patch" },
+  /* 56 */ { kind: "log", solid: true, burnable: true },
+  /* 57 */ { kind: "fern" },
+  /* 58 */ { kind: "pebbles" },
+  /* 59 */ { kind: "snowdrift", slow: 0.72 },
+  /* 60 */ { kind: "cattail", slow: 0.85 },
+  /* 61 */ { kind: "dock", burnable: true },
+  /* 62 */ { kind: "barrel", solid: true, burnable: true },
+  /* 63 */ { kind: "crate", solid: true, burnable: true },
+  /* 64 */ { kind: "hedge", solid: true, cuttable: true, burnable: true },
+  /* 65 */ { kind: "ruin_column", solid: true },
+  /* 66 */ { kind: "dead_tree", solid: true, burnable: true },
+  /* 67 */ { kind: "lantern_post", solid: true, light: { radius: 92, color: "#ffcb76" } },
+  /* 68 */ { kind: "wheat", burnable: true, slow: 0.9 },
+  /* 69 */ { kind: "ice", slow: 1.12 },
+  /* 70 */ { kind: "vines" },
+  /* 71 */ { kind: "grave", solid: true },
+  /* 72 */ { kind: "banner" },
+  /* 73 */ { kind: "arch_top" },
+  /* 74 */ { kind: "canopy" },
+  /* 75 */ { kind: "cliff_top" },
+  /* 76 */ { kind: "brazier", solid: true, light: { radius: 96, color: "#ff9a4a" } },
+  /* 77 */ { kind: "market_stall", solid: true, burnable: true },
+  /* 78 */ { kind: "haystack", solid: true, burnable: true },
+  /* 79 */ { kind: "chimney", solid: true },
+  /* 80 */ { kind: "shrine_stone", solid: true, light: { radius: 56, color: "#8fd8ff" } },
 ];
+
+/** Indices nommés, pour que les générateurs restent lisibles. */
+export const TILE = {
+  empty: 0, grass: 1, grassAlt: 2, path: 3, stone: 4, water: 5,
+  treeCrown: 6, treeTrunk: 7, roof: 8, wall: 9, well: 10, flowers: 11,
+  fence: 12, bush: 13, door: 14, sign: 15, stairs: 16, forestFloor: 17,
+  mud: 18, cliff: 19, reeds: 20, rubble: 21, lilypad: 22, crop: 23,
+  pineCrown: 24, stump: 25, mushroom: 26, deepWater: 27, bridge: 28,
+  mossStone: 29, wildflowers: 30, crackedPath: 31, woodFloor: 32,
+  interiorWall: 33, rug: 34, bed: 35, bookshelf: 36, table: 37,
+  fireplace: 38, chair: 39, window: 40, interiorBlock: 41,
+  scree: 42, snow: 43, alpineGrass: 44, heather: 45, boulder: 46, gravel: 47,
+  cobble: 48, dryGrass: 49, marshGrass: 50, snowPine: 51, crag: 52,
+  tallGrass: 53, shoreSand: 54, flowerPatch: 55, log: 56, fern: 57,
+  pebbles: 58, snowdrift: 59, cattail: 60, dock: 61, barrel: 62, crate: 63,
+  hedge: 64, ruinColumn: 65, deadTree: 66, lanternPost: 67, wheat: 68,
+  ice: 69, vines: 70, grave: 71, banner: 72, archTop: 73, canopy: 74,
+  cliffTop: 75, brazier: 76, marketStall: 77, haystack: 78, chimney: 79,
+  shrineStone: 80,
+} as const;
+
+/** Tuiles repeintes à chaque image : eau, flammes, herbe qui ondule. */
+const ANIMATED = new Set<number>([
+  TILE.water, TILE.deepWater, TILE.lilypad, TILE.fireplace, TILE.brazier,
+  TILE.tallGrass, TILE.wheat, TILE.cattail, TILE.banner, TILE.shrineStone,
+]);
 
 function fill(ctx: CanvasRenderingContext2D, color: string, x: number, y: number,
   width: number, height: number): void {
@@ -57,12 +155,54 @@ function shadow(ctx: CanvasRenderingContext2D, x: number, y: number, width = 14)
   ctx.globalAlpha = 1;
 }
 
+/** Bruit déterministe propre à une tuile et à un indice de détail. */
+function speckNoise(x: number, y: number, index: number, salt: number): number {
+  let value = Math.imul(x + 1, 374761393) ^ Math.imul(y + 31, 668265263)
+    ^ Math.imul(index + 7, 2246822519) ^ salt;
+  value = Math.imul(value ^ (value >>> 13), 1274126177);
+  return ((value ^ (value >>> 16)) >>> 0) / 4294967296;
+}
+
+/**
+ * Sème des points de détail dans une tuile.
+ *
+ * Les sols dessinaient deux ou trois rectangles toujours au même endroit de la
+ * cellule : à l'écran, on ne voyait plus la matière mais la grille de 16 px.
+ * Les grains sont maintenant tirés d'un bruit propre à chaque tuile — aucune
+ * cellule ne ressemble à sa voisine, et le sol redevient une surface.
+ */
+function specks(ctx: CanvasRenderingContext2D, color: string, px: number, py: number,
+  x: number, y: number, salt: number, count: number, size = 1): void {
+  ctx.fillStyle = color;
+  const span = 17 - size;
+  for (let index = 0; index < count; index += 1) {
+    const sx = Math.floor(speckNoise(x, y, index * 2, salt) * span);
+    const sy = Math.floor(speckNoise(x, y, index * 2 + 1, salt) * span);
+    ctx.fillRect(px + sx, py + sy, size, size);
+  }
+}
+
+/** Tache allongée occasionnelle : cailloux, touffes, plaques de mousse. */
+function patch(ctx: CanvasRenderingContext2D, color: string, px: number, py: number,
+  x: number, y: number, salt: number, chance: number, width = 4, height = 2): void {
+  if (speckNoise(x, y, 91, salt) > chance) return;
+  const sx = Math.floor(speckNoise(x, y, 92, salt) * (17 - width));
+  const sy = Math.floor(speckNoise(x, y, 93, salt) * (17 - height));
+  fill(ctx, color, px + sx, py + sy, width, height);
+}
+
 export class TileSet {
   properties(id: number): TileProperties {
     return TILES[id] ?? TILES[0]!;
   }
 
-  draw(ctx: CanvasRenderingContext2D, id: number, x: number, y: number, frame = 0): void {
+  isAnimated(id: number): boolean { return ANIMATED.has(id); }
+
+  /** Lumière propre à une tuile, si elle en émet. */
+  lightOf(id: number): TileProperties["light"] { return this.properties(id).light; }
+
+  draw(ctx: CanvasRenderingContext2D, id: number, x: number, y: number, frame = 0,
+    map?: TileMap): void {
     const px = x * TILE_SIZE;
     const py = y * TILE_SIZE;
     const kind = this.properties(id).kind;
@@ -75,40 +215,44 @@ export class TileSet {
       case "grass_alt": {
         const base = kind === "grass" ? PALETTE.grass : PALETTE.grassDark;
         const light = kind === "grass" ? PALETTE.grassLight : PALETTE.leaf;
+        const dark = kind === "grass" ? PALETTE.grassDark : PALETTE.leafDark;
         fill(ctx, base, px, py, 16, 16);
-        fill(ctx, kind === "grass" ? PALETTE.leafLight : PALETTE.leafDark,
-          px + 2 + variant * 3, py + 3 + ((x + y) & 5), 1, 2);
-        fill(ctx, light, px + 11 - variant, py + 11, 1, 2);
-        if ((x + y) % 5 === 0) {
-          fill(ctx, PALETTE.grassDark, px + 5, py + 8, 1, 1);
-          fill(ctx, light, px + 6, py + 7, 1, 2);
-        }
+        specks(ctx, dark, px, py, x, y, 0x11, 5);
+        specks(ctx, light, px, py, x, y, 0x22, 4);
+        patch(ctx, light, px, py, x, y, 0x33, 0.22, 3, 1);
+        patch(ctx, PALETTE.leafLight, px, py, x, y, 0x44, 0.1, 2, 2);
         break;
       }
       case "forest_floor":
         fill(ctx, PALETTE.pine, px, py, 16, 16);
-        fill(ctx, PALETTE.pineDark, px + 1, py + 3 + variant * 2, 4, 1);
-        fill(ctx, PALETTE.leafDark, px + 10, py + 2 + variant, 2, 2);
-        fill(ctx, PALETTE.wood, px + 6, py + 12, 3, 1);
-        fill(ctx, PALETTE.leaf, px + 13, py + 9, 1, 3);
+        specks(ctx, PALETTE.pineDark, px, py, x, y, 0x51, 6);
+        specks(ctx, PALETTE.leafDark, px, py, x, y, 0x52, 4);
+        specks(ctx, PALETTE.leaf, px, py, x, y, 0x53, 2);
+        patch(ctx, PALETTE.woodDark, px, py, x, y, 0x54, 0.18, 3, 1);
+        patch(ctx, PALETTE.leafDark, px, py, x, y, 0x55, 0.3, 4, 2);
         break;
       case "mud":
         fill(ctx, PALETTE.marsh, px, py, 16, 16);
-        fill(ctx, PALETTE.pineDark, px + 2, py + 4, 6, 2);
-        fill(ctx, PALETTE.soil, px + 9, py + 11, 5, 2);
-        fill(ctx, PALETTE.water, px + 4 + variant, py + 10, 3, 1);
+        specks(ctx, PALETTE.pineDark, px, py, x, y, 0x61, 6);
+        specks(ctx, PALETTE.soil, px, py, x, y, 0x62, 4);
+        patch(ctx, PALETTE.water, px, py, x, y, 0x63, 0.3, 4, 2);
+        patch(ctx, PALETTE.pineDark, px, py, x, y, 0x64, 0.4, 5, 2);
         break;
       case "path":
-      case "cracked_path":
-        fill(ctx, kind === "path" ? PALETTE.sand : PALETTE.stone, px, py, 16, 16);
-        fill(ctx, kind === "path" ? PALETTE.sandDark : PALETTE.stoneDark, px + 2, py + 3, 4, 2);
-        fill(ctx, kind === "path" ? PALETTE.sandLight : PALETTE.stoneLight, px + 9, py + 9, 5, 2);
-        fill(ctx, kind === "path" ? PALETTE.soil : PALETTE.ink, px + 7, py + 13, 2, 1);
-        if (kind === "cracked_path") {
-          fill(ctx, PALETTE.stoneDark, px + 6, py + 5, 1, 4);
-          fill(ctx, PALETTE.stoneDark, px + 7, py + 8, 3, 1);
-        }
+      case "cracked_path": {
+        // Terre battue, pas sable de plage : le chemin partageait sa teinte
+        // claire avec les rives et les champs, et toute la vallée virait au
+        // beige. On l'assombrit pour qu'un sentier reste un sentier.
+        const sandy = kind === "path";
+        fill(ctx, sandy ? PALETTE.sandDark : PALETTE.stone, px, py, 16, 16);
+        specks(ctx, sandy ? PALETTE.soil : PALETTE.stoneDark, px, py, x, y, 0x71, 7);
+        specks(ctx, sandy ? PALETTE.sand : PALETTE.stoneLight, px, py, x, y, 0x72, 5);
+        patch(ctx, sandy ? PALETTE.sandLight : PALETTE.ink, px, py, x, y, 0x73, 0.24, 3, 1);
+        if (!sandy) patch(ctx, PALETTE.stoneDark, px, py, x, y, 0x74, 0.4, 1, 5);
+        // Bordure douce là où le chemin touche autre chose que lui-même.
+        if (map) this.drawPathFringe(ctx, map, x, y, px, py, sandy);
         break;
+      }
       case "stone":
       case "moss_stone":
         shadow(ctx, px, py);
@@ -122,12 +266,15 @@ export class TileSet {
         }
         break;
       case "cliff":
-        fill(ctx, PALETTE.stoneDark, px, py, 16, 16);
-        fill(ctx, PALETTE.stone, px + 1, py, 14, 12);
-        fill(ctx, PALETTE.stoneLight, px + 2, py + 1, 12, 3);
-        fill(ctx, PALETTE.ink, px, py + 13, 16, 3);
-        fill(ctx, PALETTE.stoneDark, px + 4, py + 6, 2, 5);
-        fill(ctx, PALETTE.stoneDark, px + 10, py + 4, 3, 2);
+      case "crag":
+        this.drawRock(ctx, map, x, y, px, py, variant, kind === "crag");
+        break;
+      case "cliff_top":
+        // Plateau : la même roche vue de dessus, sans la paroi.
+        fill(ctx, PALETTE.stone, px, py, 16, 16);
+        fill(ctx, PALETTE.stoneLight, px + 1 + variant, py + 2, 6, 3);
+        fill(ctx, PALETTE.stoneDark, px + 9 - variant, py + 8, 5, 3);
+        fill(ctx, PALETTE.stoneDark, px + 2, py + 12, 4, 1);
         break;
       case "rubble":
         shadow(ctx, px, py);
@@ -139,13 +286,22 @@ export class TileSet {
         break;
       case "water":
       case "deep_water": {
+        const deep = kind === "deep_water";
         const offset = Math.floor(frame / 18 + x * 2 + y) % 8;
-        fill(ctx, kind === "water" ? PALETTE.water : PALETTE.deepWater, px, py, 16, 16);
-        fill(ctx, kind === "water" ? PALETTE.waterLight : PALETTE.water, px + offset - 4, py + 4, 8, 1);
-        fill(ctx, kind === "water" ? PALETTE.deepWater : PALETTE.pineDark, px + 9 - offset / 2, py + 11, 7, 1);
+        fill(ctx, deep ? PALETTE.deepWater : PALETTE.water, px, py, 16, 16);
+        fill(ctx, deep ? PALETTE.water : PALETTE.waterLight, px + offset - 4, py + 4, 8, 1);
+        fill(ctx, deep ? PALETTE.pineDark : PALETTE.deepWater, px + 9 - offset / 2, py + 11, 7, 1);
         fill(ctx, PALETTE.waterLight, px + ((offset + 8) % 11), py + 14, 3, 1);
+        if (map) this.drawFoam(ctx, map, x, y, px, py, frame);
         break;
       }
+      case "ice":
+        fill(ctx, "#a9d8e6", px, py, 16, 16);
+        fill(ctx, "#cdeaf2", px + 1, py + 1, 14, 6);
+        fill(ctx, "#7fb6cc", px + 2 + variant, py + 9, 8, 2);
+        fill(ctx, PALETTE.white, px + 3, py + 2, 5, 1);
+        fill(ctx, "#7fb6cc", px + 11, py + 4, 1, 6);
+        break;
       case "lilypad":
         fill(ctx, PALETTE.water, px, py, 16, 16);
         fill(ctx, PALETTE.waterLight, px + ((frame / 20 + x) % 8), py + 3, 6, 1);
@@ -156,7 +312,8 @@ export class TileSet {
         fill(ctx, PALETTE.rose, px + 6, py + 6, 1, 1);
         break;
       case "bridge":
-        fill(ctx, PALETTE.deepWater, px, py, 16, 16);
+      case "dock":
+        fill(ctx, kind === "bridge" ? PALETTE.deepWater : PALETTE.water, px, py, 16, 16);
         fill(ctx, PALETTE.woodDark, px, py + 1, 16, 14);
         for (let plank = 1; plank < 16; plank += 5) {
           fill(ctx, PALETTE.wood, px + plank, py + 2, 4, 12);
@@ -183,6 +340,13 @@ export class TileSet {
           fill(ctx, PALETTE.leafLight, px + 7, py + 3, 2, 5);
         }
         break;
+      case "canopy":
+        // Feuillage haut, dessiné par-dessus les personnages.
+        fill(ctx, PALETTE.leafDark, px, py + 2, 16, 12);
+        fill(ctx, PALETTE.leaf, px + 1 + variant, py, 12, 11);
+        fill(ctx, PALETTE.leafLight, px + 4, py + 1, 5, 3);
+        fill(ctx, PALETTE.pineDark, px + 10, py + 8, 5, 5);
+        break;
       case "tree_trunk":
         fill(ctx, PALETTE.leafDark, px, py, 16, 5);
         shadow(ctx, px, py, 10);
@@ -190,6 +354,23 @@ export class TileSet {
         fill(ctx, PALETTE.wood, px + 6, py + 4, 4, 10);
         fill(ctx, PALETTE.woodLight, px + 7, py + 5, 2, 5);
         fill(ctx, PALETTE.ink, px + 10, py + 7, 2, 5);
+        break;
+      case "dead_tree":
+        shadow(ctx, px, py, 12);
+        fill(ctx, PALETTE.woodDark, px + 6, py + 2, 4, 14);
+        fill(ctx, PALETTE.wood, px + 7, py + 4, 2, 10);
+        fill(ctx, PALETTE.woodDark, px + 2, py + 3, 4, 2);
+        fill(ctx, PALETTE.woodDark, px + 10, py + 6, 5, 2);
+        fill(ctx, PALETTE.woodDark, px + 3, py + 8, 3, 2);
+        fill(ctx, PALETTE.ink, px + 8, py + 6, 1, 6);
+        break;
+      case "log":
+        shadow(ctx, px, py, 15);
+        fill(ctx, PALETTE.woodDark, px, py + 5, 16, 8);
+        fill(ctx, PALETTE.wood, px, py + 6, 16, 5);
+        fill(ctx, PALETTE.woodLight, px + 1, py + 6, 14, 1);
+        fill(ctx, PALETTE.soil, px + 1, py + 6, 4, 5);
+        fill(ctx, PALETTE.leafDark, px + 8, py + 4, 5, 2);
         break;
       case "stump":
         shadow(ctx, px, py, 14);
@@ -200,21 +381,16 @@ export class TileSet {
         fill(ctx, PALETTE.leafDark, px + 1, py + 12, 5, 3);
         break;
       case "roof":
-        fill(ctx, PALETTE.roofDark, px, py, 16, 16);
-        fill(ctx, PALETTE.ink, px, py + 14, 16, 2);
-        for (let row = 1; row < 14; row += 5) {
-          fill(ctx, PALETTE.roof, px + 1, py + row, 14, 4);
-          fill(ctx, PALETTE.rose, px + 2 + ((row / 5) % 2) * 4, py + row, 5, 1);
-          fill(ctx, PALETTE.roofDark, px + 8, py + row + 1, 1, 3);
-        }
+        this.drawRoof(ctx, map, x, y, px, py, variant);
+        break;
+      case "chimney":
+        fill(ctx, PALETTE.stoneDark, px + 3, py, 10, 16);
+        fill(ctx, PALETTE.stone, px + 4, py + 1, 8, 14);
+        fill(ctx, PALETTE.stoneLight, px + 5, py + 2, 3, 2);
+        fill(ctx, PALETTE.ink, px + 5, py, 6, 2);
         break;
       case "wall":
-        fill(ctx, PALETTE.stoneDark, px, py, 16, 16);
-        fill(ctx, PALETTE.sandLight, px + 1, py, 14, 13);
-        fill(ctx, PALETTE.cream, px + 2, py + 1, 5, 2);
-        fill(ctx, PALETTE.sandDark, px, py + 12, 16, 4);
-        fill(ctx, PALETTE.soil, px + 7, py + 5, 2, 1);
-        fill(ctx, PALETTE.sandDark, px + 11, py + 8, 3, 2);
+        this.drawWall(ctx, map, x, y, px, py, variant);
         break;
       case "well":
         shadow(ctx, px, py, 16);
@@ -237,6 +413,51 @@ export class TileSet {
         fill(ctx, PALETTE.yellow, px + 4, py + 6, 1, 1);
         fill(ctx, PALETTE.cream, px + 11, py + 4, 1, 1);
         break;
+      case "flower_patch": {
+        const colors = [PALETTE.rose, PALETTE.yellow, PALETTE.white, PALETTE.purple];
+        for (let index = 0; index < 5; index += 1) {
+          const fx = px + 1 + ((x * 5 + index * 7) % 13);
+          const fy = py + 2 + ((y * 3 + index * 5) % 12);
+          fill(ctx, PALETTE.leafDark, fx, fy + 2, 1, 3);
+          fill(ctx, colors[(index + variant) % colors.length]!, fx - 1, fy, 3, 2);
+        }
+        break;
+      }
+      case "fern":
+        fill(ctx, PALETTE.pineDark, px + 7, py + 8, 2, 7);
+        for (const [dx, dy, w] of [[2, 6, 5], [9, 5, 5], [3, 10, 4], [9, 9, 4]] as const) {
+          fill(ctx, PALETTE.leafDark, px + dx, py + dy, w, 2);
+          fill(ctx, PALETTE.leaf, px + dx + 1, py + dy - 1, w - 2, 1);
+        }
+        break;
+      case "tall_grass": {
+        const sway = Math.sin((frame + x * 9 + y * 5) / 22) > 0 ? 1 : 0;
+        for (let blade = 1; blade < 15; blade += 3) {
+          const height = 8 + ((blade + x) % 5);
+          fill(ctx, PALETTE.leafDark, px + blade + sway, py + 16 - height, 2, height);
+          fill(ctx, PALETTE.leafLight, px + blade + sway, py + 16 - height, 1, 3);
+        }
+        break;
+      }
+      case "wheat": {
+        const sway = Math.sin((frame + x * 11) / 26) > 0 ? 1 : 0;
+        fill(ctx, PALETTE.soil, px, py + 13, 16, 3);
+        for (let stem = 1; stem < 15; stem += 4) {
+          fill(ctx, PALETTE.sandDark, px + stem + sway, py + 3, 1, 12);
+          fill(ctx, PALETTE.sand, px + stem + sway - 1, py + 2, 3, 4);
+          fill(ctx, PALETTE.cream, px + stem + sway, py + 2, 1, 2);
+        }
+        break;
+      }
+      case "cattail": {
+        const sway = Math.sin((frame + y * 13) / 30) > 0 ? 1 : 0;
+        fill(ctx, PALETTE.marsh, px, py + 11, 16, 5);
+        for (const stem of [3, 8, 12]) {
+          fill(ctx, PALETTE.pine, px + stem + sway, py + 2, 1, 13);
+          fill(ctx, PALETTE.woodDark, px + stem + sway - 1, py + 2, 3, 5);
+        }
+        break;
+      }
       case "mushroom":
         fill(ctx, PALETTE.sandLight, px + 7, py + 8, 3, 6);
         fill(ctx, PALETTE.ink, px + 6, py + 13, 5, 2);
@@ -253,6 +474,14 @@ export class TileSet {
           fill(ctx, PALETTE.yellow, px + stem + 1, py + 5, 2, 3);
         }
         break;
+      case "haystack":
+        shadow(ctx, px, py, 16);
+        fill(ctx, PALETTE.sandDark, px + 1, py + 4, 14, 11);
+        fill(ctx, PALETTE.sand, px + 2, py + 3, 12, 10);
+        fill(ctx, PALETTE.sandLight, px + 4, py + 2, 7, 4);
+        fill(ctx, PALETTE.soil, px + 3, py + 9, 10, 1);
+        fill(ctx, PALETTE.soil, px + 5, py + 12, 7, 1);
+        break;
       case "fence":
         shadow(ctx, px, py, 16);
         fill(ctx, PALETTE.woodDark, px, py + 6, 16, 4);
@@ -261,6 +490,14 @@ export class TileSet {
         fill(ctx, PALETTE.woodLight, px + 3, py + 3, 2, 9);
         fill(ctx, PALETTE.woodDark, px + 11, py + 2, 4, 14);
         fill(ctx, PALETTE.woodLight, px + 12, py + 3, 2, 9);
+        break;
+      case "hedge":
+        shadow(ctx, px, py, 16);
+        fill(ctx, PALETTE.pineDark, px, py + 3, 16, 13);
+        fill(ctx, PALETTE.leafDark, px, py + 2, 16, 10);
+        fill(ctx, PALETTE.leaf, px + 1 + variant, py + 3, 6, 4);
+        fill(ctx, PALETTE.leaf, px + 9 - variant, py + 6, 5, 3);
+        fill(ctx, PALETTE.leafLight, px + 3, py + 3, 2, 2);
         break;
       case "bush":
       case "reeds":
@@ -303,6 +540,121 @@ export class TileSet {
           fill(ctx, PALETTE.stoneLight, px, py + step, 16, 1);
         }
         break;
+      case "barrel":
+        shadow(ctx, px, py, 13);
+        fill(ctx, PALETTE.woodDark, px + 2, py + 2, 12, 13);
+        fill(ctx, PALETTE.wood, px + 3, py + 3, 10, 11);
+        fill(ctx, PALETTE.woodLight, px + 4, py + 4, 2, 8);
+        fill(ctx, PALETTE.stoneDark, px + 3, py + 6, 10, 2);
+        fill(ctx, PALETTE.stoneDark, px + 3, py + 11, 10, 2);
+        break;
+      case "crate":
+        shadow(ctx, px, py, 14);
+        fill(ctx, PALETTE.woodDark, px + 1, py + 3, 14, 12);
+        fill(ctx, PALETTE.wood, px + 2, py + 4, 12, 10);
+        fill(ctx, PALETTE.woodLight, px + 2, py + 4, 12, 1);
+        fill(ctx, PALETTE.woodDark, px + 2, py + 8, 12, 2);
+        fill(ctx, PALETTE.woodDark, px + 7, py + 4, 2, 10);
+        break;
+      case "market_stall":
+        fill(ctx, PALETTE.woodDark, px + 1, py + 8, 14, 8);
+        fill(ctx, PALETTE.wood, px + 2, py + 9, 12, 6);
+        for (let stripe = 0; stripe < 16; stripe += 6) {
+          fill(ctx, PALETTE.roof, px + stripe, py + 1, 3, 7);
+          fill(ctx, PALETTE.cream, px + stripe + 3, py + 1, 3, 7);
+        }
+        fill(ctx, PALETTE.ink, px, py + 7, 16, 2);
+        fill(ctx, PALETTE.yellow, px + 4, py + 10, 3, 2);
+        fill(ctx, PALETTE.leafLight, px + 9, py + 10, 3, 2);
+        break;
+      case "ruin_column":
+        shadow(ctx, px, py, 13);
+        fill(ctx, PALETTE.stoneDark, px + 3, py, 10, 16);
+        fill(ctx, PALETTE.stone, px + 4, py, 8, 15);
+        fill(ctx, PALETTE.stoneLight, px + 5, py + 1, 2, 12);
+        fill(ctx, PALETTE.stoneDark, px + 2, py, 12, 3);
+        fill(ctx, PALETTE.stoneLight, px + 3, py, 10, 1);
+        fill(ctx, PALETTE.leafDark, px + 9, py + 9, 3, 3);
+        break;
+      case "grave":
+        shadow(ctx, px, py, 12);
+        fill(ctx, PALETTE.stoneDark, px + 4, py + 3, 8, 12);
+        fill(ctx, PALETTE.stone, px + 5, py + 2, 6, 12);
+        fill(ctx, PALETTE.stoneLight, px + 6, py + 3, 2, 5);
+        fill(ctx, PALETTE.leafDark, px + 3, py + 13, 10, 3);
+        break;
+      case "lantern_post": {
+        shadow(ctx, px, py, 8);
+        fill(ctx, PALETTE.woodDark, px + 7, py + 5, 2, 11);
+        fill(ctx, PALETTE.ink, px + 4, py, 8, 7);
+        fill(ctx, PALETTE.yellow, px + 5, py + 1, 6, 5);
+        fill(ctx, PALETTE.white, px + 6, py + 2, 3, 3);
+        fill(ctx, PALETTE.woodDark, px + 5, py, 6, 1);
+        break;
+      }
+      case "brazier": {
+        const flicker = Math.floor(frame / 7) % 3;
+        shadow(ctx, px, py, 12);
+        fill(ctx, PALETTE.stoneDark, px + 4, py + 9, 8, 7);
+        fill(ctx, PALETTE.stone, px + 3, py + 7, 10, 4);
+        fill(ctx, PALETTE.red, px + 5 + (flicker & 1), py + 3, 6 - (flicker & 1), 6);
+        fill(ctx, PALETTE.yellow, px + 6, py + 2 + flicker, 4, 5);
+        fill(ctx, PALETTE.cream, px + 7, py + 3 + flicker, 2, 2);
+        break;
+      }
+      case "shrine_stone": {
+        const pulse = (Math.sin(frame / 24) + 1) / 2;
+        shadow(ctx, px, py, 13);
+        fill(ctx, PALETTE.stoneDark, px + 3, py + 2, 10, 14);
+        fill(ctx, PALETTE.stone, px + 4, py + 1, 8, 14);
+        fill(ctx, PALETTE.stoneLight, px + 5, py + 2, 2, 6);
+        ctx.globalAlpha = 0.5 + pulse * 0.5;
+        fill(ctx, PALETTE.waterLight, px + 6, py + 6, 4, 4);
+        fill(ctx, PALETTE.white, px + 7, py + 7, 2, 2);
+        ctx.globalAlpha = 1;
+        break;
+      }
+      case "banner": {
+        const wave = Math.floor(frame / 12) % 2;
+        fill(ctx, PALETTE.woodDark, px + 2, py, 2, 16);
+        fill(ctx, PALETTE.roofDark, px + 4, py + 1, 9, 11);
+        fill(ctx, PALETTE.roof, px + 5, py + 2 + wave, 7, 8);
+        fill(ctx, PALETTE.yellow, px + 7, py + 4 + wave, 3, 3);
+        fill(ctx, PALETTE.roofDark, px + 4, py + 12, 3, 2);
+        fill(ctx, PALETTE.roofDark, px + 9, py + 12, 3, 2);
+        break;
+      }
+      case "arch_top":
+        fill(ctx, PALETTE.stoneDark, px, py, 16, 8);
+        fill(ctx, PALETTE.stone, px, py + 1, 16, 6);
+        fill(ctx, PALETTE.stoneLight, px + 1, py + 1, 14, 1);
+        fill(ctx, PALETTE.ink, px, py + 7, 16, 2);
+        break;
+      case "vines":
+        for (const [vx, vy, h] of [[3, 0, 11], [8, 0, 15], [12, 0, 8]] as const) {
+          fill(ctx, PALETTE.leafDark, px + vx, py + vy, 2, h);
+          fill(ctx, PALETTE.leaf, px + vx, py + vy + 3, 1, 4);
+          fill(ctx, PALETTE.leafLight, px + vx - 1, py + vy + h - 3, 3, 2);
+        }
+        break;
+      case "shore_sand":
+        fill(ctx, PALETTE.sand, px, py, 16, 16);
+        specks(ctx, PALETTE.sandLight, px, py, x, y, 0xf1, 6, 2);
+        specks(ctx, PALETTE.sandDark, px, py, x, y, 0xf2, 5);
+        specks(ctx, PALETTE.stoneLight, px, py, x, y, 0xf3, 2);
+        break;
+      case "pebbles":
+        fill(ctx, PALETTE.stone, px, py, 16, 16);
+        specks(ctx, PALETTE.stoneDark, px, py, x, y, 0x101, 8, 2);
+        specks(ctx, PALETTE.stoneLight, px, py, x, y, 0x102, 6, 2);
+        specks(ctx, PALETTE.ink, px, py, x, y, 0x103, 3);
+        break;
+      case "snowdrift":
+        fill(ctx, PALETTE.cream, px, py, 16, 16);
+        specks(ctx, PALETTE.white, px, py, x, y, 0x111, 8, 3);
+        specks(ctx, PALETTE.stoneLight, px, py, x, y, 0x112, 3);
+        patch(ctx, PALETTE.white, px, py, x, y, 0x113, 0.6, 7, 3);
+        break;
       case "wood_floor":
         fill(ctx, PALETTE.wood, px, py, 16, 16);
         fill(ctx, PALETTE.woodLight, px, py + 1, 16, 2);
@@ -319,12 +671,7 @@ export class TileSet {
         if ((x + y) % 3 === 0) fill(ctx, PALETTE.sandDark, px + 5, py + 6, 2, 2);
         break;
       case "rug":
-        fill(ctx, PALETTE.roofDark, px, py, 16, 16);
-        fill(ctx, PALETTE.roof, px + 1, py + 1, 14, 14);
-        fill(ctx, PALETTE.yellow, px + 3, py + 3, 10, 2);
-        fill(ctx, PALETTE.cream, px + 5, py + 6, 6, 5);
-        fill(ctx, PALETTE.purple, px + 7, py + 7, 2, 3);
-        fill(ctx, PALETTE.yellow, px + 3, py + 12, 10, 2);
+        this.drawRug(ctx, map, x, y, px, py);
         break;
       case "bed":
         shadow(ctx, px, py, 16);
@@ -387,7 +734,329 @@ export class TileSet {
         break;
       case "interior_block":
         break;
+
+      case "scree":
+        // Éboulis : deux valeurs proches, du grain, et surtout aucun motif
+        // centré qui redessinerait la grille.
+        fill(ctx, PALETTE.stoneDark, px, py, 16, 16);
+        specks(ctx, PALETTE.stone, px, py, x, y, 0x81, 7, 2);
+        specks(ctx, PALETTE.stone, px, py, x, y, 0x82, 5);
+        specks(ctx, PALETTE.stoneLight, px, py, x, y, 0x83, 3);
+        patch(ctx, PALETTE.ink, px, py, x, y, 0x84, 0.3, 3, 2);
+        break;
+      case "snow":
+        fill(ctx, PALETTE.white, px, py, 16, 16);
+        specks(ctx, PALETTE.cream, px, py, x, y, 0x91, 6, 2);
+        specks(ctx, PALETTE.stoneLight, px, py, x, y, 0x92, 3);
+        patch(ctx, PALETTE.stoneLight, px, py, x, y, 0x93, 0.22, 5, 1);
+        break;
+      case "alpine_grass":
+        fill(ctx, PALETTE.pineDark, px, py, 16, 16);
+        specks(ctx, PALETTE.pine, px, py, x, y, 0xa1, 7, 2);
+        specks(ctx, PALETTE.leafDark, px, py, x, y, 0xa2, 5);
+        patch(ctx, PALETTE.stone, px, py, x, y, 0xa3, 0.2, 4, 3);
+        patch(ctx, PALETTE.leaf, px, py, x, y, 0xa4, 0.18, 2, 2);
+        break;
+      case "heather":
+        fill(ctx, PALETTE.marsh, px, py, 16, 16);
+        specks(ctx, PALETTE.pineDark, px, py, x, y, 0xb1, 8, 2);
+        specks(ctx, PALETTE.pine, px, py, x, y, 0xb2, 4);
+        specks(ctx, PALETTE.purple, px, py, x, y, 0xb3, 4);
+        specks(ctx, PALETTE.rose, px, py, x, y, 0xb4, 1);
+        break;
+      case "boulder":
+        shadow(ctx, px, py, 15);
+        fill(ctx, PALETTE.ink, px + 2, py + 5, 13, 10);
+        fill(ctx, PALETTE.stoneDark, px + 2, py + 4, 12, 10);
+        fill(ctx, PALETTE.stone, px + 3, py + 3, 10, 8);
+        fill(ctx, PALETTE.stoneLight, px + 4, py + 3, 5, 3);
+        fill(ctx, PALETTE.stoneDark, px + 9 - variant, py + 7, 3, 3);
+        fill(ctx, PALETTE.ink, px + 5, py + 11, 6, 2);
+        break;
+      case "snow_pine":
+        shadow(ctx, px, py, 16);
+        fill(ctx, PALETTE.pineDark, px, py + 6, 16, 10);
+        fill(ctx, PALETTE.pineDark, px + 6, py, 4, 3);
+        fill(ctx, PALETTE.pine, px + 4, py + 3, 8, 4);
+        fill(ctx, PALETTE.pine, px + 2, py + 7, 12, 4);
+        fill(ctx, PALETTE.white, px + 6, py, 4, 2);
+        fill(ctx, PALETTE.white, px + 4, py + 3, 8, 2);
+        fill(ctx, PALETTE.cream, px + 2, py + 7, 12, 2);
+        fill(ctx, PALETTE.woodDark, px + 7, py + 12, 3, 4);
+        break;
+      case "gravel":
+        fill(ctx, PALETTE.stone, px, py, 16, 16);
+        specks(ctx, PALETTE.stoneLight, px, py, x, y, 0xc1, 7, 2);
+        specks(ctx, PALETTE.stoneDark, px, py, x, y, 0xc2, 6);
+        specks(ctx, PALETTE.sandDark, px, py, x, y, 0xc3, 2);
+        break;
+      case "cobble": {
+        // Pavage ancien. Le liseré clair systématique dessinait une grille de
+        // carrelage neuf sur toute la place ; il ne survient plus que sur une
+        // pierre sur trois, et la mousse mange les joints.
+        fill(ctx, PALETTE.stoneDark, px, py, 16, 16);
+        const shift = (y & 1) === 0 ? 0 : 4;
+        for (let row = 0; row < 2; row += 1) {
+          for (let col = -1; col < 2; col += 1) {
+            const bx = px + shift + col * 8 + 1;
+            const by = py + row * 8 + 1;
+            const wear = (x * 7 + y * 13 + row * 3 + col) % 5;
+            fill(ctx, wear === 0 ? PALETTE.stoneDark : PALETTE.stone, bx, by, 7, 6);
+            if (wear === 2) fill(ctx, PALETTE.stoneLight, bx, by, 5, 1);
+            if (wear === 4) fill(ctx, PALETTE.leafDark, bx + 1, by + 4, 4, 2);
+          }
+        }
+        break;
+      }
+      case "dry_grass":
+        fill(ctx, PALETTE.sand, px, py, 16, 16);
+        specks(ctx, PALETTE.sandDark, px, py, x, y, 0xd1, 7, 2);
+        specks(ctx, PALETTE.sandLight, px, py, x, y, 0xd2, 5);
+        specks(ctx, PALETTE.grassDark, px, py, x, y, 0xd3, 3);
+        patch(ctx, PALETTE.soil, px, py, x, y, 0xd4, 0.2, 3, 1);
+        break;
+      case "marsh_grass":
+        // La tourbe manquait d'écart de valeur : tout le marais se lisait
+        // comme un aplat vert. On creuse les creux et l'on pose des flaques.
+        fill(ctx, PALETTE.marsh, px, py, 16, 16);
+        patch(ctx, PALETTE.pineDark, px, py, x, y, 0xe5, 0.55, 8, 5);
+        specks(ctx, PALETTE.pineDark, px, py, x, y, 0xe1, 6, 2);
+        specks(ctx, PALETTE.pine, px, py, x, y, 0xe2, 5, 2);
+        specks(ctx, PALETTE.leafDark, px, py, x, y, 0xe3, 4);
+        patch(ctx, PALETTE.deepWater, px, py, x, y, 0xe4, 0.3, 5, 3);
+        patch(ctx, PALETTE.leaf, px, py, x, y, 0xe6, 0.18, 2, 2);
+        break;
     }
     ctx.restore();
+  }
+
+  /**
+   * Écume au contact de la terre. Sans elle, une nappe d'eau se termine par un
+   * bord net qui trahit la grille ; avec elle, la rive se lit d'un coup d'œil.
+   * Un seul pixel suffit : deux dessinaient un cadre autour de chaque tuile.
+   */
+  private drawFoam(ctx: CanvasRenderingContext2D, map: TileMap, x: number, y: number,
+    px: number, py: number, frame: number): void {
+    const land = (tileX: number, tileY: number): boolean =>
+      tileX >= 0 && tileY >= 0 && tileX < map.width && tileY < map.height
+      && !map.isWater(tileX, tileY);
+    const mask = map.neighbourMask(x, y, land);
+    if (mask === 0) return;
+    const pulse = Math.floor(frame / 24 + x + y) % 2;
+    ctx.fillStyle = PALETTE.waterLight;
+    if (mask & 1) ctx.fillRect(px, py, 16, 1);
+    if (mask & 2) ctx.fillRect(px + 15, py, 1, 16);
+    if (mask & 4) ctx.fillRect(px, py + 15, 16, 1);
+    if (mask & 8) ctx.fillRect(px, py, 1, 16);
+    if (pulse === 0) return;
+    ctx.fillStyle = PALETTE.white;
+    if (mask & 4) ctx.fillRect(px + 4, py + 14, 4, 1);
+    if (mask & 1) ctx.fillRect(px + 9, py + 1, 3, 1);
+  }
+
+  /**
+   * Liseré du sentier. Un trait plein dessinait un quadrillage sur toute la
+   * vallée ; un pixel sur deux donne un bord effrité, bien plus proche d'une
+   * terre battue.
+   */
+  private drawPathFringe(ctx: CanvasRenderingContext2D, map: TileMap, x: number, y: number,
+    px: number, py: number, sandy: boolean): void {
+    const samePath = (tileX: number, tileY: number): boolean => {
+      const kind = this.properties(map.tileAt("ground", tileX, tileY)).kind;
+      return kind === "path" || kind === "cracked_path" || kind === "gravel"
+        || kind === "cobble" || kind === "dock" || kind === "bridge";
+    };
+    const mask = map.neighbourMask(x, y, samePath);
+    ctx.fillStyle = sandy ? PALETTE.sandDark : PALETTE.stoneDark;
+    const dither = (offset: number): boolean => ((offset + x * 5 + y * 3) & 3) !== 0;
+    for (let offset = 0; offset < 16; offset += 1) {
+      if (!dither(offset)) continue;
+      if ((mask & 1) === 0) ctx.fillRect(px + offset, py, 1, 1);
+      if ((mask & 4) === 0) ctx.fillRect(px + offset, py + 15, 1, 1);
+      if ((mask & 8) === 0) ctx.fillRect(px, py + offset, 1, 1);
+      if ((mask & 2) === 0) ctx.fillRect(px + 15, py + offset, 1, 1);
+    }
+  }
+
+  /**
+   * Paroi rocheuse consciente de ses voisines.
+   *
+   * Une falaise dessinée à l'identique partout donnait un aplat gris : rien
+   * ne disait où commençait le relief. On éclaire désormais la lèvre du haut
+   * et l'on assombrit le pied — le regard lit une hauteur, pas un carré.
+   */
+  private drawRock(ctx: CanvasRenderingContext2D, map: TileMap | undefined,
+    x: number, y: number, px: number, py: number, variant: number, jagged: boolean): void {
+    const sameRock = (tileX: number, tileY: number): boolean => {
+      if (!map) return false;
+      const kind = this.properties(map.tileAt("terrain", tileX, tileY)).kind;
+      return kind === "cliff" || kind === "crag";
+    };
+    const above = sameRock(x, y - 1);
+    const below = sameRock(x, y + 1);
+    const left = sameRock(x - 1, y);
+    const right = sameRock(x + 1, y);
+
+    fill(ctx, PALETTE.stoneDark, px, py, 16, 16);
+    fill(ctx, PALETTE.stone, px, py + 2, 16, 11);
+    // Strates : décalées d'une tuile à l'autre pour éviter la rayure continue.
+    fill(ctx, PALETTE.stoneDark, px, py + 5 + (variant & 1), 16, 1);
+    fill(ctx, PALETTE.stoneDark, px + 2 + variant, py + 9, 12 - variant, 1);
+    fill(ctx, PALETTE.ink, px + 3 + variant * 3, py + 4, 1, 5);
+
+    if (!above) {
+      // Lèvre supérieure : la surface qu'on verrait de dessus, éclairée.
+      if (jagged) {
+        const peak = 2 + variant;
+        fill(ctx, PALETTE.stoneDark, px + peak, py - 4, 5, 8);
+        fill(ctx, PALETTE.stone, px + peak + 1, py - 3, 3, 7);
+        fill(ctx, PALETTE.stoneLight, px + peak + 1, py - 3, 2, 4);
+        fill(ctx, PALETTE.stoneDark, px + 10 - variant, py - 2, 4, 6);
+      }
+      fill(ctx, PALETTE.stoneLight, px, py, 16, 2);
+      fill(ctx, PALETTE.white, px + 2 + variant, py, 4, 1);
+      fill(ctx, PALETTE.stone, px, py + 2, 16, 1);
+    } else {
+      fill(ctx, PALETTE.stoneDark, px, py, 16, 2);
+    }
+
+    if (!below) {
+      // Pied de paroi : ombre franche, puis contact avec le sol.
+      fill(ctx, PALETTE.ink, px, py + 12, 16, 4);
+      fill(ctx, PALETTE.stoneDark, px + 1, py + 12, 14, 2);
+      if ((x + y) % 3 === 0) fill(ctx, PALETTE.leafDark, px + 11, py + 11, 4, 2);
+    }
+    if (!left) fill(ctx, PALETTE.ink, px, py + 2, 1, 12);
+    if (!right) fill(ctx, PALETTE.stoneDark, px + 15, py + 2, 1, 12);
+  }
+
+  /**
+   * Tapis vu comme un seul objet.
+   *
+   * Chaque tuile dessinait un motif encadré complet : une pièce tapissée de
+   * huit cases sur huit devenait un damier de cadres dorés, impossible à lire
+   * comme un tapis. Le galon ne court plus que sur le pourtour réel.
+   */
+  private drawRug(ctx: CanvasRenderingContext2D, map: TileMap | undefined,
+    x: number, y: number, px: number, py: number): void {
+    const sameRug = (tileX: number, tileY: number): boolean =>
+      map !== undefined && this.properties(map.tileAt("ground", tileX, tileY)).kind === "rug";
+    const above = sameRug(x, y - 1);
+    const below = sameRug(x, y + 1);
+    const left = sameRug(x - 1, y);
+    const right = sameRug(x + 1, y);
+
+    fill(ctx, PALETTE.roof, px, py, 16, 16);
+    // Motif intérieur discret, décalé d'une case à l'autre.
+    if (((x + y) & 1) === 0) {
+      fill(ctx, PALETTE.roofDark, px + 4, py + 4, 8, 8);
+      fill(ctx, PALETTE.roof, px + 6, py + 6, 4, 4);
+    } else {
+      fill(ctx, PALETTE.roofDark, px + 7, py + 2, 2, 12);
+      fill(ctx, PALETTE.roofDark, px + 2, py + 7, 12, 2);
+    }
+
+    if (!above) {
+      fill(ctx, PALETTE.roofDark, px, py, 16, 3);
+      fill(ctx, PALETTE.yellow, px, py + 1, 16, 1);
+    }
+    if (!below) {
+      fill(ctx, PALETTE.roofDark, px, py + 13, 16, 3);
+      fill(ctx, PALETTE.yellow, px, py + 14, 16, 1);
+    }
+    if (!left) {
+      fill(ctx, PALETTE.roofDark, px, py, 3, 16);
+      fill(ctx, PALETTE.yellow, px + 1, py, 1, 16);
+    }
+    if (!right) {
+      fill(ctx, PALETTE.roofDark, px + 13, py, 3, 16);
+      fill(ctx, PALETTE.yellow, px + 14, py, 1, 16);
+    }
+  }
+
+  /** Vrai si la case voisine appartient au même bâtiment. */
+  private isBuilding(map: TileMap | undefined, x: number, y: number): boolean {
+    if (!map) return false;
+    for (const layer of ["terrain", "decor_above"] as const) {
+      const kind = this.properties(map.tileAt(layer, x, y)).kind;
+      if (kind === "roof" || kind === "wall" || kind === "door" || kind === "window"
+        || kind === "chimney" || kind === "interior_wall") return true;
+    }
+    return false;
+  }
+
+  /**
+   * Toiture consciente de ses voisines.
+   *
+   * Une tuile de toit se dessinait identique partout : un bâtiment de six
+   * cases sur cinq n'était qu'un grand rectangle de briques, sans faîtage ni
+   * débord. On distingue désormais l'arête, les rampants et l'avant-toit —
+   * c'est ce qui fait qu'une maison ressemble à une maison.
+   */
+  private drawRoof(ctx: CanvasRenderingContext2D, map: TileMap | undefined,
+    x: number, y: number, px: number, py: number, variant: number): void {
+    const above = this.isBuilding(map, x, y - 1);
+    const below = this.isBuilding(map, x, y + 1);
+    const left = this.isBuilding(map, x - 1, y);
+    const right = this.isBuilding(map, x + 1, y);
+
+    fill(ctx, PALETTE.roofDark, px, py, 16, 16);
+    // Rangs de tuiles, décalés d'une ligne à l'autre.
+    for (let row = above ? 0 : 3; row < 16; row += 4) {
+      fill(ctx, PALETTE.roof, px, py + row, 16, 3);
+      for (let shingle = ((row / 4) % 2) * 4; shingle < 16; shingle += 8) {
+        fill(ctx, PALETTE.roofDark, px + shingle, py + row, 1, 3);
+      }
+    }
+    if (!above) {
+      // Faîtage : une arête claire qui capte la lumière du ciel.
+      fill(ctx, PALETTE.ink, px, py, 16, 3);
+      fill(ctx, PALETTE.stoneLight, px, py + 1, 16, 1);
+      fill(ctx, PALETTE.sandLight, px + 2 + variant, py + 1, 4, 1);
+    }
+    if (!below) {
+      // Avant-toit : le débord et son ombre portée.
+      fill(ctx, PALETTE.woodDark, px, py + 12, 16, 2);
+      fill(ctx, PALETTE.wood, px, py + 12, 16, 1);
+      fill(ctx, PALETTE.ink, px, py + 14, 16, 2);
+    }
+    if (!left) {
+      fill(ctx, PALETTE.roofDark, px, py, 2, 16);
+      fill(ctx, PALETTE.ink, px, py, 1, 16);
+    }
+    if (!right) {
+      fill(ctx, PALETTE.roofDark, px + 14, py, 2, 16);
+      fill(ctx, PALETTE.ink, px + 15, py, 1, 16);
+    }
+  }
+
+  /** Façade consciente de ses voisines : linteau, angles et soubassement. */
+  private drawWall(ctx: CanvasRenderingContext2D, map: TileMap | undefined,
+    x: number, y: number, px: number, py: number, variant: number): void {
+    const above = this.isBuilding(map, x, y - 1);
+    const below = this.isBuilding(map, x, y + 1);
+    const left = this.isBuilding(map, x - 1, y);
+    const right = this.isBuilding(map, x + 1, y);
+
+    fill(ctx, PALETTE.sandDark, px, py, 16, 16);
+    fill(ctx, PALETTE.sandLight, px + 1, py + 1, 14, 14);
+    // Colombage : deux ou trois poutres, jamais aux mêmes places.
+    fill(ctx, PALETTE.woodDark, px + 3 + variant * 3, py, 2, 16);
+    if (variant % 2 === 0) fill(ctx, PALETTE.woodDark, px + 11, py, 2, 16);
+    fill(ctx, PALETTE.cream, px + 2, py + 2, 4, 2);
+
+    if (!above) {
+      fill(ctx, PALETTE.woodDark, px, py, 16, 3);
+      fill(ctx, PALETTE.wood, px, py + 1, 16, 1);
+    }
+    if (!below) {
+      // Soubassement de pierre : la maison touche le sol au lieu de flotter.
+      fill(ctx, PALETTE.stoneDark, px, py + 11, 16, 5);
+      fill(ctx, PALETTE.stone, px + 1, py + 11, 14, 3);
+      fill(ctx, PALETTE.stoneLight, px + 2, py + 11, 4, 1);
+      fill(ctx, PALETTE.ink, px, py + 15, 16, 1);
+    }
+    if (!left) fill(ctx, PALETTE.woodDark, px, py, 2, 16);
+    if (!right) fill(ctx, PALETTE.woodDark, px + 14, py, 2, 16);
   }
 }

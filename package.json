@@ -9,7 +9,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "validate:data": "tsx tools/validate-data.ts",
-    "screenshot": "tsx tools/screenshot.ts"
+    "screenshot": "tsx tools/screenshot.ts",
+    "gallery": "tsx tools/gallery.ts",
+    "playtest": "tsx tools/playtest.ts",
+    "verify": "npm run validate:data && npm test && npm run playtest 240"
   },
   "devDependencies": {
     "@types/node": "^24.1.0",

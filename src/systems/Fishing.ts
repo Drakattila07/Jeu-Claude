@@ -1,6 +1,6 @@
 import { RNG } from "../core/RNG";
 import type { Input } from "../core/Input";
-import type { Renderer } from "../core/Renderer";
+import { VIEW_HEIGHT, VIEW_WIDTH, type Renderer } from "../core/Renderer";
 import { PALETTE } from "../data/palette";
 
 export type FishingState = "idle" | "waiting" | "bite" | "caught" | "missed";
@@ -17,6 +17,13 @@ export class Fishing {
     this.state = "waiting";
     this.frame = 0;
     this.biteFrame = new RNG(seed ^ day).int(50, 110);
+    this.resultFrames = 0;
+  }
+
+  /** Interrompt la séquence de pêche (mort, chargement…). */
+  cancel(): void {
+    this.state = "idle";
+    this.frame = 0;
     this.resultFrames = 0;
   }
 
@@ -47,20 +54,38 @@ export class Fishing {
   draw(renderer: Renderer): void {
     if (!this.active) return;
     const { ctx } = renderer;
-    ctx.fillStyle = PALETTE.night;
-    ctx.fillRect(33, 70, 190, 77);
+    const centre = VIEW_WIDTH / 2;
+    const top = VIEW_HEIGHT - 92;
+    ctx.save();
+    ctx.fillStyle = "rgba(12,14,24,0.92)";
+    ctx.fillRect(centre - 116, top, 232, 76);
     ctx.strokeStyle = PALETTE.waterLight;
-    ctx.strokeRect(34.5, 71.5, 187, 74);
-    renderer.pixelText("PÊCHE", 128, 79, PALETTE.cream, "center");
+    ctx.lineWidth = 1;
+    ctx.strokeRect(centre - 115.5, top + 0.5, 231, 75);
+    renderer.pixelText("PÊCHE", centre, top + 8, PALETTE.cream, "center");
     const message = this.state === "waiting" ? "Patience…"
-      : this.state === "bite" ? "ÇA MORD !  X !"
+      : this.state === "bite" ? "ÇA MORD !   X !"
       : this.state === "caught" ? "Un poisson-lune ! +8 rubis"
       : "Raté… Le lac ricane.";
-    renderer.pixelText(message, 128, 103, this.state === "bite" ? PALETTE.yellow : PALETTE.grassLight, "center");
+    renderer.pixelText(message, centre, top + 26,
+      this.state === "bite" ? PALETTE.yellow : PALETTE.grassLight, "center");
+
+    // Plan d'eau et flotteur : la tension se voit avant de s'entendre.
+    ctx.fillStyle = PALETTE.deepWater;
+    ctx.fillRect(centre - 96, top + 48, 192, 14);
     ctx.fillStyle = PALETTE.water;
-    ctx.fillRect(50, 126, 156, 6);
-    const bobber = 50 + ((this.frame * 3) % 156);
+    for (let x = 0; x < 192; x += 8) {
+      const wave = Math.sin((this.frame + x) / 9) * 2;
+      ctx.fillRect(centre - 96 + x, top + 48 + wave, 6, 2);
+    }
+    const bobberX = centre - 96 + ((this.frame * 2.4) % 192);
+    const dip = this.state === "bite" ? (Math.floor(this.frame / 3) % 2) * 4 : 0;
+    ctx.fillStyle = PALETTE.woodDark;
+    ctx.fillRect(Math.round(bobberX), top + 40 + dip, 2, 10);
     ctx.fillStyle = PALETTE.red;
-    ctx.fillRect(bobber, 121 + (this.state === "bite" ? 4 : 0), 3, 8);
+    ctx.fillRect(Math.round(bobberX) - 2, top + 44 + dip, 6, 5);
+    ctx.fillStyle = PALETTE.white;
+    ctx.fillRect(Math.round(bobberX) - 1, top + 45 + dip, 2, 2);
+    ctx.restore();
   }
 }

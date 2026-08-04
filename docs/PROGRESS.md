@@ -186,9 +186,149 @@
 - Incendies sur les arbres, maisons, clôtures, ponts et éléments en bois
 - Forêts densifiées avec arbres sur les sentiers et contreforts montagneux
 
+## Tour de Lune et accès nord du château ✅
+
+- Passage nord du Château de Cendre ouvert jusqu'à sa porte principale
+- Tour de Lune érigée à la place de l'ancienne cabane d'Îris
+- Intérieur céleste visitable avec chaudron, fioles, bibliothèque et escalier
+- Maëlis la sorcière animée par une routine individuelle
+- Chat-Lanterne flottant, interactif et capable de restaurer tous les cœurs
+
+## Enjeux, économie et quêtes atteignables ✅
+
+Une relecture complète a montré que le contenu déclaré dépassait largement le
+contenu jouable : neuf des dix-sept quêtes ne pouvaient pas être terminées.
+
+### Correctifs
+
+- Mort réelle : chute, écran de fin, renaissance au dernier puits touché,
+  quart de la bourse perdu — les cœurs à zéro n'avaient aucun effet
+- Ennemis bloqués par le décor et bornés à l'écran ; chauves-souris et
+  gargouilles conservent le droit de traverser les murs
+- Emplois du temps des PNJ rafraîchis au changement d'heure, plus seulement
+  en franchissant une frontière de zone
+- Sauvegardes intégralement validées avant chargement, restauration protégée,
+  objets inconnus ignorés au lieu de faire planter le démarrage
+- Recul du joueur réellement joué sur huit frames et arrêté par les murs
+- Notices coupées sur les espaces via `paginateText`, plus de fin avalée
+- Transition de zone qui continue d'avancer même menu ouvert
+- Boîte de collision des ennemis alignée sur leur hitbox déclarée
+
+### Contenu
+
+- Sept objets de monde créés pour les déclencheurs orphelins : fagot de
+  racines, veine de minerai, dalles de la comptine, cercle de chandelles,
+  pierres du saule, festin de Gorm et fente à courrier
+- Système de conditions : objets requis et consommés, nuit, pluie, drapeaux,
+  rubis, taux d'exploration — chacun avec son message de refus
+- Boutique du Colporteur : sept lignes, stock rare déblocable, dette de
+  200 rubis qui donne enfin un usage à la monnaie
+- Quête de cartographie déclenchée automatiquement à 56 zones sur 56
+  (l'activité n'en accordait que 44, la quête ne pouvait pas se boucler)
+- Récompenses converties en statistiques réelles : Épée +1, Porte-monnaie 500
+  et trois gains de cœurs, centralisés dans `Progression`
+- Primes en rubis effectivement versées : le type de récompense existait dans
+  les données mais `complete()` n'appliquait que les drapeaux
+- Deux nouvelles quêtes appuyées sur des déclencheurs déjà câblés — La Battue
+  (cinq loups) et Le Panier du Lac (quatre prises) — soit dix-neuf au total
+
+### Garde-fous
+
+- `validate:data` refuse désormais un déclencheur absent du monde ou une
+  activité qui n'accorde pas le compte attendu
+- Tests d'atteignabilité : chaque étape de quête doit avoir une source capable
+  de la faire avancer, chaque objet doit être posé sur une case accessible
+
+## Identité visuelle des biomes ✅
+
+Trois couples de biomes se partageaient tuile pour tuile le même sol *et* le
+même décor : les Cimes se rendaient avec l'herbe et les champignons de la
+forêt, les falaises avec le pavage des ruines. Seul l'obstacle changeait.
+
+- Onze tuiles ajoutées en fin de table — névé, éboulis, pelouse d'altitude,
+  bruyère, bloc erratique, aiguille, sapin enneigé, gravier, pavage, chaume
+  et tourbe herbue. Les indices existants n'ont pas bougé.
+- Palette inchangée : les 32 couleurs suffisaient, il manquait des matières
+- Sommets étagés du clair au sombre — névé, roche, pelouse, bruyère : la
+  hauteur se lit d'un coup d'œil
+- Chaque biome possède désormais sa propre matière dominante
+- Composition revue : un sol domine largement, l'autre ponctue. L'alternance
+  à parts égales redonnait le damier qu'on cherchait à fuir.
+- Falaises stratifiées avec fissures indexées sur la variante de tuile : une
+  rangée cesse de se lire comme un motif répété
+- Arène de l'Arbre-Mère refaite en plateau dallé clair, pour que le joueur et
+  le boss se détachent pendant le combat
+- Tests : aucun couple de biomes ne peut plus partager ses matières
+  dominantes, les sommets refusent les tuiles de vallée, et toutes les
+  sorties d'une zone restent reliées entre elles
+
+## Refonte — vallée continue, lumière et lisibilité ✅
+
+Le bug rapporté était le bon fil à tirer : « on passe dans un terrain à côté et
+on se retrouve bloqué par un objet du terrain ». Trois causes s'additionnaient.
+
+1. **Le point de dépose n'était pas vérifié.** La carte d'arrivée était générée
+   indépendamment de celle qu'on quittait ; rien ne garantissait que la case
+   d'atterrissage soit praticable. On pouvait apparaître en plein tronc.
+2. **`moveOnGrid` ne savait pas sortir d'un solide.** Une fois encastré, chaque
+   candidat de mouvement touchait le même mur, donc tout était refusé : la
+   partie était perdue sans message.
+3. **Les passages n'étaient pas partagés.** Chaque zone perçait sa ceinture où
+   elle voulait ; l'ouverture d'en face pouvait ne mener nulle part.
+
+Correctifs : `resolveOverlap` (recherche en anneaux, déterministe) appliqué à
+chaque téléportation, `moveOnGrid` qui laisse repartir un corps encastré, et
+des passages calculés depuis l'identité de la frontière — les deux voisines
+lisent le même nombre. Le point de dépose est en outre borné au passage
+partagé, ce qui a révélé quatre poches fermées supplémentaires.
+
+Vérification : un test parcourt les 56 régions × 4 bords × 9 hauteurs et exige
+que l'arrivée soit libre *et* reliée au réseau principal. Un automate joue
+36 000 images en visitant chaque région : zéro encastrement, zéro blocage.
+
+### Le reste de la refonte
+
+- **Fenêtre 16:9 de 384×216** et caméra à défilement libre ; les régions font
+  512×448, quatre fois l'ancien écran fixe
+- **Police bitmap maison** 5×7 avec accents composés — plus de texte flou
+- **Générateur réécrit** : passages partagés, réseau de routes par arbre
+  couvrant, cours d'eau, fondu des biomes aux frontières, réparation de la
+  connexité par parcours en largeur
+- **Sols au bruit fractal** ; les motifs centrés dans la cellule dessinaient la
+  grille de 16 px, les grains sont désormais tirés d'un bruit par tuile
+- **Tuiles conscientes de leurs voisines** : toitures avec faîtage et
+  avant-toit, façades avec soubassement, falaises avec lèvre éclairée, tapis
+  d'un seul tenant
+- **Éclairage dynamique** : courbe ambiante sur la journée, halos des lanternes
+  et des foyers, teinte par biome et par météo
+- **Météo et atmosphère** : pluie et éclairs, neige, brume de marais, lucioles
+- **Combat lisible** : annonce avant chaque attaque, esquive roulée invincible,
+  coup tournoyant chargé, contre-coup, chiffres de dégâts, butin ramassable
+- **Peuplement automatique** de la vallée selon le biome, le danger et l'heure
+- **Interface refaite** : écran-titre, ATH en surimpression, dialogues à
+  portraits, menu à quatre onglets, carte de la vallée, minicarte
+- **Outillage** : `npm run gallery` (planche de contrôle graphique) et
+  `npm run playtest` (partie automatique qui signale tout blocage)
+
+### Bugs trouvés et corrigés au passage
+
+- La caméra se bornait toujours à la taille d'une région : dans une pièce plus
+  petite, elle descendait sous le plancher et l'on ne voyait jamais le haut de
+  la salle
+- Le générateur maintenait sa propre liste de tuiles bloquantes, divergée de
+  celle du moteur : il perçait des couloirs au travers des bâtiments
+- La balle de Ryn rebondissait à une coordonnée absolue héritée de l'ancien
+  écran fixe, donc à l'autre bout de la carte
+- Les dégâts de contact permanents doublaient chaque attaque annoncée : 96
+  morts en deux minutes de partie automatique, une seule après correction
+- La carte de la vallée dépassait de la fenêtre : deux rangées de régions
+  n'étaient jamais affichées
+- Le signe « × » manquait à la police : chaque quantité du sac s'affichait
+  « ?4 »
+
 ## État final
 
-Les vingt tickets sont implémentés, compilés, testés et versionnés
-individuellement. Le jeu respecte TypeScript strict, le Canvas 2D pur, la
-résolution 256×224, l'upscale entier, les données séparées du moteur et la
-simulation déterministe à 60 Hz.
+Le jeu respecte TypeScript strict, le Canvas 2D pur, l'upscale entier, les
+données séparées du moteur et la simulation déterministe à 60 Hz. 126 tests
+unitaires, validation des données et du monde généré, et une partie automatique
+sans incident sur les 56 régions.

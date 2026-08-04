@@ -36,11 +36,16 @@ export class Interactable extends Entity {
       width: this.hitbox.width, height: this.hitbox.height };
   }
 
+  /** Kinds qui ne se déclenchent qu'une fois puis restent consommés. */
+  private static readonly ONE_SHOT = new Set<string>([
+    "chest", "seal", "roots", "mechanism", "footprints", "pickup", "secret",
+    "offering", "shrine",
+  ]);
+
+  get isSpent(): boolean { return this.state.get(this.data.zone, this.data.id); }
+
   interact(): InteractionResult {
-    if (this.data.kind === "chest" || this.data.kind === "seal"
-      || this.data.kind === "roots" || this.data.kind === "mechanism"
-      || this.data.kind === "footprints" || this.data.kind === "pickup"
-      || this.data.kind === "secret") {
+    if (Interactable.ONE_SHOT.has(this.data.kind)) {
       if (this.state.get(this.data.zone, this.data.id)) return { message: "Il n'y a plus rien ici.", changed: false };
       this.state.set(this.data.zone, this.data.id);
       return { message: this.data.text, changed: true };
@@ -135,6 +140,29 @@ export class Interactable extends Entity {
       ctx.fillRect(x + 5, y + 5, 6, 6);
       ctx.fillRect(x + 7, y + 2, 2, 12);
       ctx.fillRect(x + 2, y + 7, 12, 2);
+    } else if (this.data.kind === "offering") {
+      // Un petit autel : socle de pierre et coupe qui s'allume une fois servie.
+      const served = this.state.get(this.data.zone, this.data.id);
+      ctx.fillStyle = PALETTE.stoneDark;
+      ctx.fillRect(x + 2, y + 10, 12, 5);
+      ctx.fillStyle = PALETTE.stone;
+      ctx.fillRect(x + 3, y + 7, 10, 4);
+      ctx.fillStyle = served ? PALETTE.yellow : PALETTE.stoneLight;
+      ctx.fillRect(x + 5, y + 4, 6, 4);
+      if (served) {
+        ctx.fillStyle = PALETTE.cream;
+        ctx.fillRect(x + 7, y + 1, 2, 3);
+      }
+    } else if (this.data.kind === "shrine") {
+      // Trois pierres levées ; la centrale s'ouvre quand l'énigme cède.
+      const solved = this.state.get(this.data.zone, this.data.id);
+      ctx.fillStyle = PALETTE.stoneDark;
+      ctx.fillRect(x + 1, y + 6, 3, 9);
+      ctx.fillRect(x + 12, y + 6, 3, 9);
+      ctx.fillStyle = solved ? PALETTE.leafLight : PALETTE.stone;
+      ctx.fillRect(x + 5, y + 2, 6, 13);
+      ctx.fillStyle = solved ? PALETTE.yellow : PALETTE.stoneDark;
+      ctx.fillRect(x + 7, y + 6, 2, 5);
     }
     ctx.restore();
   }

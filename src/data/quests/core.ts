@@ -74,5 +74,13 @@ export const QUESTS = [
   ], rewards: [{ type: "flag", id: "statue_relic" }], worldEffects: [] },
   { id: "souche_fantome", title: "La Souche Fantôme", giver: "environnement", prerequisites: [], steps: [
     { id: "coincer", type: "flag", target: "ghost_stump_trapped", hint: "Elle bouge quand vous détournez le regard." }
-  ], rewards: [{ type: "flag", id: "heart_stump" }], worldEffects: [] }
+  ], rewards: [{ type: "flag", id: "heart_stump" }], worldEffects: [] },
+  { id: "battue_loups", title: "La Battue", giver: "garde_ronan", prerequisites: ["sword_obtained"], steps: [
+    { id: "loups", type: "defeat", target: "wolf", count: 5,
+      hint: "Cinq loups rôdent des Lisières à la Canopée." }
+  ], rewards: [{ type: "flag", id: "wolf_bounty" }, { type: "rupees", id: "prime", amount: 120 }], worldEffects: [] },
+  { id: "panier_du_lac", title: "Le Panier du Lac", giver: "nessa", prerequisites: ["fishing_unlocked"], steps: [
+    { id: "prises", type: "collect", target: "fish", count: 4,
+      hint: "Quai du Lac : quatre poissons pour remplir le panier." }
+  ], rewards: [{ type: "rupees", id: "prime", amount: 80 }], worldEffects: [] }
 ] as const satisfies readonly QuestDefinition[];

@@ -34,6 +34,25 @@ describe("quêtes et mémoire", () => {
     }]);
   });
 
+  it("publie les primes en rubis au lieu de les perdre", () => {
+    const events = new EventBus();
+    const received: number[] = [];
+    events.subscribe((event) => {
+      if (event.type === "quest_reward" && event.payload?.reward === "rupees") {
+        received.push(Number(event.payload.amount));
+      }
+    });
+    const quests = new QuestSystem(new Flags(), events, [{
+      id: "prime", title: "Prime", giver: "garde", prerequisites: [],
+      steps: [{ id: "loups", type: "defeat", target: "wolf", count: 1, hint: "Un loup." }],
+      rewards: [{ type: "flag", id: "fait" }, { type: "rupees", id: "prime", amount: 120 }],
+      worldEffects: [],
+    }]);
+    quests.refresh();
+    quests.notify("defeat", "wolf", 1);
+    expect(received).toEqual([120]);
+  });
+
   it("ne garde que dix événements récents", () => {
     const events = new EventBus();
     for (let index = 0; index < 12; index += 1) events.publish({ type: "x", id: String(index), frame: index });

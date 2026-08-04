@@ -25,6 +25,7 @@ describe("routines visuelles des PNJ", () => {
     expect(npcActivityFor("mira", 300)).toBe("gather");
     expect(npcActivityFor("doyen_orme", 800)).toBe("sweep");
     expect(npcActivityFor("fermier_a", 400)).toBe("farm");
+    expect(npcActivityFor("maelis", 0)).toBe("brew");
   });
 
   it("fait alterner les jumeaux entre déplacements, ballon et repos", () => {

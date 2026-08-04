@@ -36,6 +36,8 @@ try {
   await page.evaluate((count) => {
     const game = window.__RACINES_GAME__;
     game?.stop();
+    // L'écran-titre attend une touche : la capture doit le franchir seule.
+    game?.debugSkipTitle();
     game?.debugAdvance(count);
   }, frames);
   await mkdir(path.dirname(output), { recursive: true });

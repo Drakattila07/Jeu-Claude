@@ -4,6 +4,7 @@ export class Inventory {
   private readonly counts = new Map<ItemId, number>();
 
   count(item: ItemId): number { return this.counts.get(item) ?? 0; }
+  isFull(item: ItemId): boolean { return this.count(item) >= ITEMS[item].stack; }
   add(item: ItemId, amount = 1): number {
     const next = Math.min(ITEMS[item].stack, this.count(item) + amount);
     this.counts.set(item, next);
@@ -30,6 +31,12 @@ export class Inventory {
   }
   restore(entries: readonly { readonly id: ItemId; readonly count: number }[]): void {
     this.counts.clear();
-    for (const entry of entries) this.add(entry.id, entry.count);
+    // Une entrée inconnue (sauvegarde d'une autre version, fichier bricolé) est
+    // ignorée plutôt que de faire exploser la restauration entière.
+    for (const entry of entries) {
+      if (entry && entry.id in ITEMS && Number.isFinite(entry.count) && entry.count > 0) {
+        this.add(entry.id, entry.count);
+      }
+    }
   }
 }

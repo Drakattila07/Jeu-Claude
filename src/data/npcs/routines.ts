@@ -80,6 +80,13 @@ export const NPC_ROUTINES: Readonly<Record<string, readonly NpcRoutineStep[]>> =
     { activity: "walk", duration: 300, offset: [4, 1] },
     { activity: "meditate", duration: 260, offset: [1, 2], facing: "up" },
   ],
+  maelis: [
+    { activity: "brew", duration: 360, offset: [0, 0], facing: "up" },
+    { activity: "walk", duration: 260, offset: [-2, 1] },
+    { activity: "inspect", duration: 260, offset: [-2, 1], facing: "left" },
+    { activity: "walk", duration: 260, offset: [2, 1] },
+    { activity: "meditate", duration: 320, offset: [0, 3], facing: "down" },
+  ],
   crane: [
     { activity: "meditate", duration: 300, offset: [0, 0], facing: "down" },
     { activity: "walk", duration: 260, offset: [3, -1] },
