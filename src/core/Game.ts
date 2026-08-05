@@ -157,6 +157,7 @@ export class Game {
   private lastPopulatedDay = -1;
   private title: TitleScreen;
   private pendingSave: SaveData | null = null;
+  private faults = 0;
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new Renderer(canvas);
@@ -236,6 +237,13 @@ export class Game {
     this.camera.snapTo(this.player.position);
   }
 
+  /** Pose un drapeau : sert à rejouer un état de partie avancé. */
+  debugSetFlag(flag: string): void {
+    this.flags.set(flag);
+    this.quests.refresh();
+    this.quests.syncFlags(this.frame);
+  }
+
   /** Portes du décor de la région courante : outils de vérification. */
   debugDoors(): readonly { readonly x: number; readonly y: number }[] {
     const doors: { x: number; y: number }[] = [];
@@ -291,10 +299,27 @@ export class Game {
     this.previousTimeMs = timeMs;
     const consumed = consumeAccumulator(this.accumulatorMs, elapsedMs);
     this.accumulatorMs = consumed.accumulatorMs;
-    for (let index = 0; index < consumed.steps; index += 1) this.update();
-    this.render();
+    // Une image fautive ne doit pas emporter la partie. Sans ce filet, une
+    // exception dans le rendu empêchait la demande d'image suivante : la
+    // boucle mourait et l'écran restait figé sur une frame incomplète, sans
+    // rien dire à personne.
+    try {
+      for (let index = 0; index < consumed.steps; index += 1) this.update();
+      this.render();
+    } catch (error) {
+      this.reportFault(error);
+    }
     requestAnimationFrame(this.loop);
   };
+
+  /** Signale une image fautive, une seule fois, et poursuit la partie. */
+  private reportFault(error: unknown): void {
+    this.faults += 1;
+    if (this.faults > 1) return;
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("Les Racines Creuses — image fautive :", error);
+    this.showNotice(`Incident interne : ${message}`, 600);
+  }
 
   // — Simulation ————————————————————————————————————————————
 

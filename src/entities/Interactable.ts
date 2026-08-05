@@ -71,7 +71,16 @@ export class Interactable extends Entity {
   }
 
   draw(ctx: CanvasRenderingContext2D): void {
-    if (this.state.get(this.data.zone, this.data.id) && this.data.kind === "bush") return;
+    // Un objet consommé qui disparaît ne se dessine pas — et surtout, on sort
+    // AVANT `save()`.
+    //
+    // Les branches « racines » et « ramassage » sortaient après, sans
+    // `restore()` : la pile d'états du canvas gagnait un cran à chaque image.
+    // Le `restore()` du rendu dépilait alors le mauvais état, la translation
+    // de caméra restait appliquée, et toute l'interface — cœurs, horloge,
+    // minicarte, encarts — se dessinait hors de l'écran. Le jeu paraissait
+    // figé sur un décor nu, juste après avoir tranché une racine.
+    if (!this.isPresent) return;
     const x = Math.round(this.position.x);
     const y = Math.round(this.position.y);
     ctx.save();
@@ -176,7 +185,6 @@ export class Interactable extends Entity {
       ctx.fillRect(x + 7, y + 2, 2, 12);
       ctx.fillRect(x + 2, y + 7, 12, 2);
     } else if (this.data.kind === "roots") {
-      if (this.state.get(this.data.zone, this.data.id)) return;
       ctx.strokeStyle = PALETTE.woodDark;
       ctx.lineWidth = 3;
       ctx.beginPath();
@@ -204,7 +212,6 @@ export class Interactable extends Entity {
       ctx.fillStyle = PALETTE.yellow;
       ctx.fillRect(x + 6, y + 6, 4, 4);
     } else if (this.data.kind === "pickup") {
-      if (this.state.get(this.data.zone, this.data.id)) return;
       ctx.fillStyle = PALETTE.woodLight;
       ctx.fillRect(x + 7, y, 2, 13);
       ctx.strokeStyle = PALETTE.cream;

@@ -74,6 +74,14 @@ export class Renderer {
   }
 
   clear(color: string = PALETTE.ink): void {
+    // Chaque image repart d'une transformation neuve. Un dessin qui oublie un
+    // `restore()` ne lève aucune erreur : il décale silencieusement tout ce
+    // qui suit, et l'interface finit hors de l'écran. Cette remise à zéro
+    // rend la faute visible dans la frame fautive au lieu de l'accumuler
+    // jusqu'à ce que le jeu paraisse figé.
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    this.ctx.globalAlpha = 1;
+    this.ctx.globalCompositeOperation = "source-over";
     this.ctx.fillStyle = color;
     this.ctx.fillRect(0, 0, VIEW_WIDTH, VIEW_HEIGHT);
   }
