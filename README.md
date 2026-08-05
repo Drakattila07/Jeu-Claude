@@ -43,6 +43,10 @@ X pour l'épée, gâchettes pour l'esquive.
   clés laissées par ses gardes. Le Chevalier veille sur la Carte, au fond.
 - **Un dragon.** Dans la Caldeira, tant qu'il vole, l'épée passe sous lui : il
   faut survivre à ses passes et frapper pendant qu'il se pose.
+- **Un arbre qui brûle.** L'Arbre-Mère est du bois sec : le feu de la forme
+  demi-démon la ronge sur la durée, écorce ouverte ou non, et chaque coup porté
+  sur un tronc en flammes mord d'un point de plus. C'est la réponse au combat —
+  à l'épée seule il faut trois fois plus de temps.
 - **Un cycle jour/nuit éclairé.** L'aube rosit, midi blanchit, la nuit bleuit.
   Lanternes, braseros, coulées de lave et votre propre lumière creusent
   l'obscurité. La pluie assombrit, la brume monte du marais, les lucioles
@@ -83,7 +87,7 @@ sa bourse, ou l'on recharge la sauvegarde.
 ## Développement
 
 ```bash
-npm test              # 140 tests unitaires
+npm test              # 170 tests unitaires
 npm run validate:data # cohérence des données et du monde généré
 npm run build         # vérification de types, bundle, préparation du site
 ```

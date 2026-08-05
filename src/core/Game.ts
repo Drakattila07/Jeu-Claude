@@ -283,6 +283,18 @@ export class Game {
     };
   }
 
+  /** État de l'Arbre-Mère : un combat ne se juge qu'en le regardant tourner. */
+  debugBoss(): { hearts: number; max: number; phase: number; exposed: boolean;
+    burning: boolean; burnFrames: number; seeds: number; alive: boolean } | null {
+    const boss = this.boss;
+    if (!boss) return null;
+    return {
+      hearts: boss.hearts, max: boss.maxHearts, phase: boss.phase,
+      exposed: boss.isExposed, burning: boss.isBurning, burnFrames: boss.burnFrames,
+      seeds: boss.seeds.filter((seed) => seed.active).length, alive: boss.active,
+    };
+  }
+
   /** Entre dans un intérieur sans passer par sa porte. */
   debugEnterInterior(kind: InteriorKind): void {
     this.title.active = false;
@@ -584,6 +596,13 @@ export class Game {
     const boss = this.boss;
     if (!boss?.active) return;
     boss.update();
+    if (boss.isBurning && this.frame % 5 === 0) {
+      this.particles.emit(boss.position.x + 16 + (this.frame % 3) * 16,
+        boss.position.y + 20 + (this.frame % 5) * 8, "ember", 2);
+    }
+    // Le feu peut l'achever entre deux coups d'épée : la mort ne se constate
+    // plus seulement au moment de l'impact.
+    if (!boss.active) { this.onBossDefeated(); return; }
     const playerBox = {
       x: this.player.position.x + this.player.hitbox.x,
       y: this.player.position.y + this.player.hitbox.y,
@@ -673,10 +692,14 @@ export class Game {
           this.boss.position.y + 40 - this.player.position.y) <= this.player.fireRadius + 24;
       if ((overlaps(sword, this.boss.bounds) || inWave) && this.combat.confirmHit("mother_tree", true)) {
         const wasExposed = this.boss.isExposed;
-        const defeated = this.boss.hit();
+        // L'onde de feu de la forme démoniaque embrase le bois : elle porte,
+        // écorce ouverte ou non.
+        if (inWave) this.igniteBoss();
+        const dealt = damage + (this.boss.isBurning ? 1 : 0);
+        const defeated = this.boss.hit(damage);
         this.audio.playSfx(wasExposed ? "hit" : "deny");
         if (wasExposed) {
-          this.floaters.damage(this.boss.position.x + 32, this.boss.position.y + 10, 1, true);
+          this.floaters.damage(this.boss.position.x + 32, this.boss.position.y + 10, dealt, true);
           this.particles.emit(this.boss.position.x + 32, this.boss.position.y + 40, "leaf", 10);
         } else {
           this.floaters.push(this.boss.position.x + 32, this.boss.position.y + 10, "écorce",
@@ -769,7 +792,26 @@ export class Game {
     this.showNotice(`${enemy.definition.name} vaincu`, 70);
   }
 
+  /**
+   * Embrase l'Arbre-Mère.
+   *
+   * C'est le seul dégât qui traverse l'écorce fermée : le bois brûle qu'on
+   * regarde ou non. La forme démoniaque cesse ainsi d'être un simple bonus de
+   * vitesse pendant ce combat — elle en devient la réponse.
+   */
+  private igniteBoss(): void {
+    const boss = this.boss;
+    if (!boss?.active) return;
+    const first = boss.ignite();
+    this.particles.emit(boss.position.x + 32, boss.position.y + 30, "ember", first ? 24 : 8);
+    if (!first) return;
+    this.audio.playSfx("secret");
+    this.combat.impact(3, 12);
+    this.showNotice("L'Arbre-Mère prend feu. Le bois sec ne se protège plus.", 220);
+  }
+
   private onBossDefeated(): void {
+    if (this.flags.has("boss_defeated")) return;
     this.flags.set("boss_defeated");
     this.quests.notify("defeat", "mother_tree", this.frame);
     this.endingPending = true;
@@ -810,10 +852,14 @@ export class Game {
       } else {
         if (this.boss?.active && overlaps(projectile.bounds, this.boss.bounds)) {
           const wasExposed = this.boss.isExposed;
-          const defeated = this.boss.hit();
-          this.particles.emit(projectile.position.x, projectile.position.y, "spark", 12);
+          if (projectile.kind === "fireball" || projectile.kind === "ember") this.igniteBoss();
+          const defeated = this.boss.hit(projectile.damage);
+          this.particles.emit(projectile.position.x, projectile.position.y, "ember", 14);
           projectile.destroy();
-          if (wasExposed) this.floaters.damage(this.boss.position.x + 32, this.boss.position.y + 10, 1);
+          if (wasExposed) {
+            this.floaters.damage(this.boss.position.x + 32, this.boss.position.y + 10,
+              projectile.damage);
+          }
           if (defeated) this.onBossDefeated();
         }
         for (const enemy of this.enemies) {
@@ -1977,7 +2023,10 @@ export class Game {
       lights.push({ x: this.familiar.position.x + 8, y: this.familiar.position.y + 8,
         radius: 90, color: "#ffd479" });
     }
-    if (this.boss?.active && this.boss.isExposed) {
+    if (this.boss?.active && this.boss.isBurning) {
+      lights.push({ x: this.boss.position.x + 32, y: this.boss.position.y + 34,
+        radius: 150, color: "#ff8a3c" });
+    } else if (this.boss?.active && this.boss.isExposed) {
       lights.push({ x: this.boss.position.x + 32, y: this.boss.position.y + 40,
         radius: 120, color: "#ffe07a" });
     }
@@ -2096,11 +2145,15 @@ export class Game {
     ctx.fillRect(x - 2, 38, width + 4, 8);
     ctx.fillStyle = PALETTE.pineDark;
     ctx.fillRect(x, 40, width, 4);
-    ctx.fillStyle = boss.isExposed ? PALETTE.yellow : PALETTE.leaf;
+    ctx.fillStyle = boss.isBurning ? PALETTE.red
+      : boss.isExposed ? PALETTE.yellow : PALETTE.leaf;
     ctx.fillRect(x, 40, Math.round(width * boss.healthRatio), 4);
-    if (boss.isExposed) {
-      drawText(ctx, "ÉCORCE OUVERTE", VIEW_WIDTH / 2, 48, {
-        color: PALETTE.yellow, align: "center",
+    const state = boss.isBurning && boss.isExposed ? "EN FEU — ÉCORCE OUVERTE"
+      : boss.isBurning ? "EN FEU"
+        : boss.isExposed ? "ÉCORCE OUVERTE" : "";
+    if (state) {
+      drawText(ctx, state, VIEW_WIDTH / 2, 48, {
+        color: boss.isBurning ? PALETTE.red : PALETTE.yellow, align: "center",
       });
     }
     ctx.restore();
