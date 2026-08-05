@@ -4,7 +4,7 @@ import { INTERACTABLES } from "../data/interactables";
 import { createZoneMap } from "../world/ZoneMapFactory";
 import { TileMap } from "../world/TileMap";
 import { TileSet, TILE } from "../world/TileSet";
-import { EDGES, gatewayFor, neighbourOf, oppositeEdge } from "../world/WorldGen";
+import { EDGES, gatewayFor, isNavalZone, neighbourOf, oppositeEdge } from "../world/WorldGen";
 import { ZONE_TILES_X, ZONE_TILES_Y } from "../core/Renderer";
 import type { Edge } from "../core/Camera";
 
@@ -20,22 +20,48 @@ function mapFor(zoneId: string): TileMap {
   return map;
 }
 
+/**
+ * Praticabilité selon la région : à pied partout, à la barque en mer. Poser la
+ * question avec les règles de la marche dans une région d'eau libre la
+ * déclarerait entièrement bouchée.
+ */
+function blockedIn(zoneId: string, naval?: boolean): (x: number, y: number) => boolean {
+  const zone = WORLD_ZONES.find((candidate) => candidate.id === zoneId)!;
+  const map = mapFor(zoneId);
+  const mode = naval ?? isNavalZone(zone);
+  return (x, y) => map.solidFor(x, y, mode);
+}
+
+/**
+ * Mode de franchissement d'une frontière. Une côte se traverse à la barque,
+ * même vue depuis la terre : c'est la règle qui donne son sens au rivage.
+ */
+function crossingIsNaval(zoneId: string, edge: Edge): boolean {
+  const zone = WORLD_ZONES.find((candidate) => candidate.id === zoneId)!;
+  const neighbour = neighbourOf(zone, edge);
+  return isNavalZone(zone) || (neighbour !== null && isNavalZone(neighbour));
+}
+
 /** Cases ouvertes sur un bord donné, vues depuis l'intérieur de la zone. */
-function openingsOn(map: TileMap, edge: Edge): readonly number[] {
+function openingsOn(zoneId: string, edge: Edge, naval?: boolean): readonly number[] {
+  const map = mapFor(zoneId);
+  const blocked = blockedIn(zoneId, naval);
   const open: number[] = [];
   if (edge === "west" || edge === "east") {
     const x = edge === "west" ? 0 : map.width - 1;
-    for (let y = 0; y < map.height; y += 1) if (!map.isSolid(x, y)) open.push(y);
+    for (let y = 0; y < map.height; y += 1) if (!blocked(x, y)) open.push(y);
   } else {
     const y = edge === "north" ? 0 : map.height - 1;
-    for (let x = 0; x < map.width; x += 1) if (!map.isSolid(x, y)) open.push(x);
+    for (let x = 0; x < map.width; x += 1) if (!blocked(x, y)) open.push(x);
   }
   return open;
 }
 
-function floodFill(map: TileMap, start: { x: number; y: number }): Set<number> {
+function floodFill(zoneId: string, start: { x: number; y: number }): Set<number> {
+  const map = mapFor(zoneId);
+  const blocked = blockedIn(zoneId);
   const seen = new Set<number>();
-  if (map.isSolid(start.x, start.y)) return seen;
+  if (blocked(start.x, start.y)) return seen;
   const queue = [start];
   seen.add(start.y * map.width + start.x);
   while (queue.length > 0) {
@@ -44,7 +70,7 @@ function floodFill(map: TileMap, start: { x: number; y: number }): Set<number> {
       const nx = current.x + dx;
       const ny = current.y + dy;
       if (nx < 0 || ny < 0 || nx >= map.width || ny >= map.height) continue;
-      if (map.isSolid(nx, ny)) continue;
+      if (blocked(nx, ny)) continue;
       const key = ny * map.width + nx;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -83,11 +109,10 @@ describe("génération du monde", () => {
   it("ouvre réellement la ceinture à l'emplacement annoncé", () => {
     const closed: string[] = [];
     for (const zone of WORLD_ZONES) {
-      const map = mapFor(zone.id);
       for (const edge of EDGES) {
         const gateway = gatewayFor(zone, edge);
         if (!gateway) continue;
-        const open = openingsOn(map, edge);
+        const open = openingsOn(zone.id, edge, crossingIsNaval(zone.id, edge));
         if (open.length === 0) { closed.push(`${zone.id}/${edge}: mur plein`); continue; }
         const inside = open.filter((offset) => offset >= gateway.start && offset <= gateway.end);
         if (inside.length === 0) closed.push(`${zone.id}/${edge}: ouverture hors passage`);
@@ -102,19 +127,23 @@ describe("génération du monde", () => {
     const trapped: string[] = [];
     for (const zone of WORLD_ZONES) {
       const map = mapFor(zone.id);
+      const blocked = blockedIn(zone.id);
       const entries: { x: number; y: number }[] = [];
       for (const edge of EDGES) {
-        if (!neighbourOf(zone, edge)) continue;
-        for (const offset of openingsOn(map, edge)) {
+        const neighbour = neighbourOf(zone, edge);
+        // Un passage côtier relève de l'autre mode : il n'a pas à rejoindre
+        // le réseau terrestre de la région.
+        if (!neighbour || isNavalZone(neighbour) !== isNavalZone(zone)) continue;
+        for (const offset of openingsOn(zone.id, edge)) {
           if (edge === "west") entries.push({ x: 1, y: offset });
           else if (edge === "east") entries.push({ x: map.width - 2, y: offset });
           else if (edge === "north") entries.push({ x: offset, y: 1 });
           else entries.push({ x: offset, y: map.height - 2 });
         }
       }
-      const reachable = entries.filter((point) => !map.isSolid(point.x, point.y));
+      const reachable = entries.filter((point) => !blocked(point.x, point.y));
       if (reachable.length === 0) { trapped.push(`${zone.id}: aucune entrée praticable`); continue; }
-      const seen = floodFill(map, reachable[0]!);
+      const seen = floodFill(zone.id, reachable[0]!);
       const isolated = reachable.filter((point) => !seen.has(point.y * map.width + point.x));
       if (isolated.length > 0) {
         trapped.push(`${zone.id}: ${isolated.length} sortie(s) isolée(s)`);
@@ -127,9 +156,10 @@ describe("génération du monde", () => {
     const cramped: string[] = [];
     for (const zone of WORLD_ZONES) {
       const map = mapFor(zone.id);
+      const blocked = blockedIn(zone.id);
       let free = 0;
       for (let y = 1; y < map.height - 1; y += 1) {
-        for (let x = 1; x < map.width - 1; x += 1) if (!map.isSolid(x, y)) free += 1;
+        for (let x = 1; x < map.width - 1; x += 1) if (!blocked(x, y)) free += 1;
       }
       const ratio = free / ((map.width - 2) * (map.height - 2));
       if (ratio < 0.35) cramped.push(`${zone.id}: ${Math.round(ratio * 100)}% libre`);

@@ -154,6 +154,10 @@ function roadFriction(biome: Biome): number {
     case "cliffs": return 12;
     case "peaks": return 14;
     case "lake": return 18;
+    // Aucune route ne traverse la mer ni une coulée de lave : le réseau
+    // terrestre s'arrête à la côte.
+    case "volcano": return 30;
+    case "sea": return 60;
     default: return 8;
   }
 }
@@ -236,7 +240,7 @@ export function roadEdgesOf(zone: ZoneCoord): readonly Edge[] {
  * s'étale, un canal file droit. On note simplement, pour chaque bord, si de
  * l'eau doit le traverser — les deux zones voisines lisent la même réponse.
  */
-const WATER_BIOMES = new Set<Biome>(["river", "lake", "canal", "reeds", "marsh"]);
+const WATER_BIOMES = new Set<Biome>(["river", "lake", "canal", "reeds", "marsh", "sea"]);
 
 export function isWaterEdge(zone: ZoneCoord, edge: Edge): boolean {
   const here = zoneAt(zone.x, zone.y);
@@ -247,4 +251,15 @@ export function isWaterEdge(zone: ZoneCoord, edge: Edge): boolean {
 
 export function waterEdgesOf(zone: ZoneCoord): readonly Edge[] {
   return EDGES.filter((edge) => isWaterEdge(zone, edge));
+}
+
+/**
+ * Vrai si l'on ne traverse la région qu'à la barque.
+ *
+ * Tout ce qui raisonne sur la praticabilité — génération, validation, tests,
+ * peuplement — doit poser la question au même endroit : une région maritime
+ * jugée avec les règles de la marche paraît entièrement bouchée.
+ */
+export function isNavalZone(zone: { readonly biome: Biome }): boolean {
+  return zone.biome === "sea";
 }

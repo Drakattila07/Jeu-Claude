@@ -40,6 +40,15 @@ const DEFAULT_ZONES: readonly (readonly [number, number, string])[] = [
   [5, 3, "champs"],
   [7, 5, "canal"],
   [7, 0, "arene"],
+  [9, 6, "port-maree"],
+  [8, 6, "greve-de-maree"],
+  [8, 7, "rade"],
+  [1, 7, "ile-des-os"],
+  [5, 7, "ile-du-phare"],
+  [3, 8, "haute-mer"],
+  [8, 8, "ile-du-volcan"],
+  [9, 8, "caldeira"],
+  [8, 2, "vertepierre"],
 ];
 
 const zones = zoneArgs.length > 0

@@ -19,7 +19,10 @@ export const SIDE_ACTIVITIES: readonly SideActivityData[] = [
   { id: "gorm_meal", quest: "repas_gorm", trigger: "gorm_feast", event: { type: "collect", target: "gorm_food", amount: 3 }, setFlags: [], reward: "5 cœurs révélés" },
   { id: "letter", quest: "lettre_jamais_envoyee", trigger: "letter_choice", event: { type: "choice", target: "letter_recipient" }, setFlags: ["letter_resolved"], reward: "Objet unique" },
   { id: "merchant", quest: "colporteur_endette", trigger: "merchant_debt", event: { type: "flag", target: "merchant_debt_paid" }, setFlags: ["merchant_debt_paid"], reward: "Stock rare" },
-  { id: "map", quest: "carte_incomplete", trigger: "map_100", event: { type: "collect", target: "zone_mapped", amount: 56 }, setFlags: [], reward: "Carte complète" },
+  { id: "map", quest: "carte_incomplete", trigger: "map_100", event: { type: "collect", target: "zone_mapped", amount: 90 }, setFlags: [], reward: "Carte complète" },
   { id: "statues", quest: "statues_regardent", trigger: "statue_intersection", event: { type: "flag", target: "statue_secret" }, setFlags: ["statue_secret"], reward: "Relique" },
-  { id: "stump", quest: "souche_fantome", trigger: "ghost_stump", event: { type: "flag", target: "ghost_stump_trapped" }, setFlags: ["ghost_stump_trapped"], reward: "Cœur + lore" }
+  { id: "stump", quest: "souche_fantome", trigger: "ghost_stump", event: { type: "flag", target: "ghost_stump_trapped" }, setFlags: ["ghost_stump_trapped"], reward: "Cœur + lore" },
+  { id: "hull", quest: "barque_de_sarn", trigger: "shipyard_hull", event: { type: "flag", target: "boat" }, setFlags: ["boat"], reward: "Barque de Sarn" },
+  { id: "chart", quest: "carte_des_courants", trigger: "lighthouse_lamp", event: { type: "flag", target: "sea_chart" }, setFlags: ["sea_chart"], reward: "Carte des Courants" },
+  { id: "scale", quest: "le_dragon", trigger: "dragon_altar", event: { type: "flag", target: "dragon_calmed" }, setFlags: ["dragon_calmed"], reward: "La montagne se tait" }
 ];

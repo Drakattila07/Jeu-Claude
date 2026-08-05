@@ -25,6 +25,8 @@ const BIOME_COLOR: Readonly<Record<Biome, string>> = {
   river: PALETTE.waterLight,
   canal: PALETTE.deepWater,
   witch: PALETTE.purple,
+  sea: "#173a58",
+  volcano: "#4a2418",
 };
 
 export class MapScreen {

@@ -68,6 +68,8 @@ function biomeTint(biome: Biome | undefined): readonly [number, number, number] 
     case "lake": return [0.94, 0.99, 1.05];
     case "canal": return [0.95, 0.97, 1.0];
     case "fields": return [1.04, 1.0, 0.92];
+    case "sea": return [0.9, 0.97, 1.1];
+    case "volcano": return [1.12, 0.9, 0.82];
     default: return [1, 1, 1];
   }
 }

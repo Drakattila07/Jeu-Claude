@@ -62,15 +62,19 @@ export function populateZone(options: PopulationOptions): readonly EnemySpawn[] 
 }
 
 function freeTiles(map: TileMap, options: PopulationOptions): readonly { x: number; y: number }[] {
+  // En mer, « libre » veut dire navigable : chercher de la terre ferme dans
+  // une région d'eau libre ne renvoyait aucune place, et le large restait vide.
+  const naval = options.zone.biome === "sea";
+  const blocked = (x: number, y: number): boolean => map.solidFor(x, y, naval);
   const spots: { x: number; y: number }[] = [];
   for (let tileY = 2; tileY < map.height - 2; tileY += 1) {
     for (let tileX = 2; tileX < map.width - 2; tileX += 1) {
-      if (map.isSolid(tileX, tileY)) continue;
+      if (blocked(tileX, tileY)) continue;
       // Une créature au milieu d'un goulet bloque le passage : il lui faut
       // de l'espace autour d'elle.
       let room = 0;
       for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
-        if (!map.isSolid(tileX + dx, tileY + dy)) room += 1;
+        if (!blocked(tileX + dx, tileY + dy)) room += 1;
       }
       if (room < 3) continue;
       const x = tileX * TILE_SIZE;

@@ -31,6 +31,9 @@ export class HUD {
     if (this.titleFrames > 0) this.titleFrames -= 1;
   }
 
+  /** Coupe le cartouche : il ne doit jamais chevaucher la jauge d'un gardien. */
+  clearAnnouncement(): void { this.titleFrames = 0; }
+
   draw(renderer: Renderer, player: Player, clock: Clock, zoneName: string, objective?: string): void {
     const { ctx } = renderer;
     ctx.save();

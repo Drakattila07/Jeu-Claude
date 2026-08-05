@@ -1,5 +1,6 @@
 import { ITEMS, type ItemId } from "../data/items/core";
 import type { QuestRecord } from "./Quest";
+import type { FortressSnapshot } from "./Fortress";
 
 export interface SaveData {
   readonly version: 1;
@@ -18,6 +19,11 @@ export interface SaveData {
     readonly x: number; readonly y: number; readonly deaths: number;
   };
   readonly purchases?: readonly string[];
+  /**
+   * Progression dans une forteresse : portes ouvertes et salles nettoyées.
+   * Sans elle, mourir dans un donjon en rouvrait toutes les herses.
+   */
+  readonly fortress?: FortressSnapshot;
 }
 
 interface StorageLike {
@@ -122,6 +128,11 @@ export class SaveLoad {
         || !isFiniteNumber(checkpoint.y) || !isFiniteNumber(checkpoint.deaths)) return false;
     }
     if (candidate.purchases !== undefined && !isStringArray(candidate.purchases)) return false;
+    if (candidate.fortress !== undefined) {
+      const fortress = candidate.fortress as Record<string, unknown> | null;
+      if (typeof fortress !== "object" || fortress === null) return false;
+      if (!isStringArray(fortress.unlocked) || !isStringArray(fortress.cleared)) return false;
+    }
     return true;
   }
 }

@@ -1,3 +1,4 @@
+import type { ItemId } from "./items/core";
 import type { Requirement } from "../systems/Requirements";
 
 export type InteractableKind =
@@ -14,6 +15,12 @@ export interface InteractableData {
   readonly text: string;
   /** Condition à remplir pour que l'objet réagisse. */
   readonly requires?: Requirement;
+  /**
+   * Objet remis la première fois qu'on le fouille. Sans ce champ, un coffre ne
+   * pouvait rendre que des rubis, et toute quête de collecte devait passer par
+   * un déclencheur scénarisé.
+   */
+  readonly grants?: { readonly item: ItemId; readonly count: number };
 }
 
 export const INTERACTABLES = [
@@ -95,6 +102,45 @@ export const INTERACTABLES = [
     requires: {
       items: [{ item: "unsent_letter", count: 1 }],
       refusal: "Une fente à courrier, close depuis longtemps. Il faudrait une lettre.",
+    },
+  },
+
+  // — Port-Marée, la mer et le volcan —
+
+  { id: "shipyard_notice", zone: "port_maree", kind: "sign", x: 208, y: 240,
+    text: "CHANTIER NAVAL DE SARN — Bordés, filins, radoub. On ne vend pas la mer." },
+  {
+    id: "shipyard_hull", zone: "port_maree", kind: "offering", x: 272, y: 304,
+    text: "Sarn river les bordés, tend le filin, crache dans ses mains. La barque est à vous.",
+    requires: {
+      items: [{ item: "hull_plank", count: 2 }, { item: "tar_rope", count: 1 }],
+      refusal: "La coque bâille encore. Sarn veut deux bordés de chêne et un filin goudronné.",
+    },
+  },
+  { id: "beached_wreck", zone: "greve_de_maree", kind: "chest", x: 176, y: 224,
+    text: "Sous les algues, deux bordés de chêne encore sains.",
+    grants: { item: "hull_plank", count: 2 } },
+  { id: "rope_locker", zone: "criques", kind: "chest", x: 288, y: 176,
+    text: "Un coffre de gabier oublié : un filin goudronné, raide de sel.",
+    grants: { item: "tar_rope", count: 1 } },
+  {
+    id: "lighthouse_lamp", zone: "ile_du_phare", kind: "shrine", x: 240, y: 160,
+    text: "La Veuve Hale monte la mèche. Le faisceau balaie la passe, et vous donne la Carte des Courants.",
+    requires: {
+      flags: ["boat"],
+      refusal: "La lampe est froide. On ne relève pas une passe qu'on ne peut pas suivre.",
+    },
+  },
+  { id: "bone_cairn", zone: "ile_des_os", kind: "secret", x: 256, y: 240,
+    text: "Un cairn d'os de baleine. Dessous, la bourse d'un capitaine." },
+  { id: "fortress_gate", zone: "vertepierre", kind: "door", x: 240, y: 224,
+    text: "Franchir la herse de Vertepierre." },
+  {
+    id: "dragon_altar", zone: "caldeira", kind: "shrine", x: 240, y: 256,
+    text: "Vous posez l'écaille sur l'autel. La montagne se tait enfin.",
+    requires: {
+      items: [{ item: "dragon_scale", count: 1 }],
+      refusal: "L'autel attend une écaille. Le dragon la porte encore.",
     },
   },
 ] as const satisfies readonly InteractableData[];

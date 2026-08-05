@@ -111,6 +111,28 @@ export const NPC_ROUTINES: Readonly<Record<string, readonly NpcRoutineStep[]>> =
     { activity: "farm", duration: 360, offset: [2, -2], facing: "left" },
     { activity: "rest", duration: 200, offset: [-2, 2], facing: "right" },
   ],
+  sarn: [
+    { activity: "walk", duration: 240, offset: [-2, 1] },
+    { activity: "forge", duration: 340, offset: [-3, 1], facing: "right" },
+    { activity: "walk", duration: 240, offset: [2, 0] },
+    { activity: "inspect", duration: 260, offset: [2, 2], facing: "down" },
+  ],
+  veuve_hale: [
+    { activity: "meditate", duration: 420, offset: [0, 0], facing: "down" },
+    { activity: "walk", duration: 200, offset: [2, 1] },
+    { activity: "inspect", duration: 300, offset: [2, 1], facing: "left" },
+  ],
+  mousse_pib: [
+    { activity: "walk", duration: 180, offset: [2, 2] },
+    { activity: "ball", duration: 300, offset: [1, 2], facing: "right" },
+    { activity: "gather", duration: 220, offset: [-2, 1], facing: "down" },
+    { activity: "rest", duration: 160, offset: [0, 0], facing: "down" },
+  ],
+  gardien_vertepierre: [
+    { activity: "guard", duration: 400, offset: [0, 0], facing: "down" },
+    { activity: "walk", duration: 220, offset: [2, 0] },
+    { activity: "guard", duration: 400, offset: [2, 0], facing: "left" },
+  ],
 };
 
 export function routineFor(id: string): readonly NpcRoutineStep[] {

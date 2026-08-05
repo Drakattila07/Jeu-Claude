@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MapScreen } from "../ui/MapScreen";
+import { WORLD_ZONES } from "../data/world";
 
 describe("carte", () => {
   it("révèle chaque zone une seule fois et calcule le pourcentage", () => {
@@ -8,6 +9,6 @@ describe("carte", () => {
     map.reveal({ x: 3, y: 3 });
     map.reveal({ x: 2, y: 3 });
     expect(map.exploredCount).toBe(2);
-    expect(map.completion).toBe(4);
+    expect(map.completion).toBe(Math.round((2 / WORLD_ZONES.length) * 100));
   });
 });

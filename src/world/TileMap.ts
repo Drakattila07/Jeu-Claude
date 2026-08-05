@@ -40,7 +40,10 @@ export class TileMap {
   readonly pixelHeight: number;
   private readonly byName = new Map<LayerName, TiledLayer>();
   private readonly solidMask: Uint8Array;
+  /** Cases qu'une coque peut franchir : l'inverse presque exact du sol. */
+  private readonly sailMask: Uint8Array;
   private readonly waterMask: Uint8Array;
+  private readonly harmMask: Uint8Array;
   private readonly slowMask: Float32Array;
 
   private baseCanvas: HTMLCanvasElement | null = null;
@@ -61,23 +64,35 @@ export class TileMap {
 
     const count = this.width * this.height;
     this.solidMask = new Uint8Array(count);
+    this.sailMask = new Uint8Array(count);
     this.waterMask = new Uint8Array(count);
+    this.harmMask = new Uint8Array(count);
     this.slowMask = new Float32Array(count).fill(1);
     for (let index = 0; index < count; index += 1) {
       const x = index % this.width;
       const y = Math.floor(index / this.width);
       let solid = false;
       let water = false;
+      let sailable = false;
+      let harm = 0;
       let slow = 1;
       for (const name of LAYER_ORDER) {
         if (name === "decor_above") continue;
         const properties = tileSet.properties(this.tileAt(name, x, y));
-        if (properties.solid) solid = true;
+        // L'eau profonde bloque la marche autant qu'un rocher : c'est ce qui
+        // donne son intérêt à la barque, et une vraie rive au lac.
+        if (properties.solid || properties.deep) solid = true;
         if (properties.water) water = true;
+        if (properties.sailable) sailable = true;
+        // Un obstacle posé sur l'eau (récif, épave) interdit aussi la coque.
+        if (properties.solid) sailable = false;
+        if (properties.harm) harm = Math.max(harm, properties.harm);
         if (properties.slow !== undefined) slow = Math.min(slow, properties.slow);
       }
       this.solidMask[index] = solid ? 1 : 0;
+      this.sailMask[index] = sailable ? 1 : 0;
       this.waterMask[index] = water ? 1 : 0;
+      this.harmMask[index] = harm;
       this.slowMask[index] = slow;
     }
   }
@@ -97,9 +112,32 @@ export class TileMap {
     return this.solidMask[y * this.width + x] === 1;
   }
 
+  /** Obstacle pour une coque : toute la terre ferme, plus les récifs. */
+  isSolidForSailing(x: number, y: number): boolean {
+    if (x < 0 || y < 0 || x >= this.width || y >= this.height) return false;
+    return this.sailMask[y * this.width + x] === 0;
+  }
+
+  /** Solidité selon le mode de déplacement courant. */
+  solidFor(x: number, y: number, sailing: boolean): boolean {
+    return sailing ? this.isSolidForSailing(x, y) : this.isSolid(x, y);
+  }
+
   isWater(x: number, y: number): boolean {
     if (x < 0 || y < 0 || x >= this.width || y >= this.height) return false;
     return this.waterMask[y * this.width + x] === 1;
+  }
+
+  /** Vrai si une coque peut flotter là : sert à embarquer et à accoster. */
+  isSailable(x: number, y: number): boolean {
+    if (x < 0 || y < 0 || x >= this.width || y >= this.height) return false;
+    return this.sailMask[y * this.width + x] === 1;
+  }
+
+  /** Dégâts du sol — la lave, pour l'instant. */
+  harmAt(x: number, y: number): number {
+    if (x < 0 || y < 0 || x >= this.width || y >= this.height) return 0;
+    return this.harmMask[y * this.width + x]!;
   }
 
   /** Facteur de vitesse du sol : la boue et la neige freinent, l'eau davantage. */

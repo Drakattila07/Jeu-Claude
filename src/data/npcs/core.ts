@@ -51,5 +51,32 @@ export const NPCS = [
   ]},
   { id: "fermier_b", name: "Béa", color: "sand", schedule: [{ start: 7, end: 18, zone: "marches_ruines", x: 176, y: 288 }], chatter: [
     "J'ai caché la clé dans le foin.", "Les corbeaux connaissent les récoltes.", "Mira paie bien les graines.", "Le moulin repartira."
+  ]},
+
+  // — Port-Marée et le large —
+  { id: "sarn", name: "Sarn le Charpentier", color: "water", schedule: [
+    { start: 6, end: 20, zone: "port_maree", x: 240, y: 272 },
+    { start: 20, end: 24, zone: "port_maree", x: 176, y: 208 }
+  ], chatter: [
+    "Une coque, ça se répare pas à la parole.", "Deux bordés et un filin, pas moins.",
+    "La mer ne pardonne pas le travail bâclé.", "Ramenez-moi de quoi river, on verra."
+  ]},
+  { id: "veuve_hale", name: "La Veuve Hale", color: "purple", schedule: [
+    { start: 0, end: 24, zone: "ile_du_phare", x: 240, y: 224 }
+  ], chatter: [
+    "Je tiens la lampe depuis quarante ans.", "Trois bateaux sont partis vers le Volcan. Aucun n'est revenu.",
+    "Les courants ne se devinent pas, ils se lisent.", "Mon mari a dessiné la Carte avant de sombrer."
+  ]},
+  { id: "mousse_pib", name: "Pib", color: "sand", schedule: [
+    { start: 7, end: 21, zone: "port_maree", x: 336, y: 208 }
+  ], chatter: [
+    "J'irai en mer, moi aussi. Bientôt.", "Sarn dit que je noue mal. Sarn dit toujours ça.",
+    "On a vu de la fumée au sud. De la vraie.", "Vous avez un bateau ? Emmenez-moi !"
+  ]},
+  { id: "gardien_vertepierre", name: "Vieil Ordan", color: "stone", schedule: [
+    { start: 0, end: 24, zone: "avant_cour", x: 240, y: 336 }
+  ], chatter: [
+    "Vertepierre garde ce que la mer réclame.", "Trois portes, trois clés. C'était l'usage.",
+    "Le Chevalier n'a jamais quitté la dernière salle.", "N'y allez pas sans épée. Ni sans raison."
   ]}
 ] as const satisfies readonly NpcData[];

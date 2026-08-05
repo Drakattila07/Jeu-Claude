@@ -63,7 +63,7 @@ export const QUESTS = [
     { id: "dette", type: "flag", target: "merchant_debt_paid", hint: "Il manque 200 rubis." }
   ], rewards: [{ type: "flag", id: "rare_stock" }], worldEffects: [] },
   { id: "carte_incomplete", title: "La Carte Incomplète", giver: "doyen_orme", prerequisites: [], steps: [
-    { id: "explorer", type: "collect", target: "zone_mapped", count: 56, hint: "Cartographiez les 56 régions de la vallée." }
+    { id: "explorer", type: "collect", target: "zone_mapped", count: 90, hint: "Cartographiez les 90 régions de la vallée et de la mer." }
   ], rewards: [{ type: "flag", id: "map_complete" }], worldEffects: [] },
   { id: "chateau_cendre", title: "Le Crâne de Cendre", giver: "garde_ronan", prerequisites: ["act1_complete"], steps: [
     { id: "relique", type: "flag", target: "half_demon_skull",
@@ -75,6 +75,19 @@ export const QUESTS = [
   { id: "souche_fantome", title: "La Souche Fantôme", giver: "environnement", prerequisites: [], steps: [
     { id: "coincer", type: "flag", target: "ghost_stump_trapped", hint: "Elle bouge quand vous détournez le regard." }
   ], rewards: [{ type: "flag", id: "heart_stump" }], worldEffects: [] },
+  { id: "barque_de_sarn", title: "La Barque de Sarn", giver: "sarn", prerequisites: ["act1_complete"], steps: [
+    { id: "radoub", type: "flag", target: "boat", hint: "Port-Marée : deux bordés de chêne et un filin pour Sarn." }
+  ], rewards: [{ type: "flag", id: "boat_ready" }, { type: "rupees", id: "prime", amount: 40 }], worldEffects: [] },
+  { id: "carte_des_courants", title: "La Carte des Courants", giver: "veuve_hale", prerequisites: ["boat"], steps: [
+    { id: "phare", type: "flag", target: "sea_chart", hint: "Île du Phare : rallumez la lampe de la Veuve Hale." }
+  ], rewards: [{ type: "flag", id: "open_sea_known" }], worldEffects: [] },
+  { id: "vertepierre", title: "Les Trois Portes de Vertepierre", giver: "gardien_vertepierre", prerequisites: ["act1_complete"], steps: [
+    { id: "chevalier", type: "defeat", target: "green_knight", hint: "Vertepierre : le Chevalier garde la dernière salle." }
+  ], rewards: [{ type: "flag", id: "sword_plus_2" }], worldEffects: ["fortress_open"] },
+  { id: "le_dragon", title: "Ce qui Dort sous la Fumée", giver: "veuve_hale", prerequisites: ["sea_chart"], steps: [
+    { id: "dragon", type: "defeat", target: "dragon", hint: "Caldeira : le dragon veille sur le feu." },
+    { id: "ecaille", type: "flag", target: "dragon_calmed", hint: "Caldeira : posez l'écaille sur l'autel." }
+  ], rewards: [{ type: "flag", id: "dragon_slain" }, { type: "rupees", id: "prime", amount: 120 }], worldEffects: ["volcano_quiet"] },
   { id: "battue_loups", title: "La Battue", giver: "garde_ronan", prerequisites: ["sword_obtained"], steps: [
     { id: "loups", type: "defeat", target: "wolf", count: 5,
       hint: "Cinq loups rôdent des Lisières à la Canopée." }

@@ -70,6 +70,33 @@ export const ENEMY_TYPES = {
     name: "Horreur des racines", hearts: 8, speed: 0.55, damage: 2, behavior: "charger",
     color: "leaf", aggro: 140, reach: 30, windup: 36, bounty: 16,
   },
+  // — Le large —
+  reef_serpent: {
+    name: "Serpent de récif", hearts: 4, speed: 1.1, damage: 2, behavior: "dive",
+    color: "water", aggro: 150, reach: 24, windup: 20, bounty: 9, phasing: true,
+  },
+  gull_raider: {
+    name: "Goéland pillard", hearts: 2, speed: 1.3, damage: 1, behavior: "dive",
+    color: "sand", aggro: 160, reach: 20, windup: 16, bounty: 5, phasing: true, skittish: true,
+  },
+  drowned_sailor: {
+    name: "Matelot noyé", hearts: 5, speed: 0.62, damage: 2, behavior: "hunt",
+    color: "water", aggro: 120, reach: 26, windup: 28, bounty: 11, phasing: true,
+  },
+  // — Le volcan —
+  ember_hound: {
+    name: "Molosse de braise", hearts: 5, speed: 1.15, damage: 2, behavior: "charger",
+    color: "red", aggro: 170, reach: 26, windup: 22, bounty: 14,
+  },
+  cinder_wisp: {
+    name: "Escarbille", hearts: 3, speed: 1, damage: 2, behavior: "caster",
+    color: "red", aggro: 180, reach: 140, windup: 38, bounty: 12, ranged: true, phasing: true,
+  },
+  // — Gardiens de Vertepierre —
+  green_knight: {
+    name: "Chevalier de Vertepierre", hearts: 10, speed: 0.9, damage: 2, behavior: "charger",
+    color: "leaf", aggro: 190, reach: 32, windup: 30, bounty: 24,
+  },
 } as const satisfies Record<string, EnemyDefinition>;
 
 export type EnemyType = keyof typeof ENEMY_TYPES;
@@ -122,4 +149,6 @@ export const BIOME_FAUNA: Readonly<Record<Biome, readonly EnemyType[]>> = {
   fields: ["beetle", "hop_mushroom"],
   witch: ["frost_wisp", "branch_bat"],
   village: [],
+  sea: ["reef_serpent", "gull_raider", "drowned_sailor"],
+  volcano: ["ember_hound", "cinder_wisp"],
 };

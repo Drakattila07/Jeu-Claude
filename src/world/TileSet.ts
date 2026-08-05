@@ -19,12 +19,25 @@ export type TileKind =
   | "snowdrift" | "cattail" | "dock" | "barrel" | "crate" | "hedge"
   | "ruin_column" | "dead_tree" | "lantern_post" | "wheat" | "ice"
   | "vines" | "grave" | "banner" | "arch_top" | "canopy" | "cliff_top"
-  | "brazier" | "market_stall" | "haystack" | "chimney" | "shrine_stone";
+  | "brazier" | "market_stall" | "haystack" | "chimney" | "shrine_stone"
+  // Le large et le volcan.
+  | "open_sea" | "swell" | "coral" | "bollard" | "net" | "driftwood" | "palm"
+  | "lava" | "basalt" | "ash" | "obsidian" | "lighthouse" | "sea_rock"
+  | "hull" | "portcullis";
 
 export interface TileProperties {
   readonly kind: TileKind;
   readonly solid?: boolean;
   readonly water?: boolean;
+  /**
+   * Eau trop profonde pour qu'on y marche. On la franchit en barque : c'est
+   * elle qui fait de la mer un obstacle plutôt qu'un décor.
+   */
+  readonly deep?: boolean;
+  /** Une coque peut y passer. */
+  readonly sailable?: boolean;
+  /** Dégâts infligés au contact, en cœurs. */
+  readonly harm?: number;
   readonly slow?: number;
   readonly cuttable?: boolean;
   readonly ledge?: boolean;
@@ -39,7 +52,7 @@ const TILES: readonly TileProperties[] = [
   /*  2 */ { kind: "grass_alt" },
   /*  3 */ { kind: "path" },
   /*  4 */ { kind: "stone", solid: true },
-  /*  5 */ { kind: "water", water: true, slow: 0.6 },
+  /*  5 */ { kind: "water", water: true, slow: 0.6, sailable: true },
   /*  6 */ { kind: "tree_crown", solid: true, burnable: true },
   /*  7 */ { kind: "tree_trunk", solid: true, burnable: true },
   /*  8 */ { kind: "roof", solid: true, burnable: true },
@@ -56,12 +69,14 @@ const TILES: readonly TileProperties[] = [
   /* 19 */ { kind: "cliff", solid: true },
   /* 20 */ { kind: "reeds", solid: true },
   /* 21 */ { kind: "rubble", solid: true },
-  /* 22 */ { kind: "lilypad", water: true, slow: 0.6 },
+  /* 22 */ { kind: "lilypad", water: true, slow: 0.6, sailable: true },
   /* 23 */ { kind: "crop", burnable: true },
   /* 24 */ { kind: "pine_crown", solid: true, burnable: true },
   /* 25 */ { kind: "stump", solid: true, burnable: true },
   /* 26 */ { kind: "mushroom" },
-  /* 27 */ { kind: "deep_water", water: true, slow: 0.5 },
+  // On ne marche plus dans l'eau profonde : c'est ce qui donne un sens à la
+  // barque, et au lac une véritable rive.
+  /* 27 */ { kind: "deep_water", water: true, deep: true, sailable: true },
   /* 28 */ { kind: "bridge", burnable: true },
   /* 29 */ { kind: "moss_stone", solid: true },
   /* 30 */ { kind: "wildflowers" },
@@ -115,6 +130,21 @@ const TILES: readonly TileProperties[] = [
   /* 78 */ { kind: "haystack", solid: true, burnable: true },
   /* 79 */ { kind: "chimney", solid: true },
   /* 80 */ { kind: "shrine_stone", solid: true, light: { radius: 56, color: "#8fd8ff" } },
+  /* 81 */ { kind: "open_sea", water: true, deep: true, sailable: true },
+  /* 82 */ { kind: "swell", water: true, deep: true, sailable: true },
+  /* 83 */ { kind: "coral", water: true, deep: true },
+  /* 84 */ { kind: "bollard", solid: true },
+  /* 85 */ { kind: "net" },
+  /* 86 */ { kind: "driftwood", solid: true, burnable: true },
+  /* 87 */ { kind: "palm", solid: true, burnable: true },
+  /* 88 */ { kind: "lava", harm: 2, light: { radius: 90, color: "#ff7028" } },
+  /* 89 */ { kind: "basalt", slow: 0.92 },
+  /* 90 */ { kind: "ash", slow: 0.82 },
+  /* 91 */ { kind: "obsidian", solid: true },
+  /* 92 */ { kind: "lighthouse", solid: true, light: { radius: 140, color: "#ffeec2" } },
+  /* 93 */ { kind: "sea_rock", solid: true },
+  /* 94 */ { kind: "hull", solid: true, burnable: true },
+  /* 95 */ { kind: "portcullis", solid: true },
 ];
 
 /** Indices nommés, pour que les générateurs restent lisibles. */
@@ -135,12 +165,16 @@ export const TILE = {
   ice: 69, vines: 70, grave: 71, banner: 72, archTop: 73, canopy: 74,
   cliffTop: 75, brazier: 76, marketStall: 77, haystack: 78, chimney: 79,
   shrineStone: 80,
+  openSea: 81, swell: 82, coral: 83, bollard: 84, net: 85, driftwood: 86,
+  palm: 87, lava: 88, basalt: 89, ash: 90, obsidian: 91, lighthouse: 92,
+  seaRock: 93, hull: 94, portcullis: 95,
 } as const;
 
 /** Tuiles repeintes à chaque image : eau, flammes, herbe qui ondule. */
 const ANIMATED = new Set<number>([
   TILE.water, TILE.deepWater, TILE.lilypad, TILE.fireplace, TILE.brazier,
   TILE.tallGrass, TILE.wheat, TILE.cattail, TILE.banner, TILE.shrineStone,
+  TILE.lava, TILE.lighthouse,
 ]);
 
 function fill(ctx: CanvasRenderingContext2D, color: string, x: number, y: number,
@@ -815,6 +849,140 @@ export class TileSet {
         specks(ctx, PALETTE.grassDark, px, py, x, y, 0xd3, 3);
         patch(ctx, PALETTE.soil, px, py, x, y, 0xd4, 0.2, 3, 1);
         break;
+      case "open_sea":
+      case "swell": {
+        // Le large : houle longue et oblique, calculée en coordonnées monde
+        // pour qu'une crête traverse la zone d'un bout à l'autre. Une phase
+        // par tuile redécoupait la mer en rayures de seize pixels.
+        const deep = kind === "open_sea";
+        fill(ctx, deep ? "#123047" : PALETTE.deepWater, px, py, 16, 16);
+        for (let column = 0; column < 16; column += 2) {
+          const worldX = px + column;
+          const crest = Math.round(Math.sin((worldX + py * 0.55) / 21) * 5.5 + 8);
+          const second = Math.round(Math.sin((worldX * 0.7 - py * 0.9) / 15) * 4 + 8);
+          fill(ctx, PALETTE.deepWater, worldX, py + crest, 2, 2);
+          fill(ctx, deep ? PALETTE.water : PALETTE.waterLight, worldX, py + crest, 2, 1);
+          if (!deep) fill(ctx, PALETTE.water, worldX, py + second, 2, 1);
+        }
+        specks(ctx, PALETTE.waterLight, px, py, x, y, 0x2f1, deep ? 1 : 2);
+        if (map) this.drawFoam(ctx, map, x, y, px, py, frame);
+        break;
+      }
+      case "coral":
+        fill(ctx, PALETTE.deepWater, px, py, 16, 16);
+        fill(ctx, PALETTE.roofDark, px + 3, py + 6, 4, 8);
+        fill(ctx, PALETTE.roof, px + 4, py + 4, 2, 8);
+        fill(ctx, PALETTE.rose, px + 3, py + 3, 4, 3);
+        fill(ctx, PALETTE.purple, px + 9, py + 7, 5, 7);
+        fill(ctx, PALETTE.rose, px + 10, py + 5, 3, 4);
+        fill(ctx, PALETTE.waterLight, px + 8, py + 12, 2, 2);
+        break;
+      case "sea_rock":
+        shadow(ctx, px, py, 14);
+        fill(ctx, PALETTE.ink, px + 1, py + 3, 14, 12);
+        fill(ctx, PALETTE.stoneDark, px + 2, py + 2, 12, 11);
+        fill(ctx, PALETTE.stone, px + 3, py + 2, 9, 7);
+        fill(ctx, PALETTE.stoneLight, px + 4, py + 2, 4, 2);
+        fill(ctx, PALETTE.leafDark, px + 3, py + 10, 5, 2);
+        break;
+      case "bollard":
+        shadow(ctx, px, py, 9);
+        fill(ctx, PALETTE.ink, px + 5, py + 3, 6, 12);
+        fill(ctx, PALETTE.woodDark, px + 5, py + 2, 6, 12);
+        fill(ctx, PALETTE.wood, px + 6, py + 3, 3, 9);
+        fill(ctx, PALETTE.woodLight, px + 4, py + 1, 8, 3);
+        fill(ctx, PALETTE.sandDark, px + 4, py + 8, 9, 2);
+        break;
+      case "net":
+        fill(ctx, PALETTE.sandDark, px + 1, py + 4, 14, 1);
+        fill(ctx, PALETTE.sandDark, px + 1, py + 9, 14, 1);
+        for (let strand = 1; strand < 16; strand += 4) {
+          fill(ctx, PALETTE.sandDark, px + strand, py + 3, 1, 8);
+        }
+        fill(ctx, PALETTE.woodDark, px + 2, py + 11, 12, 2);
+        fill(ctx, PALETTE.cream, px + 6, py + 6, 2, 2);
+        break;
+      case "driftwood":
+        shadow(ctx, px, py, 15);
+        fill(ctx, PALETTE.stoneDark, px, py + 6, 16, 6);
+        fill(ctx, PALETTE.stoneLight, px + 1, py + 6, 14, 2);
+        fill(ctx, PALETTE.woodDark, px + 3, py + 4, 3, 3);
+        fill(ctx, PALETTE.woodDark, px + 10, py + 3, 4, 4);
+        break;
+      case "palm":
+        shadow(ctx, px, py, 10);
+        fill(ctx, PALETTE.woodDark, px + 7, py + 4, 3, 12);
+        fill(ctx, PALETTE.wood, px + 8, py + 5, 1, 10);
+        for (const [dx, dy] of [[-6, -1], [5, -1], [-4, 3], [4, 3]] as const) {
+          fill(ctx, PALETTE.pineDark, px + 8 + dx, py + 2 + dy, 6, 2);
+          fill(ctx, PALETTE.leaf, px + 8 + dx, py + 1 + dy, 5, 2);
+        }
+        fill(ctx, PALETTE.leafLight, px + 5, py, 6, 3);
+        fill(ctx, PALETTE.yellow, px + 6, py + 4, 2, 2);
+        break;
+      case "lava": {
+        // Coulée : croûte sombre qui se fend sur de la lumière.
+        const pulse = Math.floor(frame / 9) % 3;
+        fill(ctx, "#3a1408", px, py, 16, 16);
+        specks(ctx, "#ff8a2a", px, py, x, y, 0x201, 6, 3);
+        specks(ctx, "#ffd166", px, py, x, y, 0x202, 4, 2);
+        fill(ctx, "#ff5a1a", px + 1 + pulse, py + 6, 13 - pulse, 2);
+        fill(ctx, "#ffe7a0", px + 4, py + 7, 5 - pulse, 1);
+        specks(ctx, "#1c0a06", px, py, x, y, 0x203, 5, 2);
+        break;
+      }
+      case "basalt":
+        fill(ctx, "#2b2630", px, py, 16, 16);
+        specks(ctx, "#3d3742", px, py, x, y, 0x211, 7, 3);
+        specks(ctx, "#544c5a", px, py, x, y, 0x212, 4);
+        specks(ctx, "#181419", px, py, x, y, 0x213, 4, 2);
+        break;
+      case "ash":
+        fill(ctx, "#4a4450", px, py, 16, 16);
+        specks(ctx, "#5d5666", px, py, x, y, 0x221, 7, 3);
+        specks(ctx, "#3a3441", px, py, x, y, 0x222, 5, 2);
+        specks(ctx, "#7a6f80", px, py, x, y, 0x223, 3);
+        break;
+      case "obsidian":
+        shadow(ctx, px, py, 14);
+        fill(ctx, "#120e18", px + 1, py + 1, 14, 14);
+        fill(ctx, "#241b30", px + 2, py + 2, 11, 11);
+        fill(ctx, "#3d2b4f", px + 3, py + 3, 5, 6);
+        fill(ctx, PALETTE.purple, px + 4, py + 3, 2, 3);
+        fill(ctx, "#0a0710", px + 9, py + 8, 4, 5);
+        break;
+      case "lighthouse": {
+        // Tour à bandes, et son faisceau qui tourne.
+        const beam = Math.floor(frame / 22) % 4;
+        fill(ctx, PALETTE.ink, px + 2, py, 12, 16);
+        for (let band = 0; band < 16; band += 4) {
+          fill(ctx, band % 8 === 0 ? PALETTE.cream : PALETTE.red, px + 3, py + band, 10, 4);
+        }
+        fill(ctx, PALETTE.ink, px + 1, py, 14, 4);
+        fill(ctx, PALETTE.yellow, px + 4, py + 1, 8, 3);
+        ctx.globalAlpha = 0.5;
+        fill(ctx, PALETTE.cream, px + (beam - 1) * 7, py - 2, 6, 4);
+        ctx.globalAlpha = 1;
+        break;
+      }
+      case "hull":
+        shadow(ctx, px, py, 16);
+        fill(ctx, PALETTE.ink, px, py + 3, 16, 12);
+        fill(ctx, PALETTE.woodDark, px, py + 4, 16, 10);
+        for (let plank = 5; plank < 14; plank += 3) {
+          fill(ctx, PALETTE.wood, px + 1, py + plank, 14, 2);
+        }
+        fill(ctx, PALETTE.woodLight, px + 2, py + 4, 12, 1);
+        fill(ctx, PALETTE.ink, px + 5, py + 8, 4, 3);
+        break;
+      case "portcullis":
+        fill(ctx, PALETTE.ink, px, py, 16, 16);
+        for (let bar = 1; bar < 16; bar += 4) fill(ctx, PALETTE.stoneDark, px + bar, py, 2, 16);
+        for (let rail = 2; rail < 16; rail += 6) fill(ctx, PALETTE.stoneDark, px, py + rail, 16, 2);
+        fill(ctx, PALETTE.stoneLight, px + 1, py + 2, 1, 12);
+        fill(ctx, PALETTE.stoneLight, px + 9, py + 2, 1, 12);
+        break;
+
       case "marsh_grass":
         // La tourbe manquait d'écart de valeur : tout le marais se lisait
         // comme un aplat vert. On creuse les creux et l'on pose des flaques.

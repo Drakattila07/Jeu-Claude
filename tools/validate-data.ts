@@ -12,7 +12,7 @@ import { ITEMS } from "../src/data/items/core";
 import { createZoneMap } from "../src/world/ZoneMapFactory";
 import { TileMap } from "../src/world/TileMap";
 import { TileSet } from "../src/world/TileSet";
-import { EDGES, gatewayFor, neighbourOf, oppositeEdge } from "../src/world/WorldGen";
+import { EDGES, gatewayFor, isNavalZone, neighbourOf, oppositeEdge } from "../src/world/WorldGen";
 
 const tileSet = new TileSet();
 
@@ -102,6 +102,9 @@ let openTiles = 0;
 let solidTiles = 0;
 for (const zone of WORLD_ZONES) {
   const map = new TileMap(createZoneMap(zone), tileSet);
+  // En mer, « praticable » veut dire navigable : c'est la coque qui décide.
+  const naval = isNavalZone(zone);
+  const blocked = (x: number, y: number): boolean => map.solidFor(x, y, naval);
 
   for (const edge of EDGES) {
     const neighbour = neighbourOf(zone, edge);
@@ -119,14 +122,14 @@ for (const zone of WORLD_ZONES) {
     if (edge === "west" || edge === "east") {
       const x = edge === "west" ? 0 : map.width - 1;
       const inner = edge === "west" ? 1 : map.width - 2;
-      for (let y = 0; y < map.height; y += 1) if (!map.isSolid(x, y)) entries.push({ x: inner, y });
+      for (let y = 0; y < map.height; y += 1) if (!blocked(x, y)) entries.push({ x: inner, y });
     } else {
       const y = edge === "north" ? 0 : map.height - 1;
       const inner = edge === "north" ? 1 : map.height - 2;
-      for (let x = 0; x < map.width; x += 1) if (!map.isSolid(x, y)) entries.push({ x, y: inner });
+      for (let x = 0; x < map.width; x += 1) if (!blocked(x, y)) entries.push({ x, y: inner });
     }
   }
-  const usable = entries.filter((point) => !map.isSolid(point.x, point.y));
+  const usable = entries.filter((point) => !blocked(point.x, point.y));
   if (usable.length === 0) {
     errors.push(`Zone ${zone.id}: aucune entrée praticable.`);
     continue;
@@ -139,7 +142,7 @@ for (const zone of WORLD_ZONES) {
     for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
       const nx = current.x + dx;
       const ny = current.y + dy;
-      if (nx < 0 || ny < 0 || nx >= map.width || ny >= map.height || map.isSolid(nx, ny)) continue;
+      if (nx < 0 || ny < 0 || nx >= map.width || ny >= map.height || blocked(nx, ny)) continue;
       const key = ny * map.width + nx;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -151,7 +154,7 @@ for (const zone of WORLD_ZONES) {
 
   for (let y = 1; y < map.height - 1; y += 1) {
     for (let x = 1; x < map.width - 1; x += 1) {
-      if (map.isSolid(x, y)) solidTiles += 1;
+      if (blocked(x, y)) solidTiles += 1;
       else openTiles += 1;
     }
   }
@@ -163,6 +166,8 @@ for (const object of INTERACTABLES) {
   const map = new TileMap(createZoneMap(zone), tileSet);
   const tileX = Math.floor(object.x / 16);
   const tileY = Math.floor(object.y / 16) + (object.kind === "door" ? 1 : 0);
+  // Un objet du monde se fouille toujours à pied, même sur une île : c'est en
+  // mode terrestre qu'il faut vérifier qu'on peut l'atteindre.
   const reachable = [[0, 0], [0, 1], [0, -1], [1, 0], [-1, 0]]
     .some(([dx, dy]) => !map.isSolid(tileX + dx!, tileY + dy!));
   if (!reachable) errors.push(`Interactable ${object.id}: muré dans ${object.zone}.`);

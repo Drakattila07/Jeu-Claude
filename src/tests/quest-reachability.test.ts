@@ -39,6 +39,9 @@ describe("atteignabilité des quêtes", () => {
     const advanceable = new Set<string>([
       "defeat:wolf", "collect:fish", "defeat:mother_tree", "choice:ending",
       "talkTo:nessa",
+      // Gardiens vaincus : le moteur notifie leur défaite comme celle de
+      // n'importe quelle créature, par le type de la créature.
+      "defeat:green_knight", "defeat:dragon",
     ]);
     for (const trigger of CAMPAIGN_TRIGGERS) {
       if (trigger.quest) advanceable.add(`${trigger.quest.type}:${trigger.quest.target}`);

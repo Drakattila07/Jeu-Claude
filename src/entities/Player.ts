@@ -29,6 +29,9 @@ export class Player extends Entity {
   /** Bonus d'attaque cumulé via les récompenses de quête. */
   swordBonus = 0;
   stamina = MAX_STAMINA;
+  /** À la barre : l'eau devient praticable, la terre ne l'est plus. */
+  sailing = false;
+  private drift = { x: 0, y: 0 };
   private demon = false;
   attackFrame = -1;
   /** Frames de charge accumulées avant de relâcher le coup tournoyant. */
@@ -82,8 +85,17 @@ export class Player extends Entity {
   /** Replace le personnage sur une case praticable de la carte courante. */
   unstick(): void {
     this.position = resolveOverlap(this.position, this.hitbox,
-      (tileX, tileY) => this.map.isSolid(tileX, tileY),
+      (tileX, tileY) => this.map.solidFor(tileX, tileY, this.sailing),
       { width: this.map.pixelWidth, height: this.map.pixelHeight });
+  }
+
+  /** Monte ou descend de barque, et remet l'élan à zéro. */
+  setSailing(active: boolean): void {
+    this.sailing = active;
+    this.drift = { x: 0, y: 0 };
+    this.attackFrame = -1;
+    this.chargeFrames = 0;
+    this.rollFrames = 0;
   }
 
   update(): void {
@@ -100,6 +112,11 @@ export class Player extends Entity {
         this.attackFrame = -1;
         this.spinFrames = -1;
       }
+    }
+
+    if (this.sailing) {
+      this.updateSailing();
+      return;
     }
 
     // Le recul prend la main sur les commandes : on subit le coup avant de repartir.
@@ -145,13 +162,41 @@ export class Player extends Entity {
     } else this.walkFrame = 0;
   }
 
+  /**
+   * Barre.
+   *
+   * Une coque ne s'arrête pas net : l'élan s'accumule et se dissipe. Sans
+   * cette inertie, naviguer serait exactement marcher, en bleu.
+   */
+  private updateSailing(): void {
+    const wanted = this.input.direction();
+    const top = 2.5;
+    this.drift.x = (this.drift.x + wanted.x * 0.14) * 0.972;
+    this.drift.y = (this.drift.y + wanted.y * 0.14) * 0.972;
+    const speed = Math.hypot(this.drift.x, this.drift.y);
+    if (speed > top) {
+      this.drift.x = (this.drift.x / speed) * top;
+      this.drift.y = (this.drift.y / speed) * top;
+    }
+    if (Math.abs(this.drift.x) > Math.abs(this.drift.y)) {
+      if (Math.abs(this.drift.x) > 0.12) this.direction = this.drift.x > 0 ? "right" : "left";
+    } else if (Math.abs(this.drift.y) > 0.12) {
+      this.direction = this.drift.y > 0 ? "down" : "up";
+    }
+    this.velocity = { x: this.drift.x, y: this.drift.y };
+    this.slide(this.drift.x, this.drift.y);
+    this.walkFrame = (this.walkFrame + 1) % 32;
+    // Sillage : une éclaboussure régulière tant que la barque avance.
+    if (speed > 0.7 && this.walkFrame % 12 === 0) this.splashed = true;
+  }
+
   private slide(dx: number, dy: number): void {
     this.position = moveOnGrid(this.position, { x: dx, y: dy }, this.hitbox,
-      (tileX, tileY) => this.map.isSolid(tileX, tileY));
+      (tileX, tileY) => this.map.solidFor(tileX, tileY, this.sailing));
   }
 
   private tryRoll(wanted: Readonly<Vec2>): void {
-    if (this.rollCooldown > 0 || this.stamina < ROLL_COST) return;
+    if (this.sailing || this.rollCooldown > 0 || this.stamina < ROLL_COST) return;
     const facing = wanted.x !== 0 || wanted.y !== 0 ? wanted : this.facingVector();
     this.rollDirection = facing;
     this.rollFrames = ROLL_FRAMES;
@@ -176,7 +221,7 @@ export class Player extends Entity {
   }
 
   startAttack(): boolean {
-    if (this.attackFrame >= 0 || this.rollFrames > 0) return false;
+    if (this.sailing || this.attackFrame >= 0 || this.rollFrames > 0) return false;
     this.attackFrame = 0;
     this.spinFrames = -1;
     return true;
@@ -235,6 +280,12 @@ export class Player extends Entity {
     const bob = walking && step === 1 ? -1 : 0;
 
     ctx.save();
+
+    if (this.sailing) {
+      this.drawBoat(ctx, x, y);
+      ctx.restore();
+      return;
+    }
 
     // Ombre portée : elle se resserre pendant la roulade, comme un saut.
     ctx.globalAlpha = 0.34;
@@ -310,6 +361,65 @@ export class Player extends Entity {
     if (this.isCharging) this.drawCharge(ctx, x, y);
     if (this.attackFrame >= 0) this.drawBlade(ctx, x, y, bob);
     ctx.restore();
+  }
+
+  /**
+   * Barque vue de dessus : coque, banc, voile et gouvernail. Elle tangue au
+   * rythme de la houle et s'incline dans le sens de la marche — sans quoi on
+   * aurait l'impression de faire glisser une caisse sur l'eau.
+   */
+  private drawBoat(ctx: CanvasRenderingContext2D, x: number, y: number): void {
+    const roll = Math.round(Math.sin(this.walkFrame / 5) * 1);
+    const vertical = this.direction === "up" || this.direction === "down";
+
+    // Sillage.
+    ctx.globalAlpha = 0.34;
+    ctx.fillStyle = PALETTE.waterLight;
+    ctx.fillRect(x - 2, y + 13 + roll, 20, 2);
+    ctx.fillRect(x + 1, y + 15 + roll, 14, 1);
+    ctx.globalAlpha = 1;
+
+    ctx.translate(x + 8, y + 8 + roll);
+    if (vertical) ctx.rotate(Math.PI / 2);
+
+    // Coque.
+    ctx.fillStyle = PALETTE.ink;
+    ctx.fillRect(-11, -5, 22, 11);
+    ctx.fillStyle = PALETTE.woodDark;
+    ctx.fillRect(-10, -4, 20, 9);
+    ctx.fillStyle = PALETTE.wood;
+    ctx.fillRect(-9, -3, 18, 5);
+    ctx.fillStyle = PALETTE.woodLight;
+    ctx.fillRect(-8, -3, 16, 1);
+    // Proue et poupe.
+    ctx.fillStyle = PALETTE.ink;
+    ctx.fillRect(this.direction === "left" ? -13 : 11, -3, 2, 6);
+    // Banc et gouvernail.
+    ctx.fillStyle = PALETTE.woodDark;
+    ctx.fillRect(-3, -4, 3, 9);
+    ctx.fillRect(6, -1, 5, 2);
+    // Mât et voile.
+    ctx.fillStyle = PALETTE.woodLight;
+    ctx.fillRect(-1, -9, 2, 12);
+    ctx.fillStyle = PALETTE.cream;
+    ctx.fillRect(0, -9, 8 + roll, 8);
+    ctx.fillStyle = PALETTE.sandLight;
+    ctx.fillRect(0, -9, 8 + roll, 2);
+    ctx.fillStyle = PALETTE.roof;
+    ctx.fillRect(2, -6, 4, 2);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+    // La cartographe, assise à la barre.
+    const head = { x: x + 5, y: y + 3 + roll };
+    ctx.fillStyle = PALETTE.ink;
+    ctx.fillRect(head.x - 1, head.y - 1, 8, 8);
+    ctx.fillStyle = this.demon ? PALETTE.rose : PALETTE.sandLight;
+    ctx.fillRect(head.x, head.y + 1, 6, 5);
+    ctx.fillStyle = this.demon ? PALETTE.roofDark : PALETTE.leaf;
+    ctx.fillRect(head.x - 1, head.y - 1, 8, 3);
+    ctx.fillStyle = PALETTE.ink;
+    ctx.fillRect(head.x + 1, head.y + 3, 1, 1);
+    ctx.fillRect(head.x + 4, head.y + 3, 1, 1);
   }
 
   private drawRoll(ctx: CanvasRenderingContext2D, x: number, y: number): void {

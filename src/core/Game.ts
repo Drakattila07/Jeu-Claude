@@ -6,11 +6,12 @@ import {
 import { TileMap } from "../world/TileMap";
 import { TileSet } from "../world/TileSet";
 import { Player } from "../entities/Player";
-import { Camera } from "./Camera";
+import type { Rect, Vec2 } from "../entities/Entity";
+import { Camera, type Edge } from "./Camera";
 import { Transition } from "../ui/Transition";
 import { ZoneRegistry } from "../world/Zone";
 import { INTERACTABLES } from "../data/interactables";
-import { WORLD_ZONES } from "../data/world";
+import { WORLD_ZONES, isOpenSea } from "../data/world";
 import { Interactable, ZoneObjectState } from "../entities/Interactable";
 import { Combat, overlaps } from "../systems/Combat";
 import { CASTLE_ENEMY_SPAWNS, type EnemySpawn } from "../data/enemies";
@@ -52,12 +53,18 @@ import { Requirements, type WorldState } from "../systems/Requirements";
 import { createZoneMap } from "../world/ZoneMapFactory";
 import { gatewayFor, oppositeEdge } from "../world/WorldGen";
 import { populateZone } from "../systems/Spawner";
+import { isNavalZone } from "../world/WorldGen";
 import { TitleScreen } from "../ui/TitleScreen";
 import { ITEMS, itemEffect, type ItemId } from "../data/items/core";
 import {
   INTERIOR_ENTRY, INTERIOR_NAMES, createInteriorMap, nearInteriorExit, type InteriorKind,
 } from "../world/Interiors";
 import { BurningWorld } from "../world/BurningWorld";
+import { Fortress } from "../systems/Fortress";
+import {
+  createRoomMap, nearFortressExit, roomEntry, ROOM_TILES_X, ROOM_TILES_Y,
+} from "../world/Dungeons";
+import { Dragon } from "../entities/Dragon";
 import { drawText } from "../ui/Font";
 
 export const FIXED_STEP_MS = 1000 / 60;
@@ -135,6 +142,8 @@ export class Game {
   private exteriorReturnPosition = { x: 240, y: 300 };
   private readonly burning = new BurningWorld();
   private familiar: LanternCat | null = null;
+  private readonly fortress = new Fortress();
+  private dragon: Dragon | null = null;
   private lastScheduleHour = -1;
   private lastPopulatedDay = -1;
   private title: TitleScreen;
@@ -195,8 +204,14 @@ export class Game {
     this.textBox.close();
     this.menu.active = false;
     this.interior = null;
+    this.fortress.leave();
     this.clock.setTime(hour);
     this.camera.zone = { x: zoneX, y: zoneY };
+    // Une région de haute mer ne se visite qu'à la barque : l'outil de
+    // vérification doit s'y présenter dans le bon mode, sinon il conclut à
+    // tort que la carte est bouchée.
+    const zone = this.zones.at(this.camera.zone);
+    this.player.setSailing(zone !== null && isNavalZone(zone));
     this.player.position = { x: ZONE_WIDTH / 2, y: ZONE_HEIGHT / 2 };
     this.loadZoneObjects();
     this.player.unstick();
@@ -220,8 +235,8 @@ export class Game {
       hearts: this.player.hearts,
       rupees: this.player.rupees,
       enemies: this.enemies.filter((enemy) => enemy.active).length,
-      inSolid: this.map.isSolid(tileX, tileY),
-      interior: this.interior,
+      inSolid: this.map.solidFor(tileX, tileY, this.player.sailing),
+      interior: this.interior ?? (this.fortress.active ? this.fortress.name : null),
       busy: this.death.active || this.textBox.active || this.menu.active
         || this.shop.active || this.transition.active || this.combat.frozen,
     };
@@ -414,6 +429,7 @@ export class Game {
     if (this.player.isRolling && this.frame % 3 === 0) {
       this.particles.emit(this.player.position.x + 8, this.player.position.y + 14, "dust", 3);
     }
+    this.burnOnLava();
     this.familiar?.update();
     this.updateNpcs();
     this.updateEnemies();
@@ -424,7 +440,23 @@ export class Game {
     if (this.input.wasPressed("A")) this.interact();
     this.updateAttacks();
     this.checkCastleRelic();
+    if (this.fortress.active) this.checkRoomCleared();
+    this.updateDragon();
     this.checkZoneEdge();
+  }
+
+  /**
+   * La lave brûle. Elle ne bloque pas — on peut la traverser en courant — mais
+   * chaque instant passé dedans coûte : c'est le terrain qui devient un
+   * adversaire, sans qu'il faille y poser un ennemi.
+   */
+  private burnOnLava(): void {
+    const harm = this.map.harmAt(
+      Math.floor((this.player.position.x + 8) / TILE_SIZE),
+      Math.floor((this.player.position.y + 12) / TILE_SIZE));
+    if (harm <= 0) return;
+    this.particles.emit(this.player.position.x + 8, this.player.position.y + 12, "ember", 2);
+    if (this.player.takeDamage(harm, { x: 0, y: -1 })) this.onPlayerHurt(harm);
   }
 
   private updateNpcs(): void {
@@ -568,6 +600,7 @@ export class Game {
   private resolveSwordHits(): void {
     const sword = this.player.attackHitbox();
     const spinning = this.player.isSpinning;
+    this.resolveDragonHit(sword, spinning);
     const damage = this.player.attackDamage * (spinning ? 2 : 1);
 
     if (this.boss?.active) {
@@ -739,7 +772,59 @@ export class Game {
 
   // — Interactions ————————————————————————————————————————
 
+  /**
+   * Embarquement et débarquement.
+   *
+   * On monte à bord depuis la terre quand de l'eau navigable borde le pas ;
+   * on accoste depuis la barque quand une terre praticable la borde. Les deux
+   * gestes passent par la même touche que le reste : rien de nouveau à
+   * apprendre.
+   */
+  private tryBoarding(): boolean {
+    if (!this.flags.has("boat")) return false;
+    const centre = { x: this.player.position.x + 8, y: this.player.position.y + 10 };
+    const tileX = Math.floor(centre.x / TILE_SIZE);
+    const tileY = Math.floor(centre.y / TILE_SIZE);
+    const around: readonly (readonly [number, number])[] = [
+      [1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1],
+      [2, 0], [-2, 0], [0, 2], [0, -2],
+    ];
+
+    if (!this.player.sailing) {
+      for (const [dx, dy] of around) {
+        if (!this.map.isSailable(tileX + dx, tileY + dy)) continue;
+        this.player.setSailing(true);
+        this.player.position = {
+          x: (tileX + dx) * TILE_SIZE, y: (tileY + dy) * TILE_SIZE - 2,
+        };
+        this.player.unstick();
+        this.particles.emit(centre.x, centre.y, "splash", 12);
+        this.audio.playSfx("splash");
+        this.showNotice("Vous poussez la barque à l'eau.", 110);
+        return true;
+      }
+      return false;
+    }
+
+    for (const [dx, dy] of around) {
+      if (this.map.solidFor(tileX + dx, tileY + dy, false)) continue;
+      this.player.setSailing(false);
+      this.player.position = { x: (tileX + dx) * TILE_SIZE, y: (tileY + dy) * TILE_SIZE };
+      this.player.unstick();
+      this.particles.emit(centre.x, centre.y, "dust", 8);
+      this.showNotice("Vous tirez la barque sur la grève.", 110);
+      return true;
+    }
+    this.showNotice("Aucune terre où accoster ici.", 90);
+    this.audio.playSfx("deny");
+    return true;
+  }
+
   private interact(): void {
+    if (this.fortress.active) {
+      this.interactInFortress();
+      return;
+    }
     if (this.interior && nearInteriorExit(this.player.position)) {
       this.leaveInterior();
       return;
@@ -749,12 +834,15 @@ export class Game {
       return;
     }
 
-    const nearest = this.interactables
+    const nearest = this.player.sailing ? undefined : this.interactables
       .filter((object) => object.distanceTo(this.player.position) <= REACH)
       .sort((a, b) => a.distanceTo(this.player.position) - b.distanceTo(this.player.position))[0];
-    const nearestNpc = this.npcs
+    const nearestNpc = this.player.sailing ? undefined : this.npcs
       .filter((npc) => npc.distanceTo(this.player.position) <= REACH)
       .sort((a, b) => a.distanceTo(this.player.position) - b.distanceTo(this.player.position))[0];
+
+    // Rien à portée : la touche sert alors à embarquer ou à accoster.
+    if (!nearest && !nearestNpc && this.tryBoarding()) return;
 
     if (nearestNpc && (!nearest
       || nearestNpc.distanceTo(this.player.position) < nearest.distanceTo(this.player.position))) {
@@ -763,9 +851,12 @@ export class Game {
     }
     if (!nearest) return;
     if (nearest.data.kind === "door") {
-      this.enterInterior(nearest.data.id === "hermitage_door" ? "hermitage"
-        : nearest.data.id === "castle_gate" ? "castle"
-          : nearest.data.id === "witch_tower_door" ? "tower" : "cottage");
+      if (nearest.data.id === "fortress_gate") this.enterFortress("vertepierre");
+      else {
+        this.enterInterior(nearest.data.id === "hermitage_door" ? "hermitage"
+          : nearest.data.id === "castle_gate" ? "castle"
+            : nearest.data.id === "witch_tower_door" ? "tower" : "cottage");
+      }
       return;
     }
     this.useInteractable(nearest);
@@ -825,7 +916,16 @@ export class Game {
       ? this.campaign.trigger(nearest.data.id, this.frame) : null;
     const sideMessage = "changed" in result && result.changed
       ? this.sideActivities.trigger(nearest.data.id, this.frame) : null;
-    if ("changed" in result && result.changed && nearest.data.kind === "chest") {
+    const opened = "changed" in result && result.changed;
+    if (opened && nearest.data.grants) {
+      // Un coffre peut remettre un objet nommé : c'est ce qui permet aux
+      // quêtes de collecte d'exister sans déclencheur scénarisé.
+      const { item, count } = nearest.data.grants;
+      this.inventory.add(item, count);
+      this.floaters.reward(nearest.position.x + 8, nearest.position.y - 6,
+        `${ITEMS[item].name} ×${count}`);
+      this.particles.emit(nearest.position.x + 8, nearest.position.y + 4, "spark", 14);
+    } else if (opened && nearest.data.kind === "chest") {
       for (let index = 0; index < 4; index += 1) {
         this.pickups.push(new Pickup(
           { x: nearest.position.x + 8, y: nearest.position.y + 8 }, "rupee", 5, this.frame));
@@ -953,12 +1053,22 @@ export class Game {
   }
 
   private checkZoneEdge(): void {
+    if (this.fortress.active) { this.checkRoomEdge(); return; }
     if (this.interior) return;
     const edge = this.camera.edgeFor(this.player.position);
     if (!edge) return;
     const destination = this.camera.adjacent(edge);
-    if (!this.zones.canEnter(destination)) {
+    const target = this.zones.at(destination);
+    if (!target) {
       this.player.position = this.camera.blockedPosition(edge, this.player.position);
+      return;
+    }
+    // Le large ne s'ouvre qu'avec la Carte des Courants : sans elle, on ne
+    // trouve pas la passe et le ressac vous rend à la côte.
+    if (isOpenSea(target) && !this.flags.has("sea_chart")) {
+      this.player.position = this.camera.blockedPosition(edge, this.player.position);
+      this.showNotice("Les courants vous repoussent. Il faudrait la Carte des Courants.", 170);
+      this.audio.playSfx("deny");
       return;
     }
     // Le passage de la zone d'arrivée est le même bord physique que celui
@@ -994,6 +1104,232 @@ export class Game {
   }
 
   private currentZone() { return this.zones.at(this.camera.zone); }
+
+  /** Sous un toit : maison, ermitage ou salle de forteresse. */
+  private get indoors(): boolean { return this.interior !== null || this.fortress.active; }
+
+  // — Le dragon ————————————————————————————————————————————
+
+  /**
+   * Le dragon ne se combat pas comme le reste : tant qu'il vole, l'épée passe
+   * sous lui. On encaisse ses passes, et l'on frappe pendant qu'il se pose.
+   */
+  private updateDragon(): void {
+    const dragon = this.dragon;
+    if (!dragon?.active) return;
+    dragon.update();
+
+    const playerBox = {
+      x: this.player.position.x + this.player.hitbox.x,
+      y: this.player.position.y + this.player.hitbox.y,
+      width: this.player.hitbox.width,
+      height: this.player.hitbox.height,
+    };
+    for (const flame of dragon.flameBounds()) {
+      if (!overlaps(flame, playerBox)) continue;
+      const direction = {
+        x: this.player.position.x - (flame.x + 7),
+        y: this.player.position.y - (flame.y + 7),
+      };
+      const length = Math.max(1, Math.hypot(direction.x, direction.y));
+      if (this.player.takeDamage(2, { x: direction.x / length, y: direction.y / length })) {
+        this.onPlayerHurt(2);
+      }
+    }
+    // En piqué, la masse elle-même écrase.
+    if (dragon.state === "dive" && dragon.altitude < 14 && overlaps(dragon.bounds, playerBox)) {
+      const direction = {
+        x: this.player.position.x - (dragon.position.x + 40),
+        y: this.player.position.y - (dragon.position.y + 40),
+      };
+      const length = Math.max(1, Math.hypot(direction.x, direction.y));
+      if (this.player.takeDamage(2, { x: direction.x / length, y: direction.y / length })) {
+        this.onPlayerHurt(2);
+      }
+    }
+    if (dragon.state === "breathe" && this.frame % 6 === 0) {
+      this.particles.emit(dragon.position.x + 40, dragon.position.y + 6, "ember", 3);
+    }
+  }
+
+  private resolveDragonHit(sword: Rect, spinning: boolean): void {
+    const dragon = this.dragon;
+    if (!dragon?.active || !overlaps(sword, dragon.bounds)) return;
+    if (!this.combat.confirmHit("dragon", true)) return;
+    const outcome = dragon.hit(this.player.attackDamage * (spinning ? 2 : 1));
+    if (outcome === "guarded") {
+      this.audio.playSfx("deny");
+      this.floaters.push(dragon.position.x + 40, dragon.position.y + 10, "hors d'atteinte",
+        PALETTE.stoneLight);
+      return;
+    }
+    this.audio.playSfx("hit");
+    this.floaters.damage(dragon.position.x + 40, dragon.position.y + 10,
+      this.player.attackDamage * (spinning ? 2 : 1), true);
+    this.particles.emit(dragon.position.x + 40, dragon.position.y + 40, "ember", 10);
+    if (outcome !== "slain") return;
+
+    this.flags.set("dragon_slain");
+    this.inventory.add("dragon_scale");
+    this.quests.notify("defeat", "dragon", this.frame);
+    this.combat.impact(6, 40);
+    this.particles.emit(dragon.position.x + 40, dragon.position.y + 40, "ember", 40);
+    this.textBox.open(
+      "Le dragon s'abat sur la roche noire. La fumée retombe pour la première "
+      + "fois depuis des siècles. Une écaille tiède reste dans votre main.",
+      "LA CALDEIRA");
+    this.audio.playSfx("secret");
+  }
+
+  // — Forteresse ————————————————————————————————————————————
+
+  private enterFortress(id: string): void {
+    if (this.transition.active || this.fortress.active) return;
+    this.exteriorReturnPosition = {
+      x: this.player.position.x,
+      y: Math.min(ZONE_HEIGHT - 40, this.player.position.y + 24),
+    };
+    this.transition.start(() => {
+      if (!this.fortress.enter(id)) return;
+      this.interior = null;
+      this.player.setSailing(false);
+      this.loadRoom(null);
+      this.hud.announce(this.fortress.name, "Trois portes, trois clés");
+    });
+  }
+
+  private leaveFortress(): void {
+    if (this.transition.active || !this.fortress.active) return;
+    this.transition.start(() => {
+      this.fortress.leave();
+      this.loadZoneObjects();
+      this.player.position = { ...this.exteriorReturnPosition };
+      this.player.unstick();
+      this.camera.snapTo(this.player.position);
+      this.announceZone();
+    });
+  }
+
+  /** Charge la salle courante et son contenu. */
+  private loadRoom(from: Edge | null): void {
+    const definition = this.fortress.definition;
+    const room = this.fortress.room;
+    if (!definition || !room) return;
+    this.useMap(new TileMap(
+      createRoomMap(definition, room, this.fortress.unlockedDoors), this.tileSet));
+    this.player.position = { ...roomEntry(from) };
+    this.player.unstick();
+    this.camera.snapTo(this.player.position);
+    this.interactables = [];
+    this.npcs = [];
+    this.pickups = [];
+    this.projectiles = [];
+    this.familiar = null;
+    this.boss = null;
+    this.enemies = this.fortress.spawns().map((spawn) => new Enemy(spawn, this.player, this.map));
+    this.particles.clear();
+  }
+
+  /** Franchissement d'une porte entre deux salles. */
+  private checkRoomEdge(): void {
+    const width = ROOM_TILES_X * TILE_SIZE;
+    const height = ROOM_TILES_Y * TILE_SIZE;
+    const edge: Edge | null = this.player.position.x < -2 ? "west"
+      : this.player.position.x > width - 14 ? "east"
+        : this.player.position.y < -2 ? "north"
+          : this.player.position.y > height - 14 ? "south" : null;
+    if (!edge) return;
+
+    const passage = this.fortress.passage(edge);
+    if (!passage || passage.locked) {
+      this.player.position = this.blockedInRoom(edge, width, height);
+      return;
+    }
+    this.transition.start(() => {
+      this.fortress.moveTo(passage.room);
+      this.loadRoom(edge);
+    });
+  }
+
+  private blockedInRoom(edge: Edge, width: number, height: number): Vec2 {
+    if (edge === "west") return { x: 2, y: this.player.position.y };
+    if (edge === "east") return { x: width - 18, y: this.player.position.y };
+    if (edge === "north") return { x: this.player.position.x, y: 2 };
+    return { x: this.player.position.x, y: height - 18 };
+  }
+
+  /**
+   * « Agir » dans une forteresse : sortir par la herse d'entrée, ou ouvrir une
+   * porte verrouillée si l'on porte une clé.
+   */
+  private interactInFortress(): void {
+    if (this.fortress.room?.kind === "entrance" && nearFortressExit(this.player.position)) {
+      this.leaveFortress();
+      return;
+    }
+    const locked = this.fortress.lockedEdges();
+    if (locked.length === 0) return;
+
+    const width = ROOM_TILES_X * TILE_SIZE;
+    const height = ROOM_TILES_Y * TILE_SIZE;
+    const near = locked.find((edge) => {
+      if (edge === "west") return this.player.position.x < 64;
+      if (edge === "east") return this.player.position.x > width - 80;
+      if (edge === "north") return this.player.position.y < 64;
+      return this.player.position.y > height - 80;
+    });
+    if (!near) return;
+
+    if (!this.inventory.remove("fortress_key")) {
+      this.showNotice("La herse est verrouillée. Il faudrait une clé de Vertepierre.", 160);
+      this.audio.playSfx("deny");
+      return;
+    }
+    this.fortress.unlock(near);
+    this.useMap(new TileMap(
+      createRoomMap(this.fortress.definition!, this.fortress.room!, this.fortress.unlockedDoors),
+      this.tileSet));
+    this.showNotice("La clé tourne. La herse remonte en grinçant.", 150);
+    this.particles.emit(this.player.position.x + 8, this.player.position.y + 8, "dust", 12);
+    this.audio.playSfx("secret");
+    this.combat.impact(2, 10);
+  }
+
+  /** Récompenses d'une salle une fois ses gardes abattus. */
+  private checkRoomCleared(): void {
+    const room = this.fortress.room;
+    if (!room || this.fortress.isCleared()) return;
+    if (this.enemies.length === 0 || this.enemies.some((enemy) => enemy.active)) return;
+    this.fortress.markCleared();
+
+    if (room.dropsKey) {
+      this.inventory.add("fortress_key");
+      this.floaters.reward(this.player.position.x + 8, this.player.position.y - 8,
+        "Clé de Vertepierre");
+      this.audio.playSfx("secret");
+    }
+    if (room.prize === "heart_shard") {
+      this.inventory.add("heart_shard");
+      this.showNotice("Un éclat de cœur repose dans le coffre.", 170);
+    } else if (room.prize === "rupees") {
+      for (let index = 0; index < 5; index += 1) {
+        this.pickups.push(new Pickup(
+          { x: this.player.position.x + 8, y: this.player.position.y }, "rupee", 8, this.frame));
+      }
+    } else if (room.prize === "sea_chart" && !this.flags.has("sea_chart")) {
+      this.inventory.add("sea_chart");
+      this.flags.set("sea_chart");
+      this.quests.notify("defeat", "green_knight", this.frame);
+      this.textBox.open(
+        "Le Chevalier tombe à genoux et ne se relève pas. Sur la table de pierre, "
+        + "roulée dans un étui de cuir : la Carte des Courants. Le large vous est ouvert.",
+        "VERTEPIERRE");
+      this.combat.impact(5, 24);
+    }
+    if (room.kind !== "boss" && room.dropsKey) {
+      this.showNotice("Une clé tombe du ceinturon du garde.", 150);
+    }
+  }
 
   private worldState(): WorldState {
     return {
@@ -1068,6 +1404,8 @@ export class Game {
     this.lastScheduleHour = this.clock.hour;
     this.reloadNpcs();
     this.populate();
+    this.dragon = zone?.id === "caldeira" && !this.flags.has("dragon_slain")
+      ? new Dragon(this.player) : null;
     this.boss = zone?.id === "boss_arena" && this.flags.has("mechanism_repaired")
       && !this.flags.has("boss_defeated") ? new MotherTreeBoss(this.player) : null;
   }
@@ -1110,6 +1448,9 @@ export class Game {
     };
     this.transition.start(() => {
       this.interior = kind;
+      this.fortress.leave();
+      this.dragon = null;
+      this.player.setSailing(false);
       this.useMap(new TileMap(createInteriorMap(kind), this.tileSet));
       this.player.position = { ...INTERIOR_ENTRY };
       this.player.unstick();
@@ -1153,6 +1494,9 @@ export class Game {
   }
 
   private currentSceneId(): string {
+    if (this.fortress.active && this.fortress.room) {
+      return `fortress:${this.fortress.definition!.id}:${this.fortress.room.x},${this.fortress.room.y}`;
+    }
     return this.interior ? `interior:${this.interior}` : (this.currentZone()?.id ?? "unknown");
   }
 
@@ -1174,6 +1518,7 @@ export class Game {
     this.player.rupees = rupeesAfterDeath(this.player.rupees);
     this.player.hearts = this.player.maxHearts;
     this.player.setDemon(false);
+    this.player.setSailing(false);
     this.player.clearImpact();
     this.interior = null;
     this.camera.zone = { ...point.zone };
@@ -1207,6 +1552,7 @@ export class Game {
     this.boss = null;
     this.endingPending = false;
     this.player.setDemon(false);
+    this.player.setSailing(false);
     this.player.clearImpact();
     this.loadZoneObjects();
     this.player.unstick();
@@ -1236,6 +1582,7 @@ export class Game {
       clock: this.clock.snapshot(),
       checkpoint: this.death.snapshot(),
       purchases: this.shop.snapshot(),
+      fortress: this.fortress.snapshot(),
     };
   }
 
@@ -1261,6 +1608,7 @@ export class Game {
     this.clock.restore(data.clock);
     this.death.restore(data.checkpoint);
     this.shop.restore(data.purchases ?? []);
+    this.fortress.restore(data.fortress);
     this.progression.apply(this.player);
     this.quests.refresh();
   }
@@ -1293,8 +1641,8 @@ export class Game {
     if (this.currentZone()?.id === "canal_entry" && !this.interior) this.dungeon.drawWater(ctx);
     this.applyLighting();
     this.weather.draw(ctx, this.camera, this.clock.weather,
-      this.interior ? undefined : this.currentZone()?.biome, this.clock.isNight);
-    drawVignette(ctx, this.interior ? 0.55 : 0.42);
+      this.indoors ? undefined : this.currentZone()?.biome, this.clock.isNight);
+    drawVignette(ctx, this.indoors ? 0.55 : 0.42);
 
     this.drawInterface();
   }
@@ -1320,6 +1668,13 @@ export class Game {
     }
     if (this.familiar) drawables.push({ entity: this.familiar, y: this.familiar.position.y + 16 });
     if (this.boss?.active) drawables.push({ entity: this.boss, y: this.boss.position.y + 74 });
+    // Le dragon passe au-dessus de tout quand il vole, et se range dans le
+    // tri dès qu'il se pose : c'est ce qui rend son atterrissage lisible.
+    if (this.dragon?.active && !this.dragon.isGrounded) {
+      drawables.push({ entity: this.dragon, y: Number.MAX_SAFE_INTEGER });
+    } else if (this.dragon?.active) {
+      drawables.push({ entity: this.dragon, y: this.dragon.position.y + 70 });
+    }
     drawables.push({ entity: this.player, y: this.player.position.y + 16 });
 
     drawables.sort((a, b) => a.y - b.y);
@@ -1331,7 +1686,7 @@ export class Game {
     const zone = this.currentZone();
     // Lanterne du personnage : plus large en forme démon, indispensable dans
     // la forêt dense et sous terre.
-    const carriesLantern = this.flags.has("lantern") || this.interior !== null;
+    const carriesLantern = this.flags.has("lantern") || this.indoors;
     if (carriesLantern || this.clock.isNight || this.player.isDemon) {
       lights.push({
         x: this.player.position.x + 8, y: this.player.position.y + 8,
@@ -1344,6 +1699,17 @@ export class Game {
         x: projectile.position.x, y: projectile.position.y,
         radius: 52, color: projectile.style.glow,
       });
+    }
+    if (this.dragon?.active) {
+      for (const flame of this.dragon.flames) {
+        lights.push({ x: flame.x, y: flame.y, radius: 64, color: "#ff7a30" });
+      }
+      if (this.dragon.state === "breathe") {
+        lights.push({
+          x: this.dragon.position.x + 40, y: this.dragon.position.y + 6,
+          radius: 76, color: "#ff9040",
+        });
+      }
     }
     if (this.familiar) {
       lights.push({ x: this.familiar.position.x + 8, y: this.familiar.position.y + 8,
@@ -1359,7 +1725,7 @@ export class Game {
       minuteOfDay: this.clock.minuteOfDay,
       weather: this.clock.weather,
       biome: this.interior ? undefined : zone?.biome,
-      interior: this.interior !== null,
+      interior: this.indoors,
       gloom: denseForest ? 0.45 : zone?.biome === "forest" ? 0.12 : 0,
     });
   }
@@ -1367,15 +1733,28 @@ export class Game {
   private drawInterface(): void {
     const { ctx } = this.renderer;
     const zone = this.currentZone();
-    const interiorName = this.interior ? INTERIOR_NAMES[this.interior] : null;
+    const interiorName = this.interior ? INTERIOR_NAMES[this.interior]
+      : this.fortress.active ? this.fortress.name : null;
+    // Face à un gardien, le haut de l'écran appartient à sa jauge : ni
+    // cartouche de région ni rappel d'objectif ne doivent s'y superposer.
+    const fighting = this.boss?.active === true || this.dragon?.active === true;
+    if (fighting) this.hud.clearAnnouncement();
     this.hud.draw(this.renderer, this.player, this.clock,
       interiorName ?? zone?.name ?? "INCONNU",
-      this.quests.activeObjective()?.hint);
-    if (!this.interior && !this.menu.active) {
-      this.mapScreen.drawMini(ctx, this.camera.zone, VIEW_WIDTH - 62, VIEW_HEIGHT - 58);
+      fighting ? undefined : this.quests.activeObjective()?.hint);
+    if (!this.indoors && !this.menu.active) {
+      this.mapScreen.drawMini(ctx, this.camera.zone, VIEW_WIDTH - 74, VIEW_HEIGHT - 70);
     }
     if (this.boss?.active) this.drawBossBar();
+    if (this.dragon?.active) this.drawDragonBar();
 
+    if (this.fortress.active && this.fortress.room?.kind === "entrance"
+      && nearFortressExit(this.player.position) && !this.textBox.active) {
+      const label = "X   SORTIR";
+      ctx.fillStyle = "rgba(10,8,16,0.72)";
+      ctx.fillRect(VIEW_WIDTH / 2 - 34, VIEW_HEIGHT - 40, 68, 14);
+      drawText(ctx, label, VIEW_WIDTH / 2, VIEW_HEIGHT - 39, { color: PALETTE.cream, align: "center" });
+    }
     if (this.interior && nearInteriorExit(this.player.position) && !this.textBox.active) {
       const label = "X   SORTIR";
       ctx.fillStyle = "rgba(10,8,16,0.72)";
@@ -1407,6 +1786,28 @@ export class Game {
     lines.forEach((line, index) => {
       drawText(ctx, line, 18, top + 4 + index * 12, { color: PALETTE.cream });
     });
+    ctx.restore();
+  }
+
+  private drawDragonBar(): void {
+    const { ctx } = this.renderer;
+    const dragon = this.dragon!;
+    const width = 220;
+    const x = (VIEW_WIDTH - width) / 2;
+    ctx.save();
+    drawText(ctx, "LE DRAGON DE LA CALDEIRA", VIEW_WIDTH / 2, 24, {
+      color: PALETTE.red, align: "center", outline: "rgba(10,8,16,0.9)", shadow: null,
+    });
+    ctx.fillStyle = "rgba(10,8,16,0.8)";
+    ctx.fillRect(x - 2, 38, width + 4, 8);
+    ctx.fillStyle = PALETTE.roofDark;
+    ctx.fillRect(x, 40, width, 4);
+    ctx.fillStyle = dragon.isGrounded ? PALETTE.yellow : PALETTE.red;
+    ctx.fillRect(x, 40, Math.round(width * dragon.healthRatio), 4);
+    drawText(ctx, dragon.isGrounded ? "IL EST AU SOL — FRAPPEZ" : "HORS D'ATTEINTE",
+      VIEW_WIDTH / 2, 48, {
+        color: dragon.isGrounded ? PALETTE.yellow : PALETTE.stoneLight, align: "center",
+      });
     ctx.restore();
   }
 

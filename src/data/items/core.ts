@@ -68,6 +68,27 @@ export const ITEMS = {
     name: "Éclat de cœur", stack: 4,
     description: "Quatre éclats valent un cœur de plus.",
   },
+  // — La mer —
+  hull_plank: {
+    name: "Bordé de chêne", stack: 6,
+    description: "Une planche cintrée à la vapeur, prête à river.",
+  },
+  tar_rope: {
+    name: "Filin goudronné", stack: 4,
+    description: "Il sent le brai chaud. Ça tient par tous les temps.",
+  },
+  sea_chart: {
+    name: "Carte des Courants", stack: 1,
+    description: "Le tracé des veines froides. Sans elle, le large vous rend.",
+  },
+  fortress_key: {
+    name: "Clé de Vertepierre", stack: 3,
+    description: "Fer vert-de-gris. Une porte, une clé.",
+  },
+  dragon_scale: {
+    name: "Écaille de dragon", stack: 1,
+    description: "Encore tiède. Elle pèse le poids d'une main.",
+  },
 } as const satisfies Record<string, ItemDefinition>;
 
 export type ItemId = keyof typeof ITEMS;

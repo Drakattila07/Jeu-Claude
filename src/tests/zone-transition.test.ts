@@ -4,7 +4,7 @@ import { createZoneMap } from "../world/ZoneMapFactory";
 import { TileMap } from "../world/TileMap";
 import { TileSet } from "../world/TileSet";
 import { Camera, type Edge } from "../core/Camera";
-import { EDGES, gatewayFor, neighbourOf, oppositeEdge } from "../world/WorldGen";
+import { EDGES, gatewayFor, isNavalZone, neighbourOf, oppositeEdge } from "../world/WorldGen";
 import { collides, resolveOverlap } from "../world/Collision";
 import { ZONE_HEIGHT, ZONE_WIDTH, TILE_SIZE } from "../core/Renderer";
 
@@ -23,14 +23,15 @@ function mapFor(zoneId: string): TileMap {
   return map;
 }
 
-function solidOf(map: TileMap) {
-  return (x: number, y: number): boolean => map.isSolid(x, y);
+function solidOf(map: TileMap, naval: boolean) {
+  return (x: number, y: number): boolean => map.solidFor(x, y, naval);
 }
 
 /** Cases atteignables depuis un point, en quatre directions. */
-function flood(map: TileMap, start: { x: number; y: number }): Set<number> {
+function flood(map: TileMap, start: { x: number; y: number }, naval: boolean): Set<number> {
+  const blocked = solidOf(map, naval);
   const seen = new Set<number>();
-  if (map.isSolid(start.x, start.y)) return seen;
+  if (blocked(start.x, start.y)) return seen;
   seen.add(start.y * map.width + start.x);
   const queue = [start];
   while (queue.length > 0) {
@@ -38,7 +39,7 @@ function flood(map: TileMap, start: { x: number; y: number }): Set<number> {
     for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
       const nx = current.x + dx;
       const ny = current.y + dy;
-      if (nx < 0 || ny < 0 || nx >= map.width || ny >= map.height || map.isSolid(nx, ny)) continue;
+      if (nx < 0 || ny < 0 || nx >= map.width || ny >= map.height || blocked(nx, ny)) continue;
       const key = ny * map.width + nx;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -53,10 +54,19 @@ function flood(map: TileMap, start: { x: number; y: number }): Set<number> {
  * hauteurs d'arrivée — c'est exactement ce que fait un joueur qui longe une
  * frontière en essayant de passer.
  */
-function crossings(): readonly {
-  from: string; to: string; edge: Edge; entry: { x: number; y: number };
-}[] {
-  const result: { from: string; to: string; edge: Edge; entry: { x: number; y: number } }[] = [];
+interface Crossing {
+  from: string; to: string; edge: Edge;
+  entry: { x: number; y: number };
+  /** Une côte se franchit à la barque, même en venant de la terre. */
+  naval: boolean;
+  /** Terre d'un côté, mer de l'autre : on arrive dans une crique. */
+  coastal: boolean;
+  /** La région d'arrivée se parcourt-elle à la barque ? */
+  toNaval: boolean;
+}
+
+function crossings(): readonly Crossing[] {
+  const result: Crossing[] = [];
   const camera = new Camera();
   for (const zone of WORLD_ZONES) {
     for (const edge of EDGES) {
@@ -73,6 +83,9 @@ function crossings(): readonly {
         result.push({
           from: zone.id, to: neighbour.id, edge,
           entry: camera.enterPosition(edge, current, gateway),
+          naval: isNavalZone(zone) || isNavalZone(neighbour),
+          coastal: isNavalZone(zone) !== isNavalZone(neighbour),
+          toNaval: isNavalZone(neighbour),
         });
       }
     }
@@ -88,9 +101,10 @@ describe("passage d'une zone à l'autre", () => {
     const stuck: string[] = [];
     for (const crossing of crossings()) {
       const map = mapFor(crossing.to);
-      const freed = resolveOverlap(crossing.entry, HITBOX, solidOf(map),
+      const solid = solidOf(map, crossing.naval);
+      const freed = resolveOverlap(crossing.entry, HITBOX, solid,
         { width: map.pixelWidth, height: map.pixelHeight });
-      if (collides(freed, HITBOX, solidOf(map))) {
+      if (collides(freed, HITBOX, solid)) {
         stuck.push(`${crossing.from} → ${crossing.to} (${crossing.edge})`);
       }
     }
@@ -101,21 +115,53 @@ describe("passage d'une zone à l'autre", () => {
     // Être libre ne suffit pas : il faut aussi pouvoir en sortir. Une poche
     // isolée serait une prison silencieuse.
     const isolated: string[] = [];
-    for (const crossing of crossings()) {
+    for (const crossing of crossings().filter((entry) => !entry.coastal || entry.toNaval)) {
       const map = mapFor(crossing.to);
-      const freed = resolveOverlap(crossing.entry, HITBOX, solidOf(map),
+      const freed = resolveOverlap(crossing.entry, HITBOX, solidOf(map, crossing.naval),
         { width: map.pixelWidth, height: map.pixelHeight });
       const tile = {
         x: Math.floor((freed.x + HITBOX.x) / TILE_SIZE),
         y: Math.floor((freed.y + HITBOX.y) / TILE_SIZE),
       };
-      const reachable = flood(map, tile);
+      const reachable = flood(map, tile, crossing.naval);
       // La poche doit représenter une vraie part de la zone.
       if (reachable.size < 120) {
         isolated.push(`${crossing.from} → ${crossing.to} (${crossing.edge}) : ${reachable.size} cases`);
       }
     }
     expect(isolated).toEqual([]);
+  });
+
+  it("permet de débarquer de chaque crique côtière", () => {
+    // Arriver de la mer dépose dans un chenal étroit — c'est voulu. Ce qui
+    // compte, c'est qu'on puisse y poser pied à terre et gagner l'intérieur.
+    const stranded: string[] = [];
+    for (const crossing of crossings().filter((entry) => entry.coastal && !entry.toNaval)) {
+      const map = mapFor(crossing.to);
+      const freed = resolveOverlap(crossing.entry, HITBOX, solidOf(map, true),
+        { width: map.pixelWidth, height: map.pixelHeight });
+      const tile = {
+        x: Math.floor((freed.x + HITBOX.x) / TILE_SIZE),
+        y: Math.floor((freed.y + HITBOX.y) / TILE_SIZE),
+      };
+      const channel = flood(map, tile, true);
+      // Une case du chenal doit toucher une terre praticable, et cette terre
+      // doit ouvrir sur une vraie étendue.
+      let landed = 0;
+      for (const key of channel) {
+        const cx = key % map.width;
+        const cy = Math.floor(key / map.width);
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+          if (map.solidFor(cx + dx, cy + dy, false)) continue;
+          landed = Math.max(landed, flood(map, { x: cx + dx, y: cy + dy }, false).size);
+        }
+        if (landed >= 120) break;
+      }
+      if (landed < 120) {
+        stranded.push(`${crossing.from} → ${crossing.to} (${crossing.edge}) : ${landed} cases à terre`);
+      }
+    }
+    expect(stranded).toEqual([]);
   });
 
   it("garde le point de dépose à l'intérieur de la zone", () => {

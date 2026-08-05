@@ -5,9 +5,18 @@ import { TILE, TileSet } from "./TileSet";
 import { ZONE_TILES_X, ZONE_TILES_Y, TILE_SIZE } from "../core/Renderer";
 import type { Edge } from "../core/Camera";
 import {
-  EDGES, fbm, gatewayCenter, gatewayFor, isRoadEdge, isWaterEdge, neighbourOf,
-  randomAt, zoneSeed,
+  EDGES, fbm, gatewayCenter, gatewayFor, isNavalZone, isRoadEdge, isWaterEdge,
+  neighbourOf, randomAt, zoneSeed,
 } from "./WorldGen";
+
+/**
+ * Propriétés des tuiles, lues directement dans le jeu de tuiles du moteur.
+ *
+ * Le générateur maintenait sa propre liste de tuiles bloquantes, qui a
+ * naturellement divergé de celle du moteur : il croyait fermé ce qui était
+ * ouvert, et perçait des couloirs inutiles au travers des bâtiments.
+ */
+const SOLIDITY = new TileSet();
 
 const W = ZONE_TILES_X;
 const H = ZONE_TILES_Y;
@@ -27,6 +36,12 @@ interface Grid {
   readonly above: number[];
   /** Tuiles que rien ne doit jamais boucher. */
   readonly guarded: Uint8Array;
+  /**
+   * Chenaux côtiers : de l'eau protégée qui ne doit surtout pas se voir
+   * transformer en platelage, sinon la frontière redevient franchissable à
+   * pied et la barque perd sa raison d'être.
+   */
+  readonly channel: Uint8Array;
   readonly seed: number;
   readonly zone: WorldZoneData;
 }
@@ -41,6 +56,7 @@ function makeGrid(zone: WorldZoneData): Grid {
     below: new Array<number>(W * H).fill(0),
     above: new Array<number>(W * H).fill(0),
     guarded: new Uint8Array(W * H),
+    channel: new Uint8Array(W * H),
     seed: zoneSeed(zone),
     zone,
   };
@@ -85,8 +101,28 @@ interface GroundRecipe {
   readonly road: number;
 }
 
+/**
+ * Part de terre émergée d'une région maritime. Le reste est de l'eau libre.
+ * Une mer entièrement vide serait une corvée ; une mer pleine d'îles ne serait
+ * plus une mer.
+ */
+const SEA_ISLANDS: Readonly<Record<string, number>> = {
+  ile_des_os: 0.5,
+  ile_du_phare: 0.42,
+  quai_des_carenes: 0.46,
+  rade_de_maree: 0.3,
+  recif_dentele: 0.16,
+  epave_du_sud: 0.14,
+  anneau_de_fumee: 0.2,
+  banc_de_brume: 0.1,
+  grande_passe: 0.08,
+  chenal_est: 0.08,
+};
+
 function groundRecipe(biome: Biome): GroundRecipe {
   switch (biome) {
+    case "sea": return { base: TILE.openSea, accent: TILE.swell, rare: TILE.water, road: TILE.water };
+    case "volcano": return { base: TILE.basalt, accent: TILE.ash, rare: TILE.obsidian, road: TILE.ash };
     case "peaks": return { base: TILE.scree, accent: TILE.snow, rare: TILE.alpineGrass, road: TILE.gravel };
     case "cliffs": return { base: TILE.scree, accent: TILE.alpineGrass, rare: TILE.heather, road: TILE.gravel };
     case "forest": return { base: TILE.forestFloor, accent: TILE.grassAlt, rare: TILE.grass, road: TILE.path };
@@ -175,6 +211,8 @@ function blendedGround(zone: WorldZoneData, x: number, y: number, seed: number):
 
 function barrierTile(biome: Biome): number {
   switch (biome) {
+    case "sea": return TILE.seaRock;
+    case "volcano": return TILE.obsidian;
     case "peaks": return TILE.crag;
     case "cliffs": return TILE.cliff;
     case "forest": return TILE.treeCrown;
@@ -191,10 +229,20 @@ function barrierTile(biome: Biome): number {
   }
 }
 
-interface GateInfo { readonly edge: Edge; readonly center: number; readonly road: boolean }
+interface GateInfo {
+  readonly edge: Edge;
+  readonly center: number;
+  readonly road: boolean;
+  /**
+   * Passage entre la terre et la mer : on n'y franchit la frontière qu'à la
+   * barque. Il reçoit un chenal d'eau au lieu d'un couloir de sol.
+   */
+  readonly shoreline: boolean;
+}
 
 function paintBorder(grid: Grid): readonly GateInfo[] {
   const barrier = barrierTile(grid.zone.biome);
+  const naval = isNavalZone(grid.zone);
   const gates: GateInfo[] = [];
 
   for (let x = 0; x < W; x += 1) {
@@ -209,14 +257,28 @@ function paintBorder(grid: Grid): readonly GateInfo[] {
   for (const edge of EDGES) {
     const gateway = gatewayFor(grid.zone, edge);
     if (!gateway) continue;
+    const neighbour = neighbourOf(grid.zone, edge);
+    // Terre d'un côté, mer de l'autre : le passage devient un chenal.
+    const shoreline = neighbour !== null && isNavalZone(neighbour) !== naval;
     const center = gatewayCenter(gateway);
-    gates.push({ edge, center, road: gateway.road });
+    gates.push({ edge, center, road: gateway.road, shoreline });
+
     for (let offset = gateway.start; offset <= gateway.end; offset += 1) {
       if (offset < 1 || offset > (edge === "north" || edge === "south" ? W : H) - 2) continue;
-      if (edge === "west") clearTile(grid, 0, offset);
-      else if (edge === "east") clearTile(grid, W - 1, offset);
-      else if (edge === "north") clearTile(grid, offset, 0);
-      else clearTile(grid, offset, H - 1);
+      // Le chenal mord de trois cases vers l'intérieur : une seule ligne d'eau
+      // sur la bordure ne suffirait pas à y engager une coque.
+      const depth = shoreline ? 3 : 1;
+      for (let inward = 0; inward < depth; inward += 1) {
+        const x = edge === "west" ? inward : edge === "east" ? W - 1 - inward : offset;
+        const y = edge === "north" ? inward : edge === "south" ? H - 1 - inward : offset;
+        if (!inBounds(x, y)) continue;
+        clearTile(grid, x, y);
+        if (shoreline) {
+          grid.ground[index(x, y)] = inward === depth - 1 ? TILE.water : TILE.deepWater;
+          guard(grid, x, y);
+          grid.channel[index(x, y)] = 1;
+        }
+      }
     }
   }
   return gates;
@@ -281,7 +343,7 @@ function carveWaterway(grid: Grid, gates: readonly GateInfo[]): void {
   const points = waterEdges.map((edge) => {
     const gate = gates.find((candidate) => candidate.edge === edge);
     const center = gate?.center ?? Math.floor((edge === "north" || edge === "south" ? W : H) / 2);
-    return outerAnchor({ edge, center, road: false });
+    return outerAnchor({ edge, center, road: false, shoreline: false });
   });
 
   const hub = { x: Math.floor(W / 2), y: Math.floor(H / 2) };
@@ -329,7 +391,7 @@ function carveWaterway(grid: Grid, gates: readonly GateInfo[]): void {
 function bridgeGuardedWater(grid: Grid): void {
   for (let y = 0; y < H; y += 1) {
     for (let x = 0; x < W; x += 1) {
-      if (!isGuarded(grid, x, y)) continue;
+      if (!isGuarded(grid, x, y) || grid.channel[index(x, y)] === 1) continue;
       const id = grid.ground[index(x, y)]!;
       if (id === TILE.deepWater || id === TILE.water) grid.ground[index(x, y)] = TILE.bridge;
     }
@@ -341,6 +403,8 @@ function bridgeGuardedWater(grid: Grid): void {
 /** Part de la zone couverte d'obstacles, une fois les clairières déduites. */
 function scatterDensity(biome: Biome): number {
   switch (biome) {
+    case "sea": return 0.1;
+    case "volcano": return 0.3;
     case "forest": return 0.62;
     // Les gradins rocheux fournissent déjà toute la structure en altitude :
     // y ajouter des blocs à la pelle ne faisait qu'un mur gris uniforme.
@@ -366,6 +430,16 @@ interface Furnishing {
 
 function furnishingFor(biome: Biome): Furnishing {
   switch (biome) {
+    case "sea": return {
+      obstacles: [TILE.seaRock, TILE.driftwood, TILE.palm],
+      decor: [TILE.pebbles, TILE.net, TILE.tallGrass],
+    };
+    case "volcano": return {
+      // Pas de congères sur un volcan : le décor blanc semé ici piquetait la
+      // coulée de plaques de neige.
+      obstacles: [TILE.obsidian, TILE.deadTree, TILE.boulder],
+      decor: [TILE.pebbles, TILE.driftwood],
+    };
     case "forest": return {
       obstacles: [TILE.treeCrown, TILE.treeCrown, TILE.treeTrunk, TILE.stump, TILE.log, TILE.bush],
       decor: [TILE.fern, TILE.mushroom, TILE.tallGrass, TILE.flowerPatch, TILE.pebbles],
@@ -435,8 +509,10 @@ function scatter(grid: Grid): void {
     for (let x = 2; x < W - 2; x += 1) {
       if (isGuarded(grid, x, y)) continue;
       if (grid.terrain[index(x, y)] !== 0) continue;
+      // Rien ne pousse sur l'eau, la lave ou un platelage.
       const ground = grid.ground[index(x, y)]!;
-      if (ground === TILE.water || ground === TILE.deepWater || ground === TILE.bridge) continue;
+      const nature = SOLIDITY.properties(ground);
+      if (nature.water || nature.harm || ground === TILE.bridge || ground === TILE.dock) continue;
 
       const clump = fbm(x, y, grid.seed ^ 0x3c4d, 0.07);
       const roll = randomAt(x, y, grid.seed ^ 0x8f21);
@@ -576,6 +652,47 @@ function buildVillage(grid: Grid, gates: readonly GateInfo[]): void {
   }
 }
 
+/**
+ * Habillage portuaire : quai de planches le long du chenal côtier, bittes
+ * d'amarrage, filets, caisses et une coque en radoub. Sans lui, Port-Marée
+ * n'était qu'un hameau de plus qui se trouvait avoir la mer au sud.
+ */
+function dressPort(grid: Grid, gates: readonly GateInfo[]): void {
+  const shore = gates.find((gate) => gate.shoreline && gate.edge === "south");
+  const quayY = H - 5;
+  for (let x = 3; x < W - 3; x += 1) {
+    if (isGuarded(grid, x, quayY) && grid.channel[index(x, quayY)] === 1) continue;
+    clearTile(grid, x, quayY);
+    guard(grid, x, quayY);
+    grid.ground[index(x, quayY)] = TILE.dock;
+    if (!isGuarded(grid, x, quayY + 1) || grid.channel[index(x, quayY + 1)] !== 1) {
+      clearTile(grid, x, quayY + 1);
+      guard(grid, x, quayY + 1);
+      grid.ground[index(x, quayY + 1)] = TILE.dock;
+    }
+  }
+  // Le quai rejoint la place : on ne veut pas d'un ponton qui ne mène nulle part.
+  carve(grid, { x: Math.floor(W / 2), y: quayY - 1 },
+    { x: Math.floor(W / 2), y: Math.floor(H / 2) }, 1, TILE.path, false);
+
+  for (const x of [4, 9, 15, 21, 27]) {
+    if (!inBounds(x, quayY)) continue;
+    grid.guarded[index(x, quayY)] = 0;
+    grid.terrain[index(x, quayY)] = TILE.bollard;
+  }
+  for (const [x, tile] of [[6, TILE.crate], [11, TILE.barrel], [18, TILE.crate],
+    [24, TILE.barrel]] as const) {
+    if (!inBounds(x, quayY - 2)) continue;
+    block(grid, x, quayY - 2, tile);
+  }
+  for (const x of [8, 17, 25]) decorate(grid, x, quayY - 2, TILE.net);
+
+  // La coque en chantier, juste au bord : c'est elle que Sarn répare.
+  const yardX = shore ? Math.max(4, Math.min(W - 6, shore.center - 2)) : 17;
+  for (let dx = 0; dx < 4; dx += 1) block(grid, yardX + dx, quayY - 4, TILE.hull);
+  decorate(grid, yardX - 1, quayY - 3, TILE.net);
+}
+
 /** Champs : parcelles closes de haies, séparées par des chemins de terre. */
 function buildFields(grid: Grid): void {
   for (let plotY = 3; plotY < H - 5; plotY += 7) {
@@ -700,6 +817,62 @@ function buildLake(grid: Grid): void {
   }
   for (let y = centreY + 2; y <= centreY + 4; y += 1) {
     if (inBounds(centreX + 4, y)) grid.ground[index(centreX + 4, y)] = TILE.lilypad;
+  }
+}
+
+/**
+ * Haute mer : de l'eau libre, quelques hauts-fonds, et parfois une île.
+ *
+ * La terre émergée naît d'un bruit seuillé : elle prend des formes molles,
+ * cerclées de haut-fond puis de plage, comme une île vue d'en haut. Le seuil
+ * vient de la région elle-même, si bien que la Mer du Couchant reste ouverte
+ * là où l'Île des Os occupe la moitié du cadre.
+ */
+function buildSea(grid: Grid): void {
+  const land = SEA_ISLANDS[grid.zone.id] ?? 0;
+  for (let y = 1; y < H - 1; y += 1) {
+    for (let x = 1; x < W - 1; x += 1) {
+      // Deux échelles de bruit : la grande donne la forme de l'île, la petite
+      // découpe la côte. Sans elle, un seuil unique produisait un rectangle.
+      const shape = fbm(x, y, grid.seed ^ 0x5ea1, 0.06)
+        + (fbm(x, y, grid.seed ^ 0x7c3, 0.2) - 0.5) * 0.12;
+      // Les bords restent navigables : on n'enferme jamais une passe.
+      const rim = Math.min(x, y, W - 1 - x, H - 1 - y) / 6;
+      const height = shape * Math.min(1, rim) - (1 - land);
+      const key = index(x, y);
+      if (height > 0.08) grid.ground[key] = TILE.shoreSand;
+      else if (height > 0.04) grid.ground[key] = TILE.pebbles;
+      else if (height > -0.02) grid.ground[key] = TILE.water;
+      else if (shape > 0.62) grid.ground[key] = TILE.swell;
+      else grid.ground[key] = TILE.openSea;
+    }
+  }
+  // Récifs affleurants : ils obligent à barrer, sans jamais fermer le passage.
+  for (let y = 3; y < H - 3; y += 1) {
+    for (let x = 3; x < W - 3; x += 1) {
+      if (isGuarded(grid, x, y)) continue;
+      if (grid.ground[index(x, y)] !== TILE.openSea) continue;
+      if (randomAt(x, y, grid.seed ^ 0x2f5) > 0.018) continue;
+      block(grid, x, y, randomAt(x, y, grid.seed ^ 0x3f5) > 0.5 ? TILE.seaRock : TILE.coral);
+    }
+  }
+}
+
+/** Volcan : coulées de lave entre des dalles de basalte et des cendres. */
+function buildVolcano(grid: Grid): void {
+  for (let y = 1; y < H - 1; y += 1) {
+    for (let x = 1; x < W - 1; x += 1) {
+      if (isGuarded(grid, x, y)) continue;
+      const heat = fbm(x, y, grid.seed ^ 0x1a7a, 0.075);
+      const key = index(x, y);
+      if (heat > 0.74) {
+        grid.ground[key] = TILE.lava;
+        grid.terrain[key] = 0;
+        grid.below[key] = 0;
+      } else if (heat > 0.66) {
+        grid.ground[key] = TILE.ash;
+      }
+    }
   }
 }
 
@@ -857,20 +1030,23 @@ function floodFrom(start: { x: number; y: number }, solid: (x: number, y: number
 }
 
 /**
- * Solidité lue directement dans le jeu de tuiles.
- *
- * Le générateur maintenait sa propre liste de tuiles bloquantes, qui a
- * naturellement divergé de celle du moteur : il croyait fermé ce qui était
- * ouvert, et perçait des couloirs inutiles au travers des bâtiments.
+ * Praticabilité du brouillon, selon le mode de déplacement attendu dans la
+ * région. En mer c'est la coque qui décide : l'eau profonde y est un chemin,
+ * la terre un obstacle. Évaluer une région maritime avec les règles de la
+ * marche la déclarerait entièrement bouchée.
  */
-const SOLIDITY = new TileSet();
-
-function gridSolid(grid: Grid): (x: number, y: number) => boolean {
-  const solid = (id: number): boolean => SOLIDITY.properties(id).solid === true;
+function gridSolid(grid: Grid, naval = false): (x: number, y: number) => boolean {
+  const properties = (id: number) => SOLIDITY.properties(id);
   return (x, y) => {
     if (!inBounds(x, y)) return true;
     const key = index(x, y);
-    return solid(grid.terrain[key]!) || solid(grid.below[key]!) || solid(grid.ground[key]!);
+    const ids = [grid.terrain[key]!, grid.below[key]!, grid.ground[key]!];
+    if (naval) {
+      // Navigable seulement si l'eau porte et que rien ne dépasse.
+      return !ids.some((id) => properties(id).sailable === true)
+        || ids.some((id) => properties(id).solid === true);
+    }
+    return ids.some((id) => properties(id).solid === true || properties(id).deep === true);
   };
 }
 
@@ -916,6 +1092,12 @@ function applyAnchors(grid: Grid, anchors: readonly ZoneAnchor[], hub: { x: numb
       for (let dx = -1; dx <= 1; dx += 1) {
         clearTile(grid, tx + dx, ty + dy);
         guard(grid, tx + dx, ty + dy);
+        // Un objet posé au large — le phare de son île, par exemple — a besoin
+        // d'un bout de terre sous les pieds : on ne fouille pas en nageant.
+        const key = inBounds(tx + dx, ty + dy) ? index(tx + dx, ty + dy) : -1;
+        if (key >= 0 && SOLIDITY.properties(grid.ground[key]!).deep === true) {
+          grid.ground[key] = TILE.shoreSand;
+        }
       }
     }
     carve(grid, { x: tx, y: Math.min(H - 2, ty + firstRow + 1) }, hub, 1, null,
@@ -945,27 +1127,37 @@ export function createProceduralMap(zone: WorldZoneData, anchors: readonly ZoneA
     y: Math.floor(H / 2) + Math.round((randomAt(5, 9, grid.seed) - 0.5) * 4),
   };
 
+  const naval = isNavalZone(zone);
+
   // Un cours d'eau traverse la zone avant qu'on ne trace les chemins : le
   // couloir passera dessus, et c'est là que naîtra le pont.
   if (zone.biome === "river") carveWaterway(grid, gates);
 
-  // Couloirs : chaque passage rejoint le cœur de la zone.
+  // Couloirs : chaque passage rejoint le cœur de la zone. En mer le couloir ne
+  // pose pas de sol — c'est un chenal, pas un ponton — et l'on ne creuse rien
+  // vers un passage côtier, qui ne se franchit qu'à la barque.
   for (const gate of gates) {
-    const road = isRoadEdge(zone, gate.edge);
+    if (gate.shoreline) continue;
+    const road = !naval && isRoadEdge(zone, gate.edge);
     carve(grid, outerAnchor(gate), hub, road ? 2 : 1,
       road ? groundRecipe(zone.biome).road : null,
       gate.edge === "west" || gate.edge === "east");
   }
-  bridgeGuardedWater(grid);
+  if (!naval) bridgeGuardedWater(grid);
 
   // Les grandes étendues d'eau se forment ensuite, autour des chemins déjà
   // tracés : en les creusant avant, le couloir les traversait de part en part
   // et toute la zone devenait un plancher de planches.
-  if (zone.biome === "lake") buildLake(grid);
+  if (naval) buildSea(grid);
+  else if (zone.biome === "volcano") buildVolcano(grid);
+  else if (zone.biome === "lake") buildLake(grid);
   else if (zone.biome === "marsh" || zone.biome === "reeds") buildBogs(grid);
   else if (zone.biome === "canal") buildCanal(grid);
 
-  if (zone.biome === "village") buildVillage(grid, gates);
+  if (zone.biome === "village") {
+    buildVillage(grid, gates);
+    if (zone.id === "port_maree") dressPort(grid, gates);
+  }
   else if (zone.biome === "fields") buildFields(grid);
   else if (zone.biome === "ruins") buildRuins(grid);
   else if (zone.biome === "peaks" || zone.biome === "cliffs") buildTerraces(grid, gates);
@@ -976,12 +1168,15 @@ export function createProceduralMap(zone: WorldZoneData, anchors: readonly ZoneA
   if (landmark) placeLandmark(grid, landmark, doorAnchorOf(anchors));
 
   applyAnchors(grid, anchors, hub, landmark !== undefined);
-  bridgeGuardedWater(grid);
+  if (!naval) bridgeGuardedWater(grid);
 
   // Tout doit communiquer : les quatre passages, le cœur de la zone et chaque
   // point de contenu. C'est l'invariant qui remplace l'ancienne loterie.
   const mustConnect = [
-    ...gates.map(gateAnchor),
+    // Un passage côtier appartient à l'autre mode de déplacement : exiger
+    // qu'il rejoigne le réseau terrestre ferait creuser une jetée à travers
+    // le chenal qu'on vient d'ouvrir.
+    ...gates.filter((gate) => !gate.shoreline).map(gateAnchor),
     hub,
     ...anchors.map((anchor) => ({
       x: Math.max(1, Math.min(W - 2, Math.floor(anchor.x / TILE_SIZE))),
@@ -991,7 +1186,7 @@ export function createProceduralMap(zone: WorldZoneData, anchors: readonly ZoneA
         Math.floor(anchor.y / TILE_SIZE) + (anchor.kind === "door" ? 2 : 0))),
     })),
   ];
-  repairConnectivity(grid, mustConnect, gridSolid(grid));
+  repairConnectivity(grid, mustConnect, gridSolid(grid, naval));
 
   const layers: Record<LayerName, number[]> = {
     ground: grid.ground,

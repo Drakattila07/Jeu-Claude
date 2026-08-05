@@ -4,6 +4,7 @@ import { WORLD_ZONES } from "../data/world";
 import { TileMap } from "../world/TileMap";
 import { TileSet } from "../world/TileSet";
 import { createZoneMap } from "../world/ZoneMapFactory";
+import { isNavalZone } from "../world/WorldGen";
 import { ZONE_HEIGHT, ZONE_WIDTH, TILE_SIZE } from "../core/Renderer";
 
 const tileSet = new TileSet();
@@ -85,16 +86,34 @@ describe("placement des objets du monde", () => {
   it("relie chaque objet au reste de sa zone", () => {
     const isolated: string[] = [];
     for (const entry of INTERACTABLES) {
+      const zone = WORLD_ZONES.find((candidate) => candidate.id === entry.zone)!;
       const map = mapFor(entry.zone);
       const tileX = Math.floor(entry.x / TILE_SIZE);
       const tileY = Math.floor(entry.y / TILE_SIZE) + (entry.kind === "door" ? 1 : 0);
-      const start = firstOpenTile(map);
-      if (!start) { isolated.push(`${entry.id}: zone entièrement pleine`); continue; }
-      const reachable = flood(map, start);
       const target = map.isSolid(tileX, tileY)
         ? openNeighbour(map, tileX, tileY)
         : { x: tileX, y: tileY };
-      if (!target || !reachable.has(target.y * map.width + target.x)) {
+      if (!target) { isolated.push(`${entry.id}@${entry.zone} : muré`); continue; }
+
+      if (isNavalZone(zone)) {
+        // Sur une île, on n'arrive pas à pied : ce qui compte est que la terre
+        // qui porte l'objet touche quelque part une eau navigable, pour qu'on
+        // puisse y échouer la barque et finir à pied.
+        const island = flood(map, target);
+        const beachable = [...island].some((key) => {
+          const cx = key % map.width;
+          const cy = Math.floor(key / map.width);
+          return [[1, 0], [-1, 0], [0, 1], [0, -1]]
+            .some(([dx, dy]) => map.isSailable(cx + dx!, cy + dy!));
+        });
+        if (!beachable) isolated.push(`${entry.id}@${entry.zone} : inaccessible par la mer`);
+        continue;
+      }
+
+      const start = firstOpenTile(map);
+      if (!start) { isolated.push(`${entry.id}: zone entièrement pleine`); continue; }
+      const reachable = flood(map, start);
+      if (!reachable.has(target.y * map.width + target.x)) {
         isolated.push(`${entry.id}@${entry.zone}`);
       }
     }
