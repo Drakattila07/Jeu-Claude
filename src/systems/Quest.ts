@@ -9,6 +9,9 @@ export interface ActiveObjective {
   readonly id: string;
   readonly title: string;
   readonly hint: string;
+  /** Nature et cible de l'étape : de quoi retrouver la région à rejoindre. */
+  readonly type: QuestStepType;
+  readonly target: string;
   readonly step: number;
   readonly stepCount: number;
   readonly progress: number;
@@ -73,6 +76,8 @@ export class QuestSystem {
             id: quest.id,
             title: quest.title,
             hint: step.hint,
+            type: step.type,
+            target: step.target,
             step: record.step + 1,
             stepCount: quest.steps.length,
             progress: record.progress,

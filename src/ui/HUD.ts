@@ -34,7 +34,8 @@ export class HUD {
   /** Coupe le cartouche : il ne doit jamais chevaucher la jauge d'un gardien. */
   clearAnnouncement(): void { this.titleFrames = 0; }
 
-  draw(renderer: Renderer, player: Player, clock: Clock, zoneName: string, objective?: string): void {
+  draw(renderer: Renderer, player: Player, clock: Clock, zoneName: string, objective?: string,
+    heading?: { readonly dx: number; readonly dy: number } | null): void {
     const { ctx } = renderer;
     ctx.save();
     this.drawHearts(ctx, player);
@@ -42,7 +43,7 @@ export class HUD {
     this.drawPurse(renderer, player);
     this.drawClock(renderer, clock);
     if (player.isDemon) this.drawDemonBadge(renderer);
-    if (objective) this.drawObjective(renderer, objective);
+    if (objective) this.drawObjective(renderer, objective, heading);
     this.drawZoneTitle(renderer, zoneName);
     ctx.restore();
   }
@@ -137,15 +138,41 @@ export class HUD {
     drawText(ctx, label, VIEW_WIDTH / 2, 7, { color: PALETTE.rose, align: "center" });
   }
 
-  private drawObjective(renderer: Renderer, objective: string): void {
+  /**
+   * Rappel d'objectif, précédé d'une flèche qui montre la direction à prendre.
+   * Sans elle, la consigne dit quoi faire mais jamais de quel côté partir.
+   */
+  private drawObjective(renderer: Renderer, objective: string,
+    heading?: { readonly dx: number; readonly dy: number } | null): void {
     const { ctx } = renderer;
-    const text = objective.length > 54 ? `${objective.slice(0, 53)}…` : objective;
-    const width = measureText(text) + 20;
+    const text = objective.length > 52 ? `${objective.slice(0, 51)}…` : objective;
+    const width = measureText(text) + 22;
     ctx.fillStyle = "rgba(10,8,16,0.58)";
     ctx.fillRect(6, 44, width, 13);
+    if (heading && (heading.dx !== 0 || heading.dy !== 0)) this.drawCompass(ctx, 13, 50, heading);
+    else {
+      ctx.fillStyle = PALETTE.yellow;
+      ctx.fillRect(11, 48, 4, 4);
+    }
+    drawText(ctx, text, 22, 45, { color: PALETTE.cream });
+  }
+
+  /** Petite flèche de six pixels, orientée vers la région à rejoindre. */
+  private drawCompass(ctx: CanvasRenderingContext2D, cx: number, cy: number,
+    heading: { readonly dx: number; readonly dy: number }): void {
+    const angle = Math.atan2(heading.dy, heading.dx);
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(angle);
     ctx.fillStyle = PALETTE.yellow;
-    ctx.fillRect(11, 48, 4, 4);
-    drawText(ctx, text, 20, 45, { color: PALETTE.cream });
+    ctx.beginPath();
+    ctx.moveTo(5, 0);
+    ctx.lineTo(-3, -4);
+    ctx.lineTo(-1, 0);
+    ctx.lineTo(-3, 4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
   }
 
   private drawZoneTitle(renderer: Renderer, zoneName: string): void {

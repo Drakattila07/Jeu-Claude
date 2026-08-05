@@ -4,7 +4,7 @@ import {
   Renderer, VIEW_HEIGHT, VIEW_WIDTH, ZONE_HEIGHT, ZONE_WIDTH, TILE_SIZE,
 } from "./Renderer";
 import { TileMap } from "../world/TileMap";
-import { TileSet } from "../world/TileSet";
+import { TileSet, TILE } from "../world/TileSet";
 import { Player } from "../entities/Player";
 import type { Rect, Vec2 } from "../entities/Entity";
 import { Camera, type Edge } from "./Camera";
@@ -53,11 +53,13 @@ import { Requirements, type WorldState } from "../systems/Requirements";
 import { createZoneMap } from "../world/ZoneMapFactory";
 import { gatewayFor, oppositeEdge } from "../world/WorldGen";
 import { populateZone } from "../systems/Spawner";
-import { isNavalZone } from "../world/WorldGen";
+import { waypointFor, type Waypoint } from "../systems/Waypoint";
+import { hash2, isNavalZone } from "../world/WorldGen";
 import { TitleScreen } from "../ui/TitleScreen";
 import { ITEMS, itemEffect, type ItemId } from "../data/items/core";
 import {
-  INTERIOR_ENTRY, INTERIOR_NAMES, createInteriorMap, nearInteriorExit, type InteriorKind,
+  HOUSE_LABELS, INTERIOR_ENTRY, INTERIOR_NAMES, createHouseMap, createInteriorMap,
+  houseTradeFor, nearInteriorExit, type InteriorKind,
 } from "../world/Interiors";
 import { BurningWorld } from "../world/BurningWorld";
 import { Fortress } from "../systems/Fortress";
@@ -139,6 +141,8 @@ export class Game {
   private readonly progression = new Progression(this.flags);
   private readonly requirements = new Requirements(this.flags, this.inventory);
   private interior: InteriorKind | null = null;
+  /** Graine du logis visité : chaque porte du monde rend toujours la même pièce. */
+  private houseSeed: number | null = null;
   private exteriorReturnPosition = { x: 240, y: 300 };
   private readonly burning = new BurningWorld();
   private familiar: LanternCat | null = null;
@@ -820,6 +824,85 @@ export class Game {
     return true;
   }
 
+  /** Cases voisines du personnage, du plus proche au plus éloigné. */
+  private tilesAround(): readonly (readonly [number, number])[] {
+    const tileX = Math.floor((this.player.position.x + 8) / TILE_SIZE);
+    const tileY = Math.floor((this.player.position.y + 10) / TILE_SIZE);
+    return [
+      [0, -1], [0, 0], [-1, -1], [1, -1], [-1, 0], [1, 0], [0, -2], [0, 1],
+    ].map(([dx, dy]) => [tileX + dx!, tileY + dy!] as const);
+  }
+
+  /**
+   * Ouvre une porte du décor.
+   *
+   * Seules quatre portes scénarisées s'ouvraient ; toutes les autres maisons
+   * du monde étaient des façades peintes. Chaque tuile `door` mène désormais
+   * quelque part, et la graine du logis vient de sa position : la même porte
+   * rend toujours la même pièce.
+   */
+  private tryDoorTile(): boolean {
+    if (this.indoors || this.player.sailing) return false;
+    for (const [tileX, tileY] of this.tilesAround()) {
+      if (this.map.tileAt("terrain", tileX, tileY) !== TILE.door) continue;
+      const seed = hash2(tileX, tileY, hash2(this.camera.zone.x, this.camera.zone.y, 0x4d0));
+      this.enterHouse(seed);
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Dormir. Un lit rend les forces et fait passer la nuit — de quoi attendre
+   * le jour quand une condition l'exige, au lieu de tourner en rond.
+   */
+  private trySleeping(): boolean {
+    if (!this.indoors) return false;
+    const bed = this.tilesAround()
+      .some(([tileX, tileY]) => this.map.tileAt("terrain", tileX, tileY) === TILE.bed);
+    if (!bed) return false;
+    this.clock.sleepUntilMorning();
+    this.player.hearts = this.player.maxHearts;
+    this.player.stamina = 100;
+    this.lastScheduleHour = -1;
+    this.particles.emit(this.player.position.x + 8, this.player.position.y + 4, "heal", 12);
+    this.audio.playSfx("secret");
+    this.textBox.open(
+      `Vous dormez d'un trait. Au matin du jour ${this.clock.day}, la vallée sent le foin mouillé.`,
+      "REPOS");
+    return true;
+  }
+
+  private enterHouse(seed: number): void {
+    if (this.transition.active || this.indoors) return;
+    this.exteriorReturnPosition = {
+      x: this.player.position.x,
+      y: Math.min(ZONE_HEIGHT - 40, this.player.position.y + 24),
+    };
+    this.transition.start(() => {
+      this.interior = "cottage";
+      this.houseSeed = seed;
+      this.fortress.leave();
+      this.dragon = null;
+      this.player.setSailing(false);
+      this.useMap(new TileMap(createHouseMap(seed), this.tileSet));
+      this.player.position = { ...INTERIOR_ENTRY };
+      this.player.unstick();
+      this.camera.snapTo(this.player.position);
+      this.interactables = [];
+      this.npcs = [];
+      this.enemies = [];
+      this.pickups = [];
+      this.projectiles = [];
+      this.familiar = null;
+      this.boss = null;
+      this.hud.announce(HOUSE_LABELS[houseTradeFor(seed)]);
+      this.showNotice(houseTradeFor(seed) === "auberge"
+        ? "Un lit libre au fond : X pour dormir jusqu'au matin."
+        : "Personne. Le feu couve encore dans l'âtre.", 150);
+    });
+  }
+
   private interact(): void {
     if (this.fortress.active) {
       this.interactInFortress();
@@ -841,8 +924,12 @@ export class Game {
       .filter((npc) => npc.distanceTo(this.player.position) <= REACH)
       .sort((a, b) => a.distanceTo(this.player.position) - b.distanceTo(this.player.position))[0];
 
-    // Rien à portée : la touche sert alors à embarquer ou à accoster.
-    if (!nearest && !nearestNpc && this.tryBoarding()) return;
+    // Rien à portée : la touche ouvre une porte du décor, ou sert à embarquer.
+    if (!nearest && !nearestNpc) {
+      if (this.trySleeping()) return;
+      if (this.tryDoorTile()) return;
+      if (this.tryBoarding()) return;
+    }
 
     if (nearestNpc && (!nearest
       || nearestNpc.distanceTo(this.player.position) < nearest.distanceTo(this.player.position))) {
@@ -1104,6 +1191,11 @@ export class Game {
   }
 
   private currentZone() { return this.zones.at(this.camera.zone); }
+
+  /** Région à rejoindre pour avancer, résolue depuis l'objectif courant. */
+  private waypoint(): Waypoint | null {
+    return waypointFor(this.quests.activeObjective());
+  }
 
   /** Sous un toit : maison, ermitage ou salle de forteresse. */
   private get indoors(): boolean { return this.interior !== null || this.fortress.active; }
@@ -1448,6 +1540,7 @@ export class Game {
     };
     this.transition.start(() => {
       this.interior = kind;
+      this.houseSeed = null;
       this.fortress.leave();
       this.dragon = null;
       this.player.setSailing(false);
@@ -1484,6 +1577,7 @@ export class Game {
     if (this.transition.active || !this.interior) return;
     this.transition.start(() => {
       this.interior = null;
+      this.houseSeed = null;
       this.loadZoneObjects();
       this.player.position = { ...this.exteriorReturnPosition };
       this.player.unstick();
@@ -1521,6 +1615,7 @@ export class Game {
     this.player.setSailing(false);
     this.player.clearImpact();
     this.interior = null;
+    this.houseSeed = null;
     this.camera.zone = { ...point.zone };
     this.player.position = { x: point.x, y: point.y };
     this.projectiles = [];
@@ -1733,17 +1828,25 @@ export class Game {
   private drawInterface(): void {
     const { ctx } = this.renderer;
     const zone = this.currentZone();
-    const interiorName = this.interior ? INTERIOR_NAMES[this.interior]
-      : this.fortress.active ? this.fortress.name : null;
+    const interiorName = this.houseSeed !== null
+      ? HOUSE_LABELS[houseTradeFor(this.houseSeed)]
+      : this.interior ? INTERIOR_NAMES[this.interior]
+        : this.fortress.active ? this.fortress.name : null;
+    const waypoint = this.waypoint();
     // Face à un gardien, le haut de l'écran appartient à sa jauge : ni
     // cartouche de région ni rappel d'objectif ne doivent s'y superposer.
     const fighting = this.boss?.active === true || this.dragon?.active === true;
     if (fighting) this.hud.clearAnnouncement();
+    const heading = waypoint && !this.indoors
+      ? { dx: waypoint.zone.x - this.camera.zone.x, dy: waypoint.zone.y - this.camera.zone.y }
+      : null;
     this.hud.draw(this.renderer, this.player, this.clock,
       interiorName ?? zone?.name ?? "INCONNU",
-      fighting ? undefined : this.quests.activeObjective()?.hint);
+      fighting ? undefined : this.quests.activeObjective()?.hint,
+      heading);
     if (!this.indoors && !this.menu.active) {
-      this.mapScreen.drawMini(ctx, this.camera.zone, VIEW_WIDTH - 74, VIEW_HEIGHT - 70);
+      this.mapScreen.drawMini(ctx, this.camera.zone, VIEW_WIDTH - 74, VIEW_HEIGHT - 70,
+        waypoint?.zone, this.frame);
     }
     if (this.boss?.active) this.drawBossBar();
     if (this.dragon?.active) this.drawDragonBar();
@@ -1765,7 +1868,8 @@ export class Game {
 
     this.shop.draw(this.renderer, this.player);
     this.textBox.draw(this.renderer);
-    this.menu.draw(this.renderer, this.inventory, this.mapScreen, this.quests, this.camera.zone);
+    this.menu.draw(this.renderer, this.inventory, this.mapScreen, this.quests,
+      this.camera.zone, waypoint?.zone, waypoint?.label, this.frame);
     this.fishing.draw(this.renderer);
     this.transition.draw(ctx);
     this.death.draw(this.renderer);

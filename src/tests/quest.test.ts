@@ -30,6 +30,9 @@ describe("quêtes et mémoire", () => {
     quests.notify("defeat", "wolf", 1);
     expect(quests.activeObjectives()).toEqual([{
       id: "lisible", title: "Une quête lisible", hint: "Éloignez les loups.",
+      // L'étape porte sa nature et sa cible : c'est ce qui permet de retrouver
+      // la région à rejoindre et d'y poser l'étoile de la carte.
+      type: "defeat", target: "wolf",
       step: 1, stepCount: 1, progress: 1, targetCount: 3,
     }]);
   });

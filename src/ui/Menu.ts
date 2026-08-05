@@ -15,7 +15,8 @@ const CONTROLS: readonly (readonly [string, string])[] = [
   ["Flèches / WASD", "marcher"],
   ["Espace", "épée — maintenir pour charger"],
   ["Maj", "esquive roulée, invincible"],
-  ["X", "parler, fouiller, ouvrir"],
+  ["X", "parler, fouiller, entrer, embarquer"],
+  ["X près d'un lit", "dormir jusqu'au matin"],
   ["C", "utiliser le premier remède"],
   ["F", "forme demi-démon"],
   ["Entrée", "sac, quêtes et carte"],
@@ -74,7 +75,7 @@ export class Menu {
   }
 
   draw(renderer: Renderer, inventory: Inventory, map: MapScreen, quests: QuestSystem,
-    current: ZoneCoord): void {
+    current: ZoneCoord, target?: ZoneCoord | null, targetLabel?: string, frame = 0): void {
     if (!this.active) return;
     const { ctx } = renderer;
     ctx.save();
@@ -98,7 +99,7 @@ export class Menu {
     });
 
     const tab = TABS[this.tabIndex];
-    if (tab === "carte") map.draw(renderer, current);
+    if (tab === "carte") map.draw(renderer, current, target, targetLabel, frame);
     else if (tab === "quêtes") this.drawQuests(ctx, quests);
     else if (tab === "aide") this.drawHelp(ctx);
     else this.drawBag(ctx, inventory);

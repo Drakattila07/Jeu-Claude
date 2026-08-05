@@ -303,13 +303,21 @@ export class TileSet {
       case "crag":
         this.drawRock(ctx, map, x, y, px, py, variant, kind === "crag");
         break;
-      case "cliff_top":
-        // Plateau : la même roche vue de dessus, sans la paroi.
+      case "cliff_top": {
+        // Plateau : la roche vue de dessus. Quand une paroi commence juste
+        // en dessous, on éclaire le bord — c'est ce liseré qui fait sentir le
+        // vide et donne son épaisseur à la marche.
         fill(ctx, PALETTE.stone, px, py, 16, 16);
-        fill(ctx, PALETTE.stoneLight, px + 1 + variant, py + 2, 6, 3);
-        fill(ctx, PALETTE.stoneDark, px + 9 - variant, py + 8, 5, 3);
-        fill(ctx, PALETTE.stoneDark, px + 2, py + 12, 4, 1);
+        specks(ctx, PALETTE.stoneLight, px, py, x, y, 0x311, 6, 2);
+        specks(ctx, PALETTE.stoneDark, px, py, x, y, 0x312, 5, 2);
+        const brink = map !== undefined
+          && this.properties(map.tileAt("terrain", x, y + 1)).kind === "cliff";
+        if (brink) {
+          fill(ctx, PALETTE.stoneLight, px, py + 13, 16, 2);
+          fill(ctx, PALETTE.white, px + 3 + variant, py + 13, 4, 1);
+        }
         break;
+      }
       case "rubble":
         shadow(ctx, px, py);
         fill(ctx, PALETTE.stoneDark, px + 1, py + 9, 14, 5);
@@ -567,13 +575,32 @@ export class TileSet {
         fill(ctx, PALETTE.wood, px + 3, py + 5, 8, 1);
         fill(ctx, PALETTE.cream, px + 12, py + 4, 1, 3);
         break;
-      case "stairs":
+      case "stairs": {
+        // Volée vue de trois quarts : contremarche sombre, giron clair, et un
+        // limon de chaque côté. Les bandes horizontales d'avant se lisaient
+        // comme un passage clouté, pas comme une montée.
         fill(ctx, PALETTE.stoneDark, px, py, 16, 16);
-        for (let step = 1; step < 16; step += 4) {
-          fill(ctx, PALETTE.stone, px, py + step, 16, 3);
-          fill(ctx, PALETTE.stoneLight, px, py + step, 16, 1);
+        for (let step = 0; step < 4; step += 1) {
+          const top = py + step * 4;
+          fill(ctx, PALETTE.ink, px + 1, top, 14, 1);
+          fill(ctx, PALETTE.stone, px + 1, top + 1, 14, 3);
+          fill(ctx, PALETTE.stoneLight, px + 1, top + 1, 14, 1);
+          fill(ctx, PALETTE.stoneDark, px + 2 + ((step + x) % 5) * 2, top + 2, 2, 1);
+        }
+        // Limons : seulement au bord réel de la volée. Les dessiner sur
+        // chaque tuile redécoupait l'escalier en colonnes de seize pixels.
+        const isStair = (tileX: number): boolean => map !== undefined
+          && this.properties(map.tileAt("ground", tileX, y)).kind === "stairs";
+        if (!isStair(x - 1)) {
+          fill(ctx, PALETTE.stoneDark, px, py, 2, 16);
+          fill(ctx, PALETTE.ink, px, py, 1, 16);
+        }
+        if (!isStair(x + 1)) {
+          fill(ctx, PALETTE.stoneDark, px + 14, py, 2, 16);
+          fill(ctx, PALETTE.stoneLight, px + 14, py, 1, 16);
         }
         break;
+      }
       case "barrel":
         shadow(ctx, px, py, 13);
         fill(ctx, PALETTE.woodDark, px + 2, py + 2, 12, 13);

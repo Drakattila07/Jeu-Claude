@@ -548,33 +548,63 @@ function scatter(grid: Grid): void {
 
 interface House { readonly x: number; readonly y: number; readonly width: number; readonly height: number }
 
-/** Bâtit une maison dont la porte tombe sur `doorX`, dernière rangée du mur. */
+/**
+ * Bâtit une maison : toiture, façade, porte au centre, fenêtres de part et
+ * d'autre, cheminée qui fume.
+ *
+ * Deux exigences ont dicté la forme. Une maison doit se lire de loin — d'où
+ * une toiture haute de deux rangées, une façade d'une seule, et un pas de
+ * porte pavé. Et elle doit respirer : on refuse de bâtir si le voisinage
+ * immédiat est déjà occupé, faute de quoi les maisons se collaient les unes
+ * aux autres jusqu'à former un bloc unique.
+ */
 function placeHouse(grid: Grid, house: House): { readonly doorX: number; readonly doorY: number } | null {
   const { x, y, width, height } = house;
-  if (x < 1 || y < 1 || x + width > W - 1 || y + height > H - 1) return null;
+  if (x < 2 || y < 2 || x + width > W - 2 || y + height > H - 3) return null;
   const doorX = x + Math.floor(width / 2);
   const doorY = y + height - 1;
-  // Une maison ne doit jamais tomber sur un couloir : on abandonne plutôt.
-  for (let ty = y; ty < y + height; ty += 1) {
-    for (let tx = x; tx < x + width; tx += 1) if (isGuarded(grid, tx, ty)) return null;
-  }
-  for (let ty = y; ty < y + height; ty += 1) {
-    for (let tx = x; tx < x + width; tx += 1) {
-      grid.terrain[index(tx, ty)] = ty < y + Math.max(1, height - 3) ? TILE.roof : TILE.wall;
-      grid.below[index(tx, ty)] = 0;
+
+  // Marge d'une case tout autour : ni couloir, ni mur voisin.
+  for (let ty = y - 1; ty <= y + height; ty += 1) {
+    for (let tx = x - 1; tx <= x + width; tx += 1) {
+      if (!inBounds(tx, ty)) return null;
+      if (isGuarded(grid, tx, ty) && ty >= y && ty < y + height) return null;
+      const occupant = grid.terrain[index(tx, ty)]!;
+      if (occupant === TILE.roof || occupant === TILE.wall || occupant === TILE.door) return null;
     }
   }
-  grid.terrain[index(doorX, doorY)] = TILE.door;
-  if (width >= 4) {
-    grid.terrain[index(x + 1, doorY)] = TILE.window;
-    grid.terrain[index(x + width - 2, doorY)] = TILE.window;
+
+  const eaves = y;
+  const facade = y + height - 1;
+  for (let ty = y; ty < y + height; ty += 1) {
+    for (let tx = x; tx < x + width; tx += 1) {
+      grid.terrain[index(tx, ty)] = ty < facade ? TILE.roof : TILE.wall;
+      grid.below[index(tx, ty)] = 0;
+      grid.above[index(tx, ty)] = 0;
+    }
   }
-  grid.above[index(x + 1, y)] = TILE.chimney;
-  // Le seuil et son pas de porte restent dégagés.
+
+  // Façade : porte encadrée de deux fenêtres, soubassement de pierre.
+  grid.terrain[index(doorX, facade)] = TILE.door;
+  if (width >= 5) {
+    grid.terrain[index(x + 1, facade)] = TILE.window;
+    grid.terrain[index(x + width - 2, facade)] = TILE.window;
+  }
+  // Cheminée sur le faîte, décalée : une maison n'est jamais symétrique.
+  const chimneyX = x + (width >= 6 ? 1 : 0);
+  grid.above[index(chimneyX, eaves)] = TILE.chimney;
+
+  // Seuil : deux cases de pavé, dégagées et protégées.
   for (let step = 1; step <= 2; step += 1) {
-    clearTile(grid, doorX, doorY + step);
-    guard(grid, doorX, doorY + step);
-    grid.ground[index(doorX, Math.min(H - 1, doorY + step))] = TILE.path;
+    const ty = Math.min(H - 1, doorY + step);
+    clearTile(grid, doorX, ty);
+    guard(grid, doorX, ty);
+    grid.ground[index(doorX, ty)] = step === 1 ? TILE.cobble : TILE.path;
+  }
+  // Un pot de fleurs à côté de la porte, tant qu'il ne gêne pas le passage.
+  const potX = doorX + (doorX > x + width / 2 ? -2 : 2);
+  if (inBounds(potX, doorY + 1) && !isGuarded(grid, potX, doorY + 1)) {
+    grid.below[index(potX, doorY + 1)] = TILE.flowerPatch;
   }
   return { doorX, doorY };
 }
@@ -604,13 +634,15 @@ function buildVillage(grid: Grid, gates: readonly GateInfo[]): void {
     }
   }
 
+  // Les maisons regardent la place, mais se tiennent à distance les unes des
+  // autres : six parcelles réparties aux quatre coins, jamais deux mitoyennes.
   const spots: readonly House[] = [
-    { x: 3, y: 4, width: 6, height: 5 },
-    { x: 11, y: 3, width: 7, height: 5 },
-    { x: W - 9, y: 5, width: 6, height: 5 },
-    { x: 4, y: H - 9, width: 6, height: 5 },
-    { x: 13, y: H - 8, width: 6, height: 5 },
-    { x: W - 10, y: H - 10, width: 7, height: 5 },
+    { x: 2, y: 3, width: 6, height: 5 },
+    { x: 12, y: 2, width: 7, height: 5 },
+    { x: W - 8, y: 4, width: 6, height: 5 },
+    { x: 3, y: H - 8, width: 6, height: 5 },
+    { x: 13, y: H - 7, width: 7, height: 5 },
+    { x: W - 9, y: H - 9, width: 6, height: 5 },
   ];
   for (const [order, spot] of spots.entries()) {
     const door = placeHouse(grid, spot);
@@ -744,23 +776,165 @@ function buildRuins(grid: Grid): void {
   }
 }
 
-/** Falaises et sommets : gradins rocheux percés de cols. */
-function buildTerraces(grid: Grid, gates: readonly GateInfo[]): void {
-  const passes = new Set<number>(gates
-    .filter((gate) => gate.edge === "north" || gate.edge === "south")
-    .map((gate) => gate.center));
-  if (passes.size === 0) passes.add(Math.floor(W / 2));
+/**
+ * Relief en plateaux.
+ *
+ * Les montagnes étaient trois rangées de rochers posées sur un sol plat : vues
+ * de haut, rien ne disait qu'on montait. On calcule ici une véritable carte
+ * d'altitude, on la quantifie en paliers, et chaque changement de palier
+ * devient une paroi — une bande de roche haute d'une case, éclairée sur sa
+ * lèvre et noire à son pied. Des escaliers percent les parois pour qu'un
+ * plateau se visite au lieu de se contempler.
+ *
+ * Les couloirs déjà tracés restent au niveau zéro : le relief se construit
+ * autour d'eux, jamais au travers.
+ */
+function buildRelief(grid: Grid): void {
+  const alpine = grid.zone.biome === "peaks";
+  const levels = new Uint8Array(W * H);
 
-  for (const ridgeY of [6, 13, 20]) {
-    for (let x = 1; x < W - 1; x += 1) {
-      if (isGuarded(grid, x, ridgeY)) continue;
-      if ([...passes].some((pass) => Math.abs(x - pass) <= 2)) continue;
-      const wobble = Math.round((fbm(x, ridgeY, grid.seed ^ 0x18d, 0.3) - 0.5) * 3);
-      const y = Math.max(2, Math.min(H - 3, ridgeY + wobble));
-      block(grid, x, y, grid.zone.biome === "peaks" ? TILE.crag : TILE.cliff);
-      if (!isGuarded(grid, x, y - 1) && grid.terrain[index(x, y - 1)] === 0) {
-        grid.ground[index(x, y - 1)] = grid.zone.biome === "peaks" ? TILE.snowdrift : TILE.scree;
+  for (let y = 0; y < H; y += 1) {
+    for (let x = 0; x < W; x += 1) {
+      // En montagne, le nord monte ; sur les falaises, le relief est libre.
+      const climb = alpine ? 1 - y / (H - 1) : 0.5;
+      const shape = fbm(x, y, grid.seed ^ 0x5e11e, 0.05);
+      const raw = shape * 0.62 + climb * 0.55;
+      levels[index(x, y)] = raw > 0.74 ? 2 : raw > 0.55 ? 1 : 0;
+    }
+  }
+
+  // Un couloir ne grimpe pas : on aplanit son emprise et son bord.
+  for (let y = 0; y < H; y += 1) {
+    for (let x = 0; x < W; x += 1) {
+      if (!isGuarded(grid, x, y)) continue;
+      for (let dy = -1; dy <= 1; dy += 1) {
+        for (let dx = -1; dx <= 1; dx += 1) {
+          if (inBounds(x + dx, y + dy)) levels[index(x + dx, y + dy)] = 0;
+        }
       }
+    }
+  }
+
+  // Lissage : une case isolée d'un palier ne produirait qu'un plot ridicule.
+  for (let pass = 0; pass < 2; pass += 1) {
+    const copy = Uint8Array.from(levels);
+    for (let y = 1; y < H - 1; y += 1) {
+      for (let x = 1; x < W - 1; x += 1) {
+        if (isGuarded(grid, x, y)) continue;
+        const around = [copy[index(x - 1, y)]!, copy[index(x + 1, y)]!,
+          copy[index(x, y - 1)]!, copy[index(x, y + 1)]!];
+        if (around.every((value) => value !== copy[index(x, y)]!)) {
+          levels[index(x, y)] = around[0]!;
+        }
+      }
+    }
+  }
+
+  const groundFor = (level: number): number => {
+    if (!alpine) return level === 0 ? TILE.scree : level === 1 ? TILE.cliffTop : TILE.gravel;
+    return level === 0 ? TILE.alpineGrass : level === 1 ? TILE.scree : TILE.snow;
+  };
+
+  for (let y = 1; y < H - 1; y += 1) {
+    for (let x = 1; x < W - 1; x += 1) {
+      if (isGuarded(grid, x, y)) continue;
+      const here = levels[index(x, y)]!;
+      const above = levels[index(x, y - 1)]!;
+      // La paroi appartient à la case basse : c'est elle qu'on voit de face.
+      if (above > here) {
+        grid.terrain[index(x, y)] = TILE.cliff;
+        grid.below[index(x, y)] = 0;
+      }
+      grid.ground[index(x, y)] = groundFor(here);
+    }
+  }
+
+  carveStairways(grid, levels);
+
+  // Aiguilles et blocs posés sur les hauteurs : ils donnent l'échelle.
+  for (let y = 2; y < H - 2; y += 1) {
+    for (let x = 2; x < W - 2; x += 1) {
+      if (isGuarded(grid, x, y) || grid.terrain[index(x, y)] !== 0) continue;
+      if (levels[index(x, y)] === 0) continue;
+      if (randomAt(x, y, grid.seed ^ 0x9c1) > 0.04) continue;
+      block(grid, x, y, alpine ? TILE.crag : TILE.boulder);
+    }
+  }
+}
+
+/**
+ * Perce chaque paroi d'un escalier. Sans eux, un plateau serait un décor
+ * qu'on longe sans jamais y monter.
+ */
+function carveStairways(grid: Grid, levels: Uint8Array): void {
+  for (let y = 1; y < H - 1; y += 1) {
+    let runStart = -1;
+    for (let x = 1; x <= W - 1; x += 1) {
+      const isFace = x < W - 1 && grid.terrain[index(x, y)] === TILE.cliff;
+      if (isFace && runStart < 0) runStart = x;
+      if (isFace || runStart < 0) continue;
+
+      // Une marche par pan de paroi, choisie au milieu et décalée par le bruit.
+      const runEnd = x - 1;
+      const span = runEnd - runStart;
+      if (span >= 2) {
+        const offset = Math.floor(randomAt(runStart, y, grid.seed ^ 0x57a1) * (span - 1));
+        const stairX = runStart + 1 + offset;
+        grid.terrain[index(stairX, y)] = 0;
+        grid.ground[index(stairX, y)] = TILE.stairs;
+        guard(grid, stairX, y);
+        // Le palier d'arrivée reste dégagé, sinon la marche ne mène nulle part.
+        for (const dy of [-1, 1]) {
+          const ty = y + dy;
+          if (!inBounds(stairX, ty) || isGuarded(grid, stairX, ty)) continue;
+          if (grid.terrain[index(stairX, ty)] === TILE.cliff) continue;
+          clearTile(grid, stairX, ty);
+          guard(grid, stairX, ty);
+        }
+      }
+      runStart = -1;
+    }
+  }
+  void levels;
+}
+
+/**
+ * Le Grand Escalier : une volée monumentale qui grimpe du sud au nord, avec
+ * paliers et colonnades. C'est le seul endroit de la vallée où l'on voit
+ * l'altitude d'un seul regard.
+ */
+function buildGrandStair(grid: Grid): void {
+  const centre = Math.floor(W / 2);
+  const halfWidth = 4;
+
+  for (let y = 2; y < H - 2; y += 1) {
+    for (let dx = -halfWidth; dx <= halfWidth; dx += 1) {
+      const x = centre + dx;
+      if (!inBounds(x, y)) continue;
+      clearTile(grid, x, y);
+      guard(grid, x, y);
+      // Trois marches, un palier : le rythme d'un escalier qu'on gravit.
+      const onLanding = y % 4 === 0;
+      grid.ground[index(x, y)] = onLanding ? TILE.cobble : TILE.stairs;
+    }
+  }
+
+  // Balustrade : colonnes en vis-à-vis, arches au-dessus des paliers.
+  for (let y = 3; y < H - 3; y += 2) {
+    for (const x of [centre - halfWidth - 1, centre + halfWidth + 1]) {
+      if (!inBounds(x, y)) continue;
+      grid.guarded[index(x, y)] = 0;
+      grid.terrain[index(x, y)] = y % 4 === 0 ? TILE.ruinColumn : TILE.mossStone;
+      if (y % 4 === 0 && inBounds(x, y - 1)) grid.above[index(x, y - 1)] = TILE.archTop;
+    }
+  }
+
+  // Vasques allumées sur les paliers : elles ponctuent la montée.
+  for (let y = 4; y < H - 4; y += 8) {
+    for (const x of [centre - halfWidth + 1, centre + halfWidth - 1]) {
+      if (!inBounds(x, y)) continue;
+      grid.guarded[index(x, y)] = 0;
+      grid.terrain[index(x, y)] = TILE.brazier;
     }
   }
 }
@@ -1160,7 +1334,8 @@ export function createProceduralMap(zone: WorldZoneData, anchors: readonly ZoneA
   }
   else if (zone.biome === "fields") buildFields(grid);
   else if (zone.biome === "ruins") buildRuins(grid);
-  else if (zone.biome === "peaks" || zone.biome === "cliffs") buildTerraces(grid, gates);
+  else if (zone.biome === "peaks" || zone.biome === "cliffs") buildRelief(grid);
+  if (zone.id === "grand_escalier") buildGrandStair(grid);
 
   scatter(grid);
 
