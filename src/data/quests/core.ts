@@ -23,8 +23,10 @@ export const QUESTS = [
     { id: "vanne", type: "flag", target: "source_open", hint: "Près de la source : actionnez la vieille vanne." }
   ], rewards: [{ type: "flag", id: "act1_complete" }], worldEffects: ["well_restored", "river_flowing"] },
   { id: "act2_marche_nuit", title: "Ce qui Marche la Nuit", giver: "doyen_orme", prerequisites: ["act1_complete"], steps: [
-    { id: "observe", type: "flag", target: "walker_seen", hint: "La nuit : rejoignez la Clairière des Cimes." },
-    { id: "suivre", type: "flag", target: "walker_followed", hint: "Clairière des Cimes : suivez les empreintes." }
+    { id: "observe", type: "flag", target: "walker_seen",
+      hint: "Clairière des Cimes, entre 22 h et 6 h : abattez l'Arbre Marcheur." },
+    { id: "suivre", type: "flag", target: "walker_followed",
+      hint: "Clairière des Cimes : suivez la trouée qu'il a laissée." }
   ], rewards: [{ type: "flag", id: "gloves_obtained" }], worldEffects: ["stone_steps_open"] },
   { id: "act3_trois_sceaux", title: "Les Trois Sceaux", giver: "iris", prerequisites: ["walker_followed"], steps: [
     { id: "sceaux", type: "collect", target: "seal", count: 3, hint: "Ruines Basses : activez les trois Sceaux." },

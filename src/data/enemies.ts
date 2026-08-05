@@ -92,6 +92,11 @@ export const ENEMY_TYPES = {
     name: "Escarbille", hearts: 3, speed: 1, damage: 2, behavior: "caster",
     color: "red", aggro: 180, reach: 140, windup: 38, bounty: 12, ranged: true, phasing: true,
   },
+  // — Le Marcheur : il n'existe qu'entre vingt-deux heures et six heures —
+  night_walker: {
+    name: "L'Arbre Marcheur", hearts: 9, speed: 0.8, damage: 2, behavior: "charger",
+    color: "leaf", aggro: 200, reach: 34, windup: 34, bounty: 20,
+  },
   // — Gardiens de Vertepierre —
   green_knight: {
     name: "Chevalier de Vertepierre", hearts: 10, speed: 0.9, damage: 2, behavior: "charger",
@@ -130,6 +135,49 @@ export const CASTLE_ENEMY_SPAWNS = [
   { id: "castle_guard_throne", zone: "castle", type: "castle_guard", x: 184, y: 64 },
   { id: "castle_ember_mage", zone: "castle", type: "ember_mage", x: 184, y: 160 },
 ] as const satisfies readonly EnemySpawn[];
+
+/**
+ * Gardiens nocturnes.
+ *
+ * « La nuit, rejoignez la Clairière des Cimes » ne disait pas quoi y faire :
+ * on y arrivait, on ne voyait rien, et l'on repartait. Une créature qui n'y
+ * existe qu'entre vingt-deux heures et six heures répond à la question — elle
+ * se montre, elle attaque, et l'abattre fait avancer l'histoire.
+ */
+export interface NightGuardian {
+  readonly zone: string;
+  readonly type: EnemyType;
+  readonly x: number;
+  readonly y: number;
+  /** Plage d'apparition, minuit compris quand `from` dépasse `to`. */
+  readonly from: number;
+  readonly to: number;
+  /** Déclencheur de campagne joué à sa défaite. */
+  readonly trigger: string;
+  /** Une fois ce drapeau posé, il ne revient plus. */
+  readonly until: string;
+  /** Ce qu'on lit en arrivant, tant qu'il rôde. */
+  readonly announce: string;
+}
+
+export const NIGHT_GUARDIANS: readonly NightGuardian[] = [
+  {
+    zone: "clairiere_cimes", type: "night_walker", x: 192, y: 272,
+    from: 22, to: 6, trigger: "walker_trace", until: "walker_followed",
+    announce: "Quelque chose de haut marche entre les troncs.",
+  },
+];
+
+/** Le gardien d'une région, s'il rôde à cette heure et n'est pas encore abattu. */
+export function nightGuardianFor(zoneId: string, hour: number,
+  hasFlag: (flag: string) => boolean): NightGuardian | null {
+  const guardian = NIGHT_GUARDIANS.find((candidate) => candidate.zone === zoneId);
+  if (!guardian || hasFlag(guardian.until)) return null;
+  const awake = guardian.from > guardian.to
+    ? hour >= guardian.from || hour < guardian.to
+    : hour >= guardian.from && hour < guardian.to;
+  return awake ? guardian : null;
+}
 
 /**
  * Faune propre à chaque milieu. Cinquante-six régions ne pouvaient pas vivre

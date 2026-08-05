@@ -14,7 +14,7 @@ import { INTERACTABLES } from "../data/interactables";
 import { WORLD_ZONES, isOpenSea } from "../data/world";
 import { Interactable, ZoneObjectState } from "../entities/Interactable";
 import { Combat, overlaps } from "../systems/Combat";
-import { CASTLE_ENEMY_SPAWNS, type EnemySpawn } from "../data/enemies";
+import { CASTLE_ENEMY_SPAWNS, nightGuardianFor, type EnemySpawn } from "../data/enemies";
 import { Enemy } from "../entities/Enemy";
 import { Projectile } from "../entities/Projectile";
 import { Pickup } from "../entities/Pickup";
@@ -227,6 +227,9 @@ export class Game {
     this.player.unstick();
     this.camera.snapTo(this.player.position);
     this.mapScreen.reveal(this.camera.zone);
+    // Le cartouche annonce la région où l'on vient d'atterrir : sans cela,
+    // les captures de contrôle affichaient le nom de la région précédente.
+    this.announceZone();
     this.noticeFrames = 0;
   }
 
@@ -259,7 +262,7 @@ export class Game {
   debugState(): {
     zone: { x: number; y: number }; x: number; y: number;
     hearts: number; rupees: number; enemies: number; inSolid: boolean;
-    interior: string | null; busy: boolean;
+    interior: string | null; busy: boolean; hour: number; day: number;
   } {
     const tileX = Math.floor((this.player.position.x + this.player.hitbox.x) / TILE_SIZE);
     const tileY = Math.floor((this.player.position.y + this.player.hitbox.y) / TILE_SIZE);
@@ -275,6 +278,8 @@ export class Game {
       busy: this.death.active || this.textBox.active || this.menu.active
         || this.shop.active || this.choices.active || this.transition.active
         || this.combat.frozen,
+      hour: this.clock.hour,
+      day: this.clock.day,
     };
   }
 
@@ -734,6 +739,18 @@ export class Game {
 
   private onEnemyDefeated(enemy: Enemy): void {
     this.quests.notify("defeat", enemy.spawn.type, this.frame);
+    // Un gardien nocturne n'est pas une créature de plus : sa chute est un
+    // moment de l'histoire, et c'est elle qui débloque la suite.
+    const zoneId = this.currentZone()?.id ?? "";
+    const guardian = nightGuardianFor(zoneId, this.clock.hour, (flag) => this.flags.has(flag));
+    if (guardian && enemy.spawn.type === guardian.type) {
+      const message = this.campaign.trigger(guardian.trigger, this.frame);
+      if (message) {
+        this.textBox.open(message, "LA CLAIRIÈRE");
+        this.combat.impact(4, 22);
+        this.audio.playSfx("secret");
+      }
+    }
     this.particles.emit(enemy.position.x + 8, enemy.position.y + 8, "smoke", 10);
     this.combat.impact(2, 6);
     const bounty = enemy.definition.bounty;
@@ -1079,7 +1096,11 @@ export class Game {
     }
     const message = campaignMessage ?? sideMessage ?? result.message;
     this.showNotice(message, 150);
-    this.textBox.open(message);
+    // Un puits en eau ouvre directement son menu : sa réplique de fond sec
+    // s'intercalait devant, et il fallait la congédier avant de pouvoir
+    // seulement choisir d'attendre le soir.
+    const wellReady = nearest.data.kind === "well" && this.flags.has("source_open");
+    if (!wellReady) this.textBox.open(message);
     if (nearest.data.kind === "cauldron" || nearest.data.kind === "valve") {
       this.audio.playSfx("splash");
       this.particles.emit(nearest.position.x + 8, nearest.position.y + 8,
@@ -1615,6 +1636,8 @@ export class Game {
     const zone = this.currentZone();
     if (!zone || this.interior) return;
     this.lastPopulatedDay = this.clock.day;
+    const guardian = nightGuardianFor(zone.id, this.clock.hour,
+      (flag) => this.flags.has(flag));
     const spawns: readonly EnemySpawn[] = populateZone({
       zone, map: this.map, day: this.clock.day,
       playerX: this.player.position.x, playerY: this.player.position.y,
@@ -1622,6 +1645,13 @@ export class Game {
       peaceful: zone.safe && !this.flags.has("village_alarm"),
     });
     this.enemies = spawns.map((spawn) => new Enemy(spawn, this.player, this.map));
+    if (guardian) {
+      this.enemies.push(new Enemy({
+        id: `guardian:${guardian.zone}`, zone: guardian.zone, type: guardian.type,
+        x: guardian.x, y: guardian.y,
+      }, this.player, this.map));
+      this.showNotice(guardian.announce, 220);
+    }
   }
 
   /**

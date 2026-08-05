@@ -17,6 +17,7 @@ const CONTROLS: readonly (readonly [string, string])[] = [
   ["Maj", "esquive roulée, invincible"],
   ["X", "parler, fouiller, entrer, embarquer"],
   ["X près d'un lit", "dormir jusqu'au matin"],
+  ["X au puits", "soigner, sauver, attendre l'heure"],
   ["C", "utiliser le premier remède"],
   ["F", "forme demi-démon"],
   ["Entrée", "sac, quêtes et carte"],

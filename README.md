@@ -60,6 +60,10 @@ X pour l'épée, gâchettes pour l'esquive.
 - **Un puits qui sert.** Il propose de boire, de graver son passage, ou
   d'attendre le matin, midi, le soir ou la nuit : plusieurs secrets n'acceptent
   qu'une heure précise, et les guetter en tournant en rond était une punition.
+- **Des créatures qui n'existent qu'à une heure.** L'Arbre Marcheur ne se
+  montre dans la Clairière des Cimes qu'entre 22 h et 6 h. L'abattre fait
+  avancer l'histoire — une consigne nocturne doit désigner quelque chose à
+  faire, pas seulement un lieu où aller.
 - **Un repère sur la carte.** Une étoile marque la région où avancer, une
   flèche indique la direction dans l'ATH. Savoir quoi faire ne suffisait pas :
   il fallait savoir où aller.

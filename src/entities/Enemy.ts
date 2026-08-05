@@ -429,6 +429,42 @@ export class Enemy extends Entity {
         ctx.fillRect(x + 10, y + 3, 1, 1);
         break;
       }
+      case "night_walker": {
+        // Un tronc monté sur racines. Il dépasse de sa case vers le haut :
+        // c'est ce débordement qui le rend immédiatement plus grand que tout
+        // ce qu'on a croisé jusque-là.
+        const stride = Math.floor(this.aiFrame / 14) % 2;
+        ctx.fillStyle = PALETTE.ink;
+        ctx.fillRect(x + 1, y - 14, 14, 30);
+        ctx.fillStyle = tint;
+        ctx.fillRect(x + 2, y - 13, 12, 28);
+        // Frondaison.
+        ctx.fillStyle = PALETTE.pineDark;
+        ctx.fillRect(x - 3, y - 22, 22, 10);
+        ctx.fillStyle = PALETTE.leafDark;
+        ctx.fillRect(x - 2, y - 24, 20, 9);
+        ctx.fillStyle = PALETTE.leaf;
+        ctx.fillRect(x + 1, y - 25, 13, 6);
+        // Écorce et nœuds.
+        ctx.fillStyle = PALETTE.woodDark;
+        ctx.fillRect(x + 4, y - 10, 3, 20);
+        ctx.fillRect(x + 9, y - 6, 2, 14);
+        // Racines qui marchent.
+        ctx.fillStyle = PALETTE.woodDark;
+        ctx.fillRect(x + 1 + stride, y + 11, 5, 5);
+        ctx.fillRect(x + 10 - stride, y + 11, 5, 5);
+        ctx.fillRect(x - 2 + stride, y + 14, 4, 2);
+        ctx.fillRect(x + 14 - stride, y + 14, 4, 2);
+        // Deux yeux dans l'écorce : c'est ce qui fait qu'on ne le prend pas
+        // pour un arbre.
+        ctx.fillStyle = PALETTE.yellow;
+        ctx.fillRect(x + 4, y - 8, 3, 3);
+        ctx.fillRect(x + 10, y - 8, 3, 3);
+        ctx.fillStyle = PALETTE.ink;
+        ctx.fillRect(x + 5, y - 7, 1, 1);
+        ctx.fillRect(x + 11, y - 7, 1, 1);
+        break;
+      }
       case "root_horror":
         ctx.fillStyle = PALETTE.ink;
         ctx.fillRect(x, y, 16, 16);
