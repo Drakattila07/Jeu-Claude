@@ -82,11 +82,29 @@ function decorate(grid: Grid, x: number, y: number, tile: number): void {
   grid.below[index(x, y)] = tile;
 }
 
-function clearTile(grid: Grid, x: number, y: number): void {
+/**
+ * Tuiles qu'une passe de décor n'a pas le droit de démolir.
+ *
+ * Chaque passe se croyait seule et déblayait ce qu'elle traversait : une rue
+ * tranchait une façade, un quai emportait le mur d'un entrepôt, et il restait
+ * des portes sans maison au bord des chemins. Le générateur ne détruit plus ce
+ * qu'il a bâti — sauf réparation de dernier recours, seule à passer en force.
+ */
+const BUILT = new Set<number>([
+  TILE.roof, TILE.wall, TILE.door, TILE.window, TILE.chimney, TILE.well,
+]);
+
+/**
+ * Une porte et un puits ne cèdent jamais, même à la réparation : ce sont les
+ * deux seuls points du décor sur lesquels le joueur appuie sur « agir ».
+ */
+const INVIOLABLE = new Set<number>([TILE.door, TILE.well]);
+
+function clearTile(grid: Grid, x: number, y: number, force = false): void {
   if (!inBounds(x, y)) return;
-  // Une porte est le point d'entrée d'un bâtiment : la déblayer ferait
-  // disparaître le seul endroit où le joueur peut appuyer sur « agir ».
-  if (grid.terrain[index(x, y)] === TILE.door) return;
+  const standing = grid.terrain[index(x, y)]!;
+  if (INVIOLABLE.has(standing)) return;
+  if (!force && BUILT.has(standing)) return;
   grid.terrain[index(x, y)] = 0;
   grid.below[index(x, y)] = 0;
   grid.above[index(x, y)] = 0;
@@ -301,14 +319,15 @@ function outerAnchor(gate: GateInfo): { readonly x: number; readonly y: number }
 
 /** Trace un couloir praticable entre deux points, en L. */
 function carve(grid: Grid, from: { x: number; y: number }, to: { x: number; y: number },
-  halfWidth: number, groundTileId: number | null, horizontalFirst: boolean): void {
+  halfWidth: number, groundTileId: number | null, horizontalFirst: boolean,
+  force = false): void {
   const paint = (x: number, y: number): void => {
     for (let dy = -halfWidth; dy <= halfWidth; dy += 1) {
       for (let dx = -halfWidth; dx <= halfWidth; dx += 1) {
         const tx = x + dx;
         const ty = y + dy;
         if (!inBounds(tx, ty)) continue;
-        clearTile(grid, tx, ty);
+        clearTile(grid, tx, ty, force);
         guard(grid, tx, ty);
         if (groundTileId !== null && Math.abs(dx) <= halfWidth - 1 && Math.abs(dy) <= halfWidth - 1) {
           grid.ground[index(tx, ty)] = groundTileId;
@@ -485,8 +504,10 @@ function furnishingFor(biome: Biome): Furnishing {
       decor: [TILE.pebbles, TILE.vines],
     };
     case "village": return {
-      obstacles: [TILE.fence, TILE.barrel, TILE.crate, TILE.haystack],
-      decor: [TILE.flowerPatch, TILE.crop, TILE.tallGrass],
+      // Ni barrières ni cultures au hasard : elles appartiennent aux jardins,
+      // et semées à la volée elles couvraient le hameau de caisses brunes.
+      obstacles: [TILE.barrel, TILE.crate, TILE.haystack],
+      decor: [TILE.flowerPatch, TILE.tallGrass, TILE.wildflowers],
     };
     default: return { obstacles: [TILE.boulder], decor: [TILE.tallGrass] };
   }
@@ -564,11 +585,15 @@ function placeHouse(grid: Grid, house: House): { readonly doorX: number; readonl
   const doorX = x + Math.floor(width / 2);
   const doorY = y + height - 1;
 
-  // Marge d'une case tout autour : ni couloir, ni mur voisin.
+  // Une maison ne recouvre jamais une rue ni une autre maison. En revanche
+  // elle a le droit de s'y adosser : c'est même ce qu'on veut, une façade
+  // donne sur la voie. Le refus ne porte donc que sur l'emprise elle-même,
+  // et la marge ne surveille que le voisinage bâti.
   for (let ty = y - 1; ty <= y + height; ty += 1) {
     for (let tx = x - 1; tx <= x + width; tx += 1) {
       if (!inBounds(tx, ty)) return null;
-      if (isGuarded(grid, tx, ty) && ty >= y && ty < y + height) return null;
+      const inside = tx >= x && tx < x + width && ty >= y && ty < y + height;
+      if (inside && isGuarded(grid, tx, ty)) return null;
       const occupant = grid.terrain[index(tx, ty)]!;
       if (occupant === TILE.roof || occupant === TILE.wall || occupant === TILE.door) return null;
     }
@@ -610,22 +635,23 @@ function placeHouse(grid: Grid, house: House): { readonly doorX: number; readonl
 }
 
 /**
- * Village : place pavée, maisons serrées, jardins et lanternes.
+ * Village.
  *
- * La première version posait un rectangle de pavés de onze cases sur neuf au
- * centre d'un pré : vu de haut, une dalle de béton. La place est désormais
- * ronde et resserrée, les maisons se tournent vers elle, et le pavé s'effrite
- * vers la terre battue à mesure qu'on s'en éloigne.
+ * L'ordre comptait plus que le dessin. Les maisons se posaient d'abord, puis
+ * on creusait les rues — qui tranchaient les façades au passage, laissant des
+ * pans de mur orphelins au bord des chemins. On trace maintenant toute la
+ * voirie en premier, et l'on ne bâtit qu'ensuite, sur des parcelles qui
+ * bordent une rue sans jamais l'entamer.
  */
 function buildVillage(grid: Grid, gates: readonly GateInfo[]): void {
   const hubX = Math.floor(W / 2);
   const hubY = Math.floor(H / 2);
 
+  // 1. La place, ronde et rongée sur son bord.
   for (let y = hubY - 5; y <= hubY + 5; y += 1) {
     for (let x = hubX - 6; x <= hubX + 6; x += 1) {
       if (!inBounds(x, y)) continue;
-      // Ellipse plutôt que rectangle, avec un bord rongé par le bruit.
-      const distance = Math.hypot((x - hubX) / 6, (y - hubY) / 4.2)
+      const distance = Math.hypot((x - hubX) / 5, (y - hubY) / 3.4)
         + (fbm(x, y, grid.seed ^ 0x3311, 0.3) - 0.5) * 0.28;
       if (distance > 1) continue;
       clearTile(grid, x, y);
@@ -634,40 +660,56 @@ function buildVillage(grid: Grid, gates: readonly GateInfo[]): void {
     }
   }
 
-  // Les maisons regardent la place, mais se tiennent à distance les unes des
-  // autres : six parcelles réparties aux quatre coins, jamais deux mitoyennes.
-  const spots: readonly House[] = [
-    { x: 2, y: 3, width: 6, height: 5 },
-    { x: 12, y: 2, width: 7, height: 5 },
-    { x: W - 8, y: 4, width: 6, height: 5 },
-    { x: 3, y: H - 8, width: 6, height: 5 },
-    { x: 13, y: H - 7, width: 7, height: 5 },
-    { x: W - 9, y: H - 9, width: 6, height: 5 },
+  // 2. Toute la voirie, avant la moindre pierre de maison.
+  for (const gate of gates) {
+    if (gate.shoreline) continue;
+    carve(grid, gateAnchor(gate), { x: hubX, y: hubY }, 1, TILE.path,
+      gate.edge === "west" || gate.edge === "east");
+  }
+  // Deux ruelles de desserte, pour que les maisons du fond aient une adresse.
+  const northLane = 9;
+  const southLane = H - 4;
+  carve(grid, { x: 2, y: northLane }, { x: W - 3, y: northLane }, 0, TILE.path, true);
+  carve(grid, { x: 2, y: southLane }, { x: W - 3, y: southLane }, 0, TILE.path, true);
+  carve(grid, { x: 2, y: northLane }, { x: 2, y: southLane }, 0, TILE.path, false);
+  carve(grid, { x: W - 3, y: northLane }, { x: W - 3, y: southLane }, 0, TILE.path, false);
+
+  // 3. Le puits, au cœur de la place. Une région qui en déclare un dans son
+  //    contenu le recevra du système d'ancres : on ne double pas.
+
+  // 4. Les parcelles : elles doivent border une rue et ne rien recouvrir.
+  // Deux rangées qui bordent les ruelles, plus quelques parcelles de repli :
+  // un couloir d'entrée peut toujours en condamner une, et un village à deux
+  // maisons n'est plus un village.
+  const plots: readonly House[] = [
+    { x: 3, y: northLane - 5, width: 6, height: 5 },
+    { x: 11, y: northLane - 5, width: 7, height: 5 },
+    { x: 20, y: northLane - 5, width: 6, height: 5 },
+    { x: 3, y: southLane - 5, width: 6, height: 5 },
+    { x: 11, y: southLane - 5, width: 7, height: 5 },
+    { x: 20, y: southLane - 5, width: 6, height: 5 },
+    { x: 7, y: northLane - 5, width: 6, height: 5 },
+    { x: 16, y: southLane - 5, width: 6, height: 5 },
+    { x: 15, y: northLane - 5, width: 6, height: 5 },
+    { x: 24, y: northLane - 5, width: 5, height: 5 },
+    { x: 7, y: southLane - 5, width: 6, height: 5 },
+    { x: 24, y: southLane - 5, width: 5, height: 5 },
   ];
-  for (const [order, spot] of spots.entries()) {
-    const door = placeHouse(grid, spot);
+  for (const plot of plots) {
+    const door = placeHouse(grid, plot);
     if (!door) continue;
-    carve(grid, { x: door.doorX, y: Math.min(H - 2, door.doorY + 2) }, { x: hubX, y: hubY },
-      1, TILE.path, order % 2 === 0);
-    // Un potager clos derrière chaque maison.
-    for (let dy = 0; dy < 2; dy += 1) {
-      for (let dx = 0; dx < spot.width; dx += 1) {
-        const tx = spot.x + dx;
-        const ty = spot.y - 2 + dy;
-        if (!inBounds(tx, ty) || isGuarded(grid, tx, ty)) continue;
-        if (grid.terrain[index(tx, ty)] !== 0) continue;
-        if (dy === 0 && dx % 2 === 0) block(grid, tx, ty, TILE.fence);
-        else grid.below[index(tx, ty)] = TILE.crop;
-      }
-    }
+    // Le seuil rejoint la rue la plus proche par une allée courte : au-delà
+    // de quatre cases, on renonce plutôt que de percer le voisinage.
+    linkToStreet(grid, door.doorX, door.doorY + 2);
+    plantGarden(grid, plot);
   }
 
-  // Mobilier de place : lanternes, étal, tonneaux, un arbre pour l'ombre.
+  // 5. Mobilier de place.
   const furniture: readonly (readonly [number, number, number])[] = [
     [-5, -3, TILE.lanternPost], [5, -3, TILE.lanternPost],
     [-5, 3, TILE.lanternPost], [5, 3, TILE.lanternPost],
-    [3, -3, TILE.marketStall], [-3, 3, TILE.barrel], [-4, 3, TILE.crate],
-    [4, 3, TILE.haystack], [-4, -3, TILE.treeCrown],
+    [3, 3, TILE.marketStall], [-3, 3, TILE.barrel], [-4, 3, TILE.crate],
+    [4, -3, TILE.haystack], [-4, -3, TILE.treeCrown],
   ];
   for (const [dx, dy, tile] of furniture) {
     const tx = hubX + dx;
@@ -677,10 +719,77 @@ function buildVillage(grid: Grid, gates: readonly GateInfo[]): void {
     grid.terrain[index(tx, ty)] = tile;
     if (tile === TILE.treeCrown && inBounds(tx, ty - 1)) grid.above[index(tx, ty - 1)] = TILE.canopy;
   }
+}
 
-  for (const gate of gates) {
-    carve(grid, gateAnchor(gate), { x: hubX, y: hubY }, 1, TILE.path,
-      gate.edge === "west" || gate.edge === "east");
+/**
+ * Le puits sur la place. Une région qui en déclare un dans son contenu le
+ * reçoit du système d'ancres : on ne le double pas.
+ */
+function raiseWell(grid: Grid): void {
+  const declared = INTERACTABLES.some((entry) =>
+    entry.zone === grid.zone.id && entry.kind === "well");
+  if (declared) return;
+  const hubX = Math.floor(W / 2);
+  const hubY = Math.floor(H / 2);
+  for (const [dx, dy] of [[-1, 0], [1, 0], [0, 1], [-1, 1], [1, 1], [0, -1]] as const) {
+    const tx = hubX + dx;
+    const ty = hubY - 1 + dy;
+    if (!inBounds(tx, ty) || BUILT.has(grid.terrain[index(tx, ty)]!)) continue;
+    clearTile(grid, tx, ty);
+    guard(grid, tx, ty);
+    grid.ground[index(tx, ty)] = TILE.cobble;
+  }
+  grid.terrain[index(hubX, hubY - 1)] = TILE.well;
+  guard(grid, hubX, hubY - 1);
+}
+
+/** Relie un seuil à la rue la plus proche, sans traverser de bâtiment. */
+function linkToStreet(grid: Grid, fromX: number, fromY: number): void {
+  let best: { x: number; y: number; distance: number } | null = null;
+  for (let y = 2; y < H - 2; y += 1) {
+    for (let x = 2; x < W - 2; x += 1) {
+      if (!isGuarded(grid, x, y)) continue;
+      if (grid.terrain[index(x, y)] !== 0) continue;
+      const distance = Math.abs(x - fromX) + Math.abs(y - fromY);
+      if (distance > 7) continue;
+      if (!best || distance < best.distance) best = { x, y, distance };
+    }
+  }
+  if (!best) return;
+  // Allée d'une seule case de large : elle se faufile sans raser de façade.
+  let cursor = { x: fromX, y: fromY };
+  const paint = (x: number, y: number): void => {
+    if (!inBounds(x, y)) return;
+    const tile = grid.terrain[index(x, y)]!;
+    if (tile === TILE.roof || tile === TILE.wall || tile === TILE.door) return;
+    clearTile(grid, x, y);
+    guard(grid, x, y);
+    grid.ground[index(x, y)] = TILE.path;
+  };
+  while (cursor.y !== best.y) {
+    paint(cursor.x, cursor.y);
+    cursor = { x: cursor.x, y: cursor.y + Math.sign(best.y - cursor.y) };
+  }
+  while (cursor.x !== best.x) {
+    paint(cursor.x, cursor.y);
+    cursor = { x: cursor.x + Math.sign(best.x - cursor.x), y: cursor.y };
+  }
+}
+
+/** Potager clos derrière la maison, sur les cases restées libres. */
+function plantGarden(grid: Grid, plot: House): void {
+  for (let dy = 0; dy < 2; dy += 1) {
+    for (let dx = 0; dx < plot.width; dx += 1) {
+      const tx = plot.x + dx;
+      const ty = plot.y - 2 + dy;
+      if (!inBounds(tx, ty) || isGuarded(grid, tx, ty)) continue;
+      if (grid.terrain[index(tx, ty)] !== 0) continue;
+      if (dy === 0 && dx % 2 === 0) { block(grid, tx, ty, TILE.fence); continue; }
+      // La terre retournée sous les rangs : sans elle, le carré de culture
+      // se découpait sur l'herbe comme une caisse posée là.
+      grid.ground[index(tx, ty)] = TILE.dryGrass;
+      grid.below[index(tx, ty)] = TILE.crop;
+    }
   }
 }
 
@@ -693,6 +802,7 @@ function dressPort(grid: Grid, gates: readonly GateInfo[]): void {
   const shore = gates.find((gate) => gate.shoreline && gate.edge === "south");
   const quayY = H - 5;
   for (let x = 3; x < W - 3; x += 1) {
+    if (BUILT.has(grid.terrain[index(x, quayY)]!)) continue;
     if (isGuarded(grid, x, quayY) && grid.channel[index(x, quayY)] === 1) continue;
     clearTile(grid, x, quayY);
     guard(grid, x, quayY);
@@ -708,7 +818,7 @@ function dressPort(grid: Grid, gates: readonly GateInfo[]): void {
     { x: Math.floor(W / 2), y: Math.floor(H / 2) }, 1, TILE.path, false);
 
   for (const x of [4, 9, 15, 21, 27]) {
-    if (!inBounds(x, quayY)) continue;
+    if (!inBounds(x, quayY) || BUILT.has(grid.terrain[index(x, quayY)]!)) continue;
     grid.guarded[index(x, quayY)] = 0;
     grid.terrain[index(x, quayY)] = TILE.bollard;
   }
@@ -721,7 +831,10 @@ function dressPort(grid: Grid, gates: readonly GateInfo[]): void {
 
   // La coque en chantier, juste au bord : c'est elle que Sarn répare.
   const yardX = shore ? Math.max(4, Math.min(W - 6, shore.center - 2)) : 17;
-  for (let dx = 0; dx < 4; dx += 1) block(grid, yardX + dx, quayY - 4, TILE.hull);
+  for (let dx = 0; dx < 4; dx += 1) {
+    if (BUILT.has(grid.terrain[index(yardX + dx, quayY - 4)]!)) continue;
+    block(grid, yardX + dx, quayY - 4, TILE.hull);
+  }
   decorate(grid, yardX - 1, quayY - 3, TILE.net);
 }
 
@@ -1176,7 +1289,9 @@ function repairConnectivity(grid: Grid, points: readonly { x: number; y: number 
     let repaired = false;
     for (const point of points.slice(1)) {
       if (reachable.has(index(point.x, point.y))) continue;
-      carve(grid, root, point, 1, null, true);
+      // Dernier recours : ici seulement, on s'autorise à percer un bâtiment
+      // plutôt que de laisser une région infranchissable.
+      carve(grid, root, point, 1, null, true, true);
       repaired = true;
     }
     if (!repaired) return;
@@ -1246,8 +1361,13 @@ function applyAnchors(grid: Grid, anchors: readonly ZoneAnchor[], hub: { x: numb
           grid.terrain[index(hx, hy)] = dy < -2 ? TILE.roof : TILE.wall;
         }
       }
-      if (inBounds(tx - 2, ty - 2)) grid.terrain[index(tx - 2, ty - 2)] = TILE.window;
-      if (inBounds(tx + 2, ty - 2)) grid.terrain[index(tx + 2, ty - 2)] = TILE.window;
+      // La porte elle-même : sans elle, la façade bâtie autour d'un objet
+      // « porte » n'en montrait aucune, et rien ne disait qu'on pouvait entrer.
+      grid.terrain[index(tx, ty)] = TILE.door;
+      if (inBounds(tx - 1, ty)) grid.terrain[index(tx - 1, ty)] = TILE.wall;
+      if (inBounds(tx + 1, ty)) grid.terrain[index(tx + 1, ty)] = TILE.wall;
+      if (inBounds(tx - 2, ty - 1)) grid.terrain[index(tx - 2, ty - 1)] = TILE.window;
+      if (inBounds(tx + 2, ty - 1)) grid.terrain[index(tx + 2, ty - 1)] = TILE.window;
       if (inBounds(tx, ty - 5)) grid.above[index(tx, ty - 5)] = TILE.chimney;
     } else if (anchor.kind === "well") {
       for (let dy = -1; dy <= 1; dy += 1) {
@@ -1362,6 +1482,10 @@ export function createProceduralMap(zone: WorldZoneData, anchors: readonly ZoneA
     })),
   ];
   repairConnectivity(grid, mustConnect, gridSolid(grid, naval));
+
+  // Le puits en dernier : posé plus tôt, une réparation de connexité pouvait
+  // encore l'emporter, et le hameau se retrouvait sans son seul point d'eau.
+  if (zone.biome === "village") raiseWell(grid);
 
   const layers: Record<LayerName, number[]> = {
     ground: grid.ground,

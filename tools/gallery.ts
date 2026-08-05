@@ -117,6 +117,9 @@ try {
     await page.evaluate(({ x, y, at }) => {
       const game = window.__RACINES_GAME__;
       game?.debugGoto(x, y, at);
+      // On décale le personnage vers le sud : planté au centre exact, il
+      // masquait ce qui s'y trouve — le puits d'une place, par exemple.
+      game?.debugPlace(256, 300);
       game?.debugAdvance(90);
     }, { x: zoneX, y: zoneY, at: hour });
     await canvas.screenshot({ path: path.join(outputDir, `${label}.png`) });

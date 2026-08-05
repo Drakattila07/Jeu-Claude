@@ -55,8 +55,11 @@ X pour l'épée, gâchettes pour l'esquive.
   de « refuge » à « hostile ».
 - **Des portes qui s'ouvrent.** Toutes, pas seulement les quatre lieux du
   récit : chaque maison du monde a son intérieur, meublé selon son métier —
-  logis, atelier, auberge, échoppe. Un lit rend les forces et fait passer la
-  nuit.
+  logis, atelier, auberge, échoppe — et son habitant, qui a un nom et des mots
+  à lui. Un lit rend les forces et fait passer la nuit.
+- **Un puits qui sert.** Il propose de boire, de graver son passage, ou
+  d'attendre le matin, midi, le soir ou la nuit : plusieurs secrets n'acceptent
+  qu'une heure précise, et les guetter en tournant en rond était une punition.
 - **Un repère sur la carte.** Une étoile marque la région où avancer, une
   flèche indique la direction dans l'ATH. Savoir quoi faire ne suffisait pas :
   il fallait savoir où aller.

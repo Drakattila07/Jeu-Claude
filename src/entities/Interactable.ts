@@ -44,6 +44,19 @@ export class Interactable extends Entity {
 
   get isSpent(): boolean { return this.state.get(this.data.zone, this.data.id); }
 
+  /**
+   * Objets qui disparaissent une fois consommés. Tant qu'ils restaient
+   * interrogeables, appuyer sur « agir » devant une racine déjà tranchée
+   * rouvrait sans fin sa réplique — « des racines bloquent la vanne » — sur un
+   * emplacement vide. On avait toutes les raisons de croire à un blocage.
+   */
+  private static readonly VANISHING = new Set<string>(["roots", "bush", "pickup"]);
+
+  /** Faux quand l'objet a été consommé et n'est plus dessiné. */
+  get isPresent(): boolean {
+    return !this.isSpent || !Interactable.VANISHING.has(this.data.kind);
+  }
+
   interact(): InteractionResult {
     if (Interactable.ONE_SHOT.has(this.data.kind)) {
       if (this.state.get(this.data.zone, this.data.id)) return { message: "Il n'y a plus rien ici.", changed: false };
@@ -62,7 +75,70 @@ export class Interactable extends Entity {
     const x = Math.round(this.position.x);
     const y = Math.round(this.position.y);
     ctx.save();
-    if (this.data.kind === "chest") {
+    if (this.data.kind === "well") {
+      // Le puits n'avait aucun dessin : la Place du Puits n'en montrait
+      // aucun. Margelle, poteaux, toiture et seau, sur deux cases de haut.
+      ctx.globalAlpha = 0.3;
+      ctx.fillStyle = PALETTE.ink;
+      ctx.fillRect(x - 2, y + 12, 20, 4);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = PALETTE.stoneDark;
+      ctx.fillRect(x - 3, y + 2, 22, 12);
+      ctx.fillStyle = PALETTE.stone;
+      ctx.fillRect(x - 2, y + 1, 20, 11);
+      ctx.fillStyle = PALETTE.stoneLight;
+      ctx.fillRect(x - 1, y + 1, 18, 2);
+      for (let block = 0; block < 5; block += 1) {
+        ctx.fillStyle = PALETTE.stoneDark;
+        ctx.fillRect(x - 2 + block * 4, y + 4, 1, 8);
+      }
+      // Gueule d'eau sombre au centre.
+      ctx.fillStyle = PALETTE.ink;
+      ctx.fillRect(x + 1, y + 3, 14, 7);
+      ctx.fillStyle = PALETTE.deepWater;
+      ctx.fillRect(x + 2, y + 4, 12, 5);
+      ctx.fillStyle = PALETTE.waterLight;
+      ctx.fillRect(x + 4, y + 5, 5, 1);
+      // Poteaux et toiture.
+      ctx.fillStyle = PALETTE.woodDark;
+      ctx.fillRect(x - 1, y - 14, 3, 16);
+      ctx.fillRect(x + 14, y - 14, 3, 16);
+      ctx.fillStyle = PALETTE.roofDark;
+      ctx.fillRect(x - 4, y - 18, 24, 6);
+      ctx.fillStyle = PALETTE.roof;
+      ctx.fillRect(x - 3, y - 17, 22, 4);
+      ctx.fillStyle = PALETTE.rose;
+      ctx.fillRect(x - 2, y - 17, 20, 1);
+      // Treuil et seau suspendu.
+      ctx.fillStyle = PALETTE.woodLight;
+      ctx.fillRect(x, y - 11, 16, 3);
+      ctx.fillStyle = PALETTE.stoneLight;
+      ctx.fillRect(x + 7, y - 8, 1, 5);
+      ctx.fillStyle = PALETTE.woodDark;
+      ctx.fillRect(x + 5, y - 4, 6, 5);
+      ctx.fillStyle = PALETTE.wood;
+      ctx.fillRect(x + 6, y - 3, 4, 3);
+    } else if (this.data.kind === "sign") {
+      // Panneau : planche clouée sur un piquet, texte suggéré par deux traits.
+      ctx.globalAlpha = 0.3;
+      ctx.fillStyle = PALETTE.ink;
+      ctx.fillRect(x + 3, y + 13, 10, 3);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = PALETTE.woodDark;
+      ctx.fillRect(x + 6, y + 2, 4, 13);
+      ctx.fillStyle = PALETTE.ink;
+      ctx.fillRect(x - 2, y - 8, 20, 12);
+      ctx.fillStyle = PALETTE.wood;
+      ctx.fillRect(x - 1, y - 7, 18, 10);
+      ctx.fillStyle = PALETTE.woodLight;
+      ctx.fillRect(x - 1, y - 7, 18, 2);
+      ctx.fillStyle = PALETTE.woodDark;
+      ctx.fillRect(x + 1, y - 4, 13, 1);
+      ctx.fillRect(x + 1, y - 1, 9, 1);
+      ctx.fillStyle = PALETTE.stoneLight;
+      ctx.fillRect(x - 1, y - 8, 2, 2);
+      ctx.fillRect(x + 15, y - 8, 2, 2);
+    } else if (this.data.kind === "chest") {
       ctx.fillStyle = PALETTE.woodDark;
       ctx.fillRect(x + 1, y + 5, 14, 10);
       ctx.fillStyle = this.state.get(this.data.zone, this.data.id) ? PALETTE.stone : PALETTE.woodLight;

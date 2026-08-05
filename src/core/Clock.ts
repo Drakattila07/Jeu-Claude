@@ -76,6 +76,21 @@ export class Clock {
     this.setTime(6, 30);
   }
 
+  /**
+   * Attend le prochain moment demandé, en passant au lendemain s'il est déjà
+   * derrière nous. Plusieurs secrets n'acceptent que la nuit ou que le jour :
+   * sans ce raccourci, il fallait tourner en rond vingt minutes réelles.
+   */
+  waitUntil(target: "aube" | "matin" | "midi" | "soir" | "nuit"): number {
+    const hours: Readonly<Record<typeof target, number>> = {
+      aube: 6, matin: 9, midi: 13, soir: 19, nuit: 22,
+    };
+    const hour = hours[target];
+    if (hour * 60 <= this.minutes) this.day += 1;
+    this.setTime(hour, 0);
+    return hour;
+  }
+
   snapshot(): { readonly day: number; readonly hour: number; readonly minute: number } {
     return { day: this.day, hour: this.hour, minute: this.minute };
   }

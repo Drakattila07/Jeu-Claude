@@ -27,6 +27,7 @@ import { Clock } from "./Clock";
 import { Affinity } from "../systems/Affinity";
 import { NPCS } from "../data/npcs/core";
 import { Npc } from "../entities/Npc";
+import { residentOf } from "../data/npcs/residents";
 import { ZoneVariants } from "../world/ZoneVariants";
 import { Inventory } from "../systems/Inventory";
 import { Alchemy } from "../systems/Alchemy";
@@ -56,6 +57,7 @@ import { populateZone } from "../systems/Spawner";
 import { waypointFor, type Waypoint } from "../systems/Waypoint";
 import { hash2, isNavalZone } from "../world/WorldGen";
 import { TitleScreen } from "../ui/TitleScreen";
+import { ChoiceBox } from "../ui/ChoiceBox";
 import { ITEMS, itemEffect, type ItemId } from "../data/items/core";
 import {
   HOUSE_LABELS, INTERIOR_ENTRY, INTERIOR_NAMES, createHouseMap, createInteriorMap,
@@ -122,6 +124,7 @@ export class Game {
   private readonly dungeon = new Dungeon();
   private readonly hud = new HUD();
   private readonly menu = new Menu();
+  private readonly choices = new ChoiceBox();
   private readonly mapScreen = new MapScreen();
   private readonly hints = new HintSystem(this.flags, this.quests);
   private readonly campaign = new Campaign(this.flags, this.quests, this.events);
@@ -141,6 +144,8 @@ export class Game {
   private readonly progression = new Progression(this.flags);
   private readonly requirements = new Requirements(this.flags, this.inventory);
   private interior: InteriorKind | null = null;
+  /** Puits devant lequel on se tient, pour y revenir après le menu. */
+  private wellPosition: Vec2 | null = null;
   /** Graine du logis visité : chaque porte du monde rend toujours la même pièce. */
   private houseSeed: number | null = null;
   private exteriorReturnPosition = { x: 240, y: 300 };
@@ -224,6 +229,24 @@ export class Game {
     this.noticeFrames = 0;
   }
 
+  /** Pose le personnage à un point précis de la région : vérification ciblée. */
+  debugPlace(x: number, y: number): void {
+    this.player.position = { x, y };
+    this.player.unstick();
+    this.camera.snapTo(this.player.position);
+  }
+
+  /** Portes du décor de la région courante : outils de vérification. */
+  debugDoors(): readonly { readonly x: number; readonly y: number }[] {
+    const doors: { x: number; y: number }[] = [];
+    for (let y = 0; y < this.map.height; y += 1) {
+      for (let x = 0; x < this.map.width; x += 1) {
+        if (this.map.tileAt("terrain", x, y) === TILE.door) doors.push({ x, y });
+      }
+    }
+    return doors;
+  }
+
   /** Instantané lisible depuis l'extérieur : outils de vérification. */
   debugState(): {
     zone: { x: number; y: number }; x: number; y: number;
@@ -242,7 +265,8 @@ export class Game {
       inSolid: this.map.solidFor(tileX, tileY, this.player.sailing),
       interior: this.interior ?? (this.fortress.active ? this.fortress.name : null),
       busy: this.death.active || this.textBox.active || this.menu.active
-        || this.shop.active || this.transition.active || this.combat.frozen,
+        || this.shop.active || this.choices.active || this.transition.active
+        || this.combat.frozen,
     };
   }
 
@@ -322,6 +346,12 @@ export class Game {
 
     if (this.textBox.active) {
       this.textBox.update(this.input);
+      this.input.endFrame();
+      return;
+    }
+    if (this.choices.active) {
+      const picked = this.choices.update(this.input);
+      if (picked) this.resolveWellChoice(picked);
       this.input.endFrame();
       return;
     }
@@ -890,7 +920,8 @@ export class Game {
       this.player.unstick();
       this.camera.snapTo(this.player.position);
       this.interactables = [];
-      this.npcs = [];
+      // L'occupant : une maison vide est plus froide qu'une porte close.
+      this.npcs = [new Npc(residentOf(seed, "house"), this.map, this.clock, this.player)];
       this.enemies = [];
       this.pickups = [];
       this.projectiles = [];
@@ -918,7 +949,7 @@ export class Game {
     }
 
     const nearest = this.player.sailing ? undefined : this.interactables
-      .filter((object) => object.distanceTo(this.player.position) <= REACH)
+      .filter((object) => object.isPresent && object.distanceTo(this.player.position) <= REACH)
       .sort((a, b) => a.distanceTo(this.player.position) - b.distanceTo(this.player.position))[0];
     const nearestNpc = this.player.sailing ? undefined : this.npcs
       .filter((npc) => npc.distanceTo(this.player.position) <= REACH)
@@ -990,7 +1021,9 @@ export class Game {
       : nearest.data.kind === "valve"
         ? { message: this.dungeon.turnValve(0), changed: true }
         : nearest.data.kind === "roots"
-          ? { message: nearest.data.text, changed: false }
+          // Les racines ne cèdent qu'à la lame : le dire, plutôt que de
+          // répéter qu'elles bloquent le passage.
+          ? { message: `${nearest.data.text} Il faudra les trancher.`, changed: false }
           : nearest.data.kind === "footprints" && !this.clock.isNight
             ? { message: "De jour, les empreintes restent immobiles. Revenez la nuit.", changed: false }
             : nearest.interact();
@@ -1032,16 +1065,66 @@ export class Game {
     this.events.publish({ type: "interact", id: nearest.data.id, frame: this.frame });
 
     if (nearest.data.kind === "well" && this.flags.has("source_open")) {
-      this.death.setCheckpoint(this.camera.zone, nearest.position.x - 8, nearest.position.y + 34);
-      this.saveLoad.save(0, this.createSave());
+      this.wellPosition = { x: nearest.position.x, y: nearest.position.y };
+      this.openWellMenu();
+    }
+  }
+
+  /**
+   * Le puits.
+   *
+   * Il faisait tout à la fois — soigner, sauvegarder, poser le point de
+   * renaissance — sans jamais demander, et n'offrait rien d'autre. Il propose
+   * désormais chaque geste séparément, et surtout d'attendre le moment de la
+   * journée qu'on cherche : plusieurs secrets n'acceptent que la nuit, et les
+   * guetter en tournant en rond était une punition.
+   */
+  private openWellMenu(): void {
+    const full = this.player.hearts >= this.player.maxHearts && this.player.stamina >= 100;
+    this.choices.open("LE PUITS", [
+      { id: "rest", label: "Boire et se reposer", note: full ? "déjà d'aplomb" : "soigne tout",
+        disabled: full },
+      { id: "save", label: "Graver son passage", note: "sauvegarde" },
+      { id: "wait:matin", label: "Attendre le matin", note: "09:00" },
+      { id: "wait:midi", label: "Attendre midi", note: "13:00" },
+      { id: "wait:soir", label: "Attendre le soir", note: "19:00" },
+      { id: "wait:nuit", label: "Attendre la nuit", note: "22:00" },
+    ]);
+  }
+
+  private resolveWellChoice(choice: string): void {
+    const at = this.wellPosition;
+    if (choice === "cancel" || !at) return;
+
+    if (choice === "rest") {
       this.player.hearts = this.player.maxHearts;
       this.player.stamina = 100;
-      this.particles.emit(nearest.position.x + 8, nearest.position.y + 4, "heal", 16);
-      const text = "La fraîcheur du puits vous soigne. Partie sauvegardée.";
-      this.showNotice(text, 160);
-      this.textBox.open(text);
+      this.particles.emit(at.x + 8, at.y + 4, "heal", 18);
       this.audio.playSfx("secret");
+      this.showNotice("L'eau est glacée. Vous repartez d'aplomb.", 160);
+      return;
     }
+    if (choice === "save") {
+      this.death.setCheckpoint(this.camera.zone, at.x - 8, at.y + 34);
+      this.saveLoad.save(0, this.createSave());
+      this.particles.emit(at.x + 8, at.y + 4, "spark", 14);
+      this.audio.playSfx("secret");
+      this.showNotice("Partie sauvegardée. Vous renaîtrez ici.", 160);
+      return;
+    }
+    if (!choice.startsWith("wait:")) return;
+
+    const moment = choice.slice(5) as "matin" | "midi" | "soir" | "nuit";
+    const before = this.clock.day;
+    this.clock.waitUntil(moment);
+    this.lastScheduleHour = -1;
+    this.reloadNpcs();
+    if (this.clock.day !== before) this.populate();
+    this.particles.emit(at.x + 8, at.y + 4, "bubble", 12);
+    this.audio.playSfx("splash");
+    this.showNotice(this.clock.day !== before
+      ? `Vous laissez filer la nuit. ${capitalise(moment)} du jour ${this.clock.day}.`
+      : `Vous laissez filer les heures. ${capitalise(moment)}, il est ${this.clock.hour}h.`, 190);
   }
 
   private blessFromFamiliar(): void {
@@ -1866,6 +1949,7 @@ export class Game {
     }
     if (this.noticeFrames > 0) this.drawNotice();
 
+    this.choices.draw(this.renderer);
     this.shop.draw(this.renderer, this.player);
     this.textBox.draw(this.renderer);
     this.menu.draw(this.renderer, this.inventory, this.mapScreen, this.quests,
@@ -1937,6 +2021,10 @@ export class Game {
     }
     ctx.restore();
   }
+}
+
+function capitalise(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 function describeSave(save: SaveData): string {
