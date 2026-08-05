@@ -1000,6 +1000,7 @@ export class Game {
     // Rien à portée : la touche ouvre une porte du décor, ou sert à embarquer.
     if (!nearest && !nearestNpc) {
       if (this.trySleeping()) return;
+      if (this.tryWellTile()) return;
       if (this.tryDoorTile()) return;
       if (this.tryBoarding()) return;
     }
@@ -1099,8 +1100,10 @@ export class Game {
     // Un puits en eau ouvre directement son menu : sa réplique de fond sec
     // s'intercalait devant, et il fallait la congédier avant de pouvoir
     // seulement choisir d'attendre le soir.
-    const wellReady = nearest.data.kind === "well" && this.flags.has("source_open");
-    if (!wellReady) this.textBox.open(message);
+    // Un puits n'a rien à raconter : il a un menu. Sa réplique de fond sec
+    // s'intercalait devant, et il fallait la congédier avant de pouvoir
+    // seulement choisir d'attendre le soir.
+    if (nearest.data.kind !== "well") this.textBox.open(message);
     if (nearest.data.kind === "cauldron" || nearest.data.kind === "valve") {
       this.audio.playSfx("splash");
       this.particles.emit(nearest.position.x + 8, nearest.position.y + 8,
@@ -1110,10 +1113,26 @@ export class Game {
     if ("result" in result && result.result === "eternal_lantern") this.flags.set("lantern");
     this.events.publish({ type: "interact", id: nearest.data.id, frame: this.frame });
 
-    if (nearest.data.kind === "well" && this.flags.has("source_open")) {
-      this.wellPosition = { x: nearest.position.x, y: nearest.position.y };
-      this.openWellMenu();
+    if (nearest.data.kind === "well") {
+      this.openWellMenu({ x: nearest.position.x, y: nearest.position.y });
     }
+  }
+
+  /**
+   * Puits du décor.
+   *
+   * Seul le puits *déclaré* de la Place du Puits répondait ; ceux des hameaux
+   * n'étaient que des tuiles muettes. Chaque margelle du monde ouvre le même
+   * menu — c'est à cela que sert un puits, et cela évite d'en écrire deux.
+   */
+  private tryWellTile(): boolean {
+    if (this.indoors || this.player.sailing) return false;
+    for (const [tileX, tileY] of this.tilesAround()) {
+      if (this.map.tileAt("terrain", tileX, tileY) !== TILE.well) continue;
+      this.openWellMenu({ x: tileX * TILE_SIZE, y: tileY * TILE_SIZE });
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -1125,11 +1144,21 @@ export class Game {
    * journée qu'on cherche : plusieurs secrets n'acceptent que la nuit, et les
    * guetter en tournant en rond était une punition.
    */
-  private openWellMenu(): void {
+  private openWellMenu(at: Vec2): void {
+    this.wellPosition = at;
     const full = this.player.hearts >= this.player.maxHearts && this.player.stamina >= 100;
-    this.choices.open("LE PUITS", [
-      { id: "rest", label: "Boire et se reposer", note: full ? "déjà d'aplomb" : "soigne tout",
-        disabled: full },
+    // Un puits tari ne désaltère pas — mais on peut toujours s'y asseoir et
+    // laisser tourner les heures. Réserver tout le menu à la source rouverte
+    // privait le joueur du seul moyen d'atteindre une heure précise, et c'est
+    // précisément ce dont l'acte II a besoin.
+    const dry = !this.flags.has("source_open");
+    this.choices.open(dry ? "LE PUITS TARI" : "LE PUITS", [
+      {
+        id: "rest",
+        label: "Boire et se reposer",
+        note: dry ? "à sec" : full ? "déjà d'aplomb" : "soigne tout",
+        disabled: dry || full,
+      },
       { id: "save", label: "Graver son passage", note: "sauvegarde" },
       { id: "wait:matin", label: "Attendre le matin", note: "09:00" },
       { id: "wait:midi", label: "Attendre midi", note: "13:00" },

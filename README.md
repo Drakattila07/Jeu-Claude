@@ -57,9 +57,11 @@ X pour l'épée, gâchettes pour l'esquive.
   récit : chaque maison du monde a son intérieur, meublé selon son métier —
   logis, atelier, auberge, échoppe — et son habitant, qui a un nom et des mots
   à lui. Un lit rend les forces et fait passer la nuit.
-- **Un puits qui sert.** Il propose de boire, de graver son passage, ou
-  d'attendre le matin, midi, le soir ou la nuit : plusieurs secrets n'acceptent
-  qu'une heure précise, et les guetter en tournant en rond était une punition.
+- **Des puits qui servent.** Tous, pas seulement celui de la Place : boire,
+  graver son passage, ou attendre le matin, midi, le soir ou la nuit. Plusieurs
+  secrets n'acceptent qu'une heure précise, et les guetter en tournant en rond
+  était une punition. Un puits tari ne désaltère pas, mais laisse passer les
+  heures.
 - **Des créatures qui n'existent qu'à une heure.** L'Arbre Marcheur ne se
   montre dans la Clairière des Cimes qu'entre 22 h et 6 h. L'abattre fait
   avancer l'histoire — une consigne nocturne doit désigner quelque chose à

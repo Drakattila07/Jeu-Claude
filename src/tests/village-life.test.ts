@@ -82,6 +82,25 @@ describe("village habité", () => {
     }
   });
 
+  it("laisse toujours approcher la margelle du puits", () => {
+    // Un puits qu'on ne peut pas border est un décor : c'est le menu qui en
+    // fait un lieu — soigner, sauvegarder, laisser tourner les heures.
+    for (const zone of WORLD_ZONES.filter((candidate) => candidate.biome === "village")) {
+      const map = villageMap(zone.id);
+      const wells: { x: number; y: number }[] = [];
+      for (let y = 1; y < map.height - 1; y += 1) {
+        for (let x = 1; x < map.width - 1; x += 1) {
+          if (map.tileAt("terrain", x, y) === TILE.well) wells.push({ x, y });
+        }
+      }
+      for (const well of wells) {
+        const reachable = [[0, 1], [0, -1], [1, 0], [-1, 0]]
+          .some(([dx, dy]) => !map.isSolid(well.x + dx!, well.y + dy!));
+        expect(reachable, `${zone.id} : puits inaccessible en ${well.x},${well.y}`).toBe(true);
+      }
+    }
+  });
+
   it("bâtit des maisons entières, jamais tranchées par une rue", () => {
     for (const zone of WORLD_ZONES.filter((candidate) => candidate.biome === "village")) {
       const map = villageMap(zone.id);
