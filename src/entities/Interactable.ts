@@ -246,6 +246,43 @@ export class Interactable extends Entity {
       ctx.fillRect(x + 5, y + 2, 6, 13);
       ctx.fillStyle = solved ? PALETTE.yellow : PALETTE.stoneDark;
       ctx.fillRect(x + 7, y + 6, 2, 5);
+    } else if (this.data.kind === "anvil") {
+      // Billot, enclume, marteau posé dessus. Une forge se reconnaît de loin.
+      ctx.fillStyle = PALETTE.woodDark;
+      ctx.fillRect(x + 3, y + 10, 10, 6);
+      ctx.fillStyle = PALETTE.stoneDark;
+      ctx.fillRect(x + 2, y + 5, 12, 5);
+      ctx.fillRect(x + 5, y + 8, 6, 3);
+      ctx.fillStyle = PALETTE.stoneLight;
+      ctx.fillRect(x + 3, y + 5, 10, 2);
+      ctx.fillStyle = PALETTE.wood;
+      ctx.fillRect(x + 9, y + 1, 2, 5);
+      ctx.fillStyle = PALETTE.stone;
+      ctx.fillRect(x + 7, y, 6, 3);
+    } else if (this.data.kind === "dovecote") {
+      // Pigeonnier sur son mât, avec une bête à l'entrée.
+      ctx.fillStyle = PALETTE.woodDark;
+      ctx.fillRect(x + 7, y + 9, 2, 7);
+      ctx.fillStyle = PALETTE.wood;
+      ctx.fillRect(x + 2, y + 3, 12, 7);
+      ctx.fillStyle = PALETTE.roofDark;
+      ctx.fillRect(x + 1, y + 1, 14, 3);
+      ctx.fillStyle = PALETTE.ink;
+      ctx.fillRect(x + 6, y + 5, 4, 4);
+      ctx.fillStyle = PALETTE.stoneLight;
+      ctx.fillRect(x + 10, y + 6, 3, 3);
+      ctx.fillStyle = PALETTE.cream;
+      ctx.fillRect(x + 12, y + 6, 1, 1);
+    } else if (this.data.kind === "campfire") {
+      ctx.fillStyle = PALETTE.woodDark;
+      ctx.fillRect(x + 2, y + 11, 12, 3);
+      ctx.fillRect(x + 4, y + 9, 8, 3);
+      ctx.fillStyle = PALETTE.red;
+      ctx.fillRect(x + 5, y + 4, 6, 6);
+      ctx.fillStyle = PALETTE.yellow;
+      ctx.fillRect(x + 6, y + 5, 4, 4);
+      ctx.fillStyle = PALETTE.cream;
+      ctx.fillRect(x + 7, y + 6, 2, 2);
     }
     ctx.restore();
   }

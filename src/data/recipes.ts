@@ -19,3 +19,18 @@ export const RECIPES: readonly Recipe[] = [
   { id: "letter", ingredients: [{ item: "unsent_letter", count: 1 }],
     result: "letter_truth", message: "Îris lit la lettre. Elle était destinée au Doyen Orme." }
 ];
+
+/**
+ * Cuisine de bivouac.
+ *
+ * Le chaudron d'Îris transmute ; le feu de camp nourrit. Ce sont deux gestes
+ * différents, et les mélanger aurait fait du feu une deuxième sorcière.
+ */
+export const CAMP_RECIPES: readonly Recipe[] = [
+  { id: "camp_fish", ingredients: [{ item: "fish_scale", count: 2 }],
+    result: "smoked_fish", message: "Le poisson fume doucement. L'odeur porte loin." },
+  { id: "camp_stew", ingredients: [{ item: "bitter_root", count: 2 }, { item: "violet_mushroom", count: 1 }],
+    result: "root_stew", message: "Le ragoût mijote. L'amertume tourne au réconfort." },
+  { id: "camp_pear", ingredients: [{ item: "night_pear", count: 2 }, { item: "apple", count: 1 }],
+    result: "red_potion", message: "Poires et pomme réduites en sirop épais : une potion rouge." },
+];

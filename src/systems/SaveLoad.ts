@@ -1,6 +1,9 @@
 import { ITEMS, type ItemId } from "../data/items/core";
 import type { QuestRecord } from "./Quest";
 import type { FortressSnapshot } from "./Fortress";
+import type { JournalEntry } from "./Journal";
+import type { CampfireState } from "./Campfire";
+import type { Parcel } from "./PigeonPost";
 
 export interface SaveData {
   readonly version: 1;
@@ -24,6 +27,14 @@ export interface SaveData {
    * Sans elle, mourir dans un donjon en rouvrait toutes les herses.
    */
   readonly fortress?: FortressSnapshot;
+  /**
+   * Carnet, feux allumés et pigeon en vol. Tous optionnels : une sauvegarde
+   * antérieure se recharge et repart d'un carnet vierge plutôt que d'être
+   * rejetée comme corrompue.
+   */
+  readonly journal?: Record<string, JournalEntry[]>;
+  readonly campfires?: readonly CampfireState[];
+  readonly post?: Parcel | null;
 }
 
 interface StorageLike {

@@ -1,4 +1,5 @@
 import type { Biome } from "./world";
+import type { Tide } from "../core/Clock";
 
 export type EnemyBehavior = "leap" | "dive" | "hop" | "wake" | "hunt" | "caster" | "charger";
 
@@ -102,6 +103,30 @@ export const ENEMY_TYPES = {
     name: "Chevalier de Vertepierre", hearts: 10, speed: 0.9, damage: 2, behavior: "charger",
     color: "leaf", aggro: 190, reach: 32, windup: 30, bounty: 24,
   },
+
+  // — Bêtes du carnet —
+
+  /**
+   * Le Héron d'Encre ne se bat pas : il s'en va. C'est une bête à observer,
+   * pas à abattre — la seule du jeu dont l'intérêt est de l'approcher assez
+   * près pour l'écrire, sans la faire fuir.
+   */
+  ink_heron: {
+    name: "Héron d'Encre", hearts: 1, speed: 1.4, damage: 0, behavior: "hunt",
+    color: "purple", aggro: 0, reach: 0, windup: 60, bounty: 30, skittish: true,
+  },
+  peat_golem: {
+    name: "Golem de tourbe", hearts: 12, speed: 0.5, damage: 3, behavior: "charger",
+    color: "water", aggro: 150, reach: 34, windup: 42, bounty: 28,
+  },
+  moon_jelly: {
+    name: "Méduse de lune", hearts: 3, speed: 0.4, damage: 2, behavior: "wake",
+    color: "purple", aggro: 70, reach: 26, windup: 30, bounty: 10, phasing: true,
+  },
+  strand_prowler: {
+    name: "Rôdeur de l'estran", hearts: 6, speed: 1, damage: 2, behavior: "hunt",
+    color: "sand", aggro: 140, reach: 26, windup: 24, bounty: 15,
+  },
 } as const satisfies Record<string, EnemyDefinition>;
 
 export type EnemyType = keyof typeof ENEMY_TYPES;
@@ -158,6 +183,13 @@ export interface NightGuardian {
   readonly until: string;
   /** Ce qu'on lit en arrivant, tant qu'il rôde. */
   readonly announce: string;
+  /**
+   * Marée exigée. Le Rôdeur de l'estran n'existe que sur le sable découvert :
+   * la mer qui monte le remporte, et c'est tout l'intérêt de la chose.
+   */
+  readonly tide?: Tide;
+  /** Il ne se montre qu'une fois ce drapeau posé. */
+  readonly needs?: string;
 }
 
 export const NIGHT_GUARDIANS: readonly NightGuardian[] = [
@@ -166,13 +198,39 @@ export const NIGHT_GUARDIANS: readonly NightGuardian[] = [
     from: 22, to: 6, trigger: "walker_trace", until: "walker_followed",
     announce: "Quelque chose de haut marche entre les troncs.",
   },
+  {
+    zone: "tourbe", type: "peat_golem", x: 256, y: 224,
+    from: 0, to: 24, trigger: "peat_golem_felled", until: "peat_golem_felled",
+    announce: "La tourbe se soulève et prend la forme d'un dos.",
+  },
+  {
+    zone: "banc_de_brume", type: "moon_jelly", x: 240, y: 208,
+    from: 20, to: 6, trigger: "moon_jelly_seen", until: "moon_jelly_seen",
+    announce: "Une cloche pâle dérive à hauteur de plat-bord.",
+  },
+  {
+    zone: "greve_de_maree", type: "strand_prowler", x: 288, y: 320,
+    from: 0, to: 24, tide: "basse", trigger: "strand_prowler_felled",
+    until: "strand_prowler_felled",
+    announce: "Quelque chose fouille le sable que la mer vient de quitter.",
+  },
+  {
+    zone: "riviere_gue", type: "ink_heron", x: 256, y: 176,
+    from: 5, to: 8, trigger: "heron_observed", until: "heron_observed",
+    announce: "Un héron noir se tient dans le gué. Il ne vous a pas encore vue.",
+  },
 ];
 
-/** Le gardien d'une région, s'il rôde à cette heure et n'est pas encore abattu. */
+/**
+ * Le gardien d'une région, s'il rôde à cette heure, à cette marée, et qu'il
+ * n'est pas encore réglé.
+ */
 export function nightGuardianFor(zoneId: string, hour: number,
-  hasFlag: (flag: string) => boolean): NightGuardian | null {
+  hasFlag: (flag: string) => boolean, tide?: Tide): NightGuardian | null {
   const guardian = NIGHT_GUARDIANS.find((candidate) => candidate.zone === zoneId);
   if (!guardian || hasFlag(guardian.until)) return null;
+  if (guardian.needs !== undefined && !hasFlag(guardian.needs)) return null;
+  if (guardian.tide !== undefined && tide !== undefined && guardian.tide !== tide) return null;
   const awake = guardian.from > guardian.to
     ? hour >= guardian.from || hour < guardian.to
     : hour >= guardian.from && hour < guardian.to;

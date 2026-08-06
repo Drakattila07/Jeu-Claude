@@ -71,9 +71,15 @@ export class ChoiceBox {
     if (!this.active) return;
     const { ctx } = renderer;
     const rows = this.choices.length;
+    // La largeur se calculait sur le libellé seul, avec une marge fixe : dès
+    // qu'une note était longue, elle venait s'imprimer par-dessus le libellé,
+    // et le pied de page débordait des deux côtés. On mesure ce qu'on dessine.
+    const footer = "↑↓ choisir · X valider · C renoncer";
     const width = Math.max(
       measureText(this.title) + 40,
-      ...this.choices.map((choice) => measureText(choice.label) + 60),
+      measureText(footer) + 24,
+      ...this.choices.map((choice) =>
+        measureText(choice.label) + (choice.note ? measureText(choice.note) + 20 : 0) + 34),
       168);
     const height = 26 + rows * 15 + 14;
     const left = Math.round((VIEW_WIDTH - width) / 2);
@@ -116,7 +122,7 @@ export class ChoiceBox {
       }
     });
 
-    drawText(ctx, "↑↓ choisir · X valider · C renoncer", left + width / 2, top + height - 12,
+    drawText(ctx, footer, left + width / 2, top + height - 12,
       { color: PALETTE.stoneDark, align: "center" });
     ctx.restore();
   }

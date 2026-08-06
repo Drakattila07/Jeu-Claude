@@ -2,7 +2,11 @@ import type { Vec2 } from "../entities/Entity";
 import type { LayerName, TiledLayer, TiledMapData } from "./TileMap";
 import { TILE } from "./TileSet";
 
-export type InteriorKind = "cottage" | "hermitage" | "castle" | "tower";
+export type InteriorKind = "cottage" | "hermitage" | "castle" | "tower"
+  // Trois lieux qui ne s'ouvrent pas à n'importe quelle condition : une
+  // bibliothèque sous le lac, un verger qui ne donne qu'à la nuit, une grotte
+  // que la mer rend une fois sur deux.
+  | "library" | "orchard" | "strand_cave";
 
 /**
  * Intérieurs entièrement en tuiles.
@@ -249,10 +253,104 @@ export function createHouseMap(seed: number): TiledMapData {
   return tiled(layers);
 }
 
+/**
+ * La Bibliothèque Noyée.
+ *
+ * Sous la Grotte Noyée, une salle que le lac a prise sans la détruire. Les
+ * rayonnages tiennent encore ; l'eau court entre eux. On y vient lire, ce qui
+ * est une raison suffisante d'exister dans un jeu qui n'en offrait aucune.
+ */
+export function createLibraryMap(): TiledMapData {
+  // Dalle fendue, pas pierre moussue : `mossStone` est une tuile pleine, et
+  // en faire un plancher murait la salle entière.
+  const layers = roomLayers(TILE.crackedPath, TILE.interiorWall);
+  // Deux rigoles d'une case : la nef est inondée, pas noyée. Des canaux
+  // larges rendaient la salle infranchissable — on la traversait à peine.
+  for (const y of [3, 4, 5, 6, 7, 8, 9, 10]) {
+    put(layers, "terrain", 7, y, TILE.water);
+    put(layers, "terrain", 16, y, TILE.water);
+  }
+  fillRect(layers, "ground", 8, 3, 8, 9, TILE.woodFloor);
+
+  // Rayonnages contre les murs seulement : le centre reste une allée.
+  for (const y of [3, 5, 7, 9]) {
+    put(layers, "terrain", 2, y, TILE.bookshelf);
+    put(layers, "terrain", 21, y, TILE.bookshelf);
+  }
+  put(layers, "terrain", 11, 3, TILE.shrineStone);
+  put(layers, "terrain", 12, 3, TILE.shrineStone);
+  put(layers, "terrain", 11, 7, TILE.table);
+  put(layers, "terrain", 12, 7, TILE.table);
+  put(layers, "terrain", 10, 7, TILE.chair);
+  put(layers, "terrain", 13, 7, TILE.chair);
+  put(layers, "terrain", 4, 11, TILE.crate);
+  put(layers, "terrain", 19, 11, TILE.barrel);
+  put(layers, "decor_below", 5, 5, TILE.lilypad);
+  put(layers, "decor_below", 18, 9, TILE.lilypad);
+  put(layers, "decor_above", 4, 1, TILE.banner);
+  put(layers, "decor_above", 19, 1, TILE.banner);
+  return tiled(layers);
+}
+
+/**
+ * Le Verger de Nuit.
+ *
+ * Un clos qu'on traverse en plein jour sans rien y trouver. Après vingt
+ * heures, les poires sont là. C'est le genre de chose qu'un joueur raconte à
+ * quelqu'un d'autre — et c'est ce qu'on cherche.
+ */
+export function createOrchardMap(): TiledMapData {
+  const layers = roomLayers(TILE.grass, TILE.hedge);
+  fillRect(layers, "ground", 3, 3, 18, 9, TILE.alpineGrass);
+  // Quatre rangs d'arbres, allées franches entre eux.
+  for (const x of [4, 8, 12, 16, 20]) {
+    for (const y of [4, 7, 10]) {
+      put(layers, "terrain", x, y, TILE.treeTrunk);
+      put(layers, "decor_above", x, y - 1, TILE.treeCrown);
+    }
+  }
+  put(layers, "terrain", 2, 12, TILE.barrel);
+  put(layers, "terrain", 21, 12, TILE.crate);
+  put(layers, "terrain", 11, 2, TILE.shrineStone);
+  put(layers, "decor_below", 6, 12, TILE.wildflowers);
+  put(layers, "decor_below", 14, 12, TILE.wildflowers);
+  put(layers, "decor_below", 18, 6, TILE.flowerPatch);
+  return tiled(layers);
+}
+
+/**
+ * La Grotte de l'Estran.
+ *
+ * Elle n'a d'entrée qu'à marée basse, et la mer y remonte. Le sable du fond
+ * garde ce que le reflux a laissé.
+ */
+export function createStrandCaveMap(): TiledMapData {
+  const layers = roomLayers(TILE.shoreSand, TILE.cliff);
+  fillRect(layers, "ground", 2, 2, 20, 4, TILE.pebbles);
+  // Flaques laissées par le reflux : décor, mais un décor qui dit l'heure.
+  for (const [x, y] of [[4, 4], [5, 4], [9, 3], [15, 5], [16, 5], [19, 3]] as const) {
+    put(layers, "terrain", x, y, TILE.water);
+  }
+  for (const [x, y] of [[3, 8], [7, 10], [13, 9], [18, 8], [20, 11]] as const) {
+    put(layers, "terrain", x, y, TILE.seaRock);
+  }
+  put(layers, "terrain", 11, 6, TILE.shrineStone);
+  put(layers, "terrain", 12, 6, TILE.shrineStone);
+  put(layers, "terrain", 6, 11, TILE.driftwood);
+  put(layers, "terrain", 17, 11, TILE.driftwood);
+  put(layers, "terrain", 2, 6, TILE.crate);
+  put(layers, "decor_below", 9, 9, TILE.coral);
+  put(layers, "decor_below", 15, 11, TILE.coral);
+  return tiled(layers);
+}
+
 export function createInteriorMap(kind: InteriorKind): TiledMapData {
   if (kind === "cottage") return createCottageMap();
   if (kind === "hermitage") return createHermitageMap();
   if (kind === "tower") return createTowerMap();
+  if (kind === "library") return createLibraryMap();
+  if (kind === "orchard") return createOrchardMap();
+  if (kind === "strand_cave") return createStrandCaveMap();
   return createCastleMap();
 }
 
@@ -268,4 +366,7 @@ export const INTERIOR_NAMES: Readonly<Record<InteriorKind, string>> = {
   hermitage: "ERMITAGE DE GORM",
   castle: "CHÂTEAU DE CENDRE",
   tower: "TOUR DE LUNE",
+  library: "LA BIBLIOTHÈQUE NOYÉE",
+  orchard: "LE VERGER DE NUIT",
+  strand_cave: "GROTTE DE L'ESTRAN",
 };

@@ -24,5 +24,20 @@ export const CAMPAIGN_TRIGGERS: readonly CampaignTrigger[] = [
   { id: "seal_c", once: true, setFlags: ["seal_c", "three_seals_open"], quest: { type: "collect", target: "seal" },
     message: "Troisième Sceau : le portail du Canal s'ouvre." },
   { id: "mechanism_heart", once: true, setFlags: ["mechanism_repaired", "lake_high", "mill_running"],
-    quest: { type: "flag", target: "mechanism_repaired" }, message: "Le Cœur tourne. Le lac remonte de deux tuiles." }
+    quest: { type: "flag", target: "mechanism_repaired" }, message: "Le Cœur tourne. Le lac remonte de deux tuiles." },
+
+  // — Les gardiens ajoutés : chacun doit poser son propre drapeau, sinon on
+  //   le recroise à chaque visite sans que rien n'avance.
+  { id: "peat_golem_felled", once: true, setFlags: ["peat_golem_felled"],
+    quest: { type: "defeat", target: "peat_golem" },
+    message: "Le golem retourne à la tourbe. Le sol se referme sur lui sans un bruit." },
+  { id: "moon_jelly_seen", once: true, setFlags: ["moon_jelly_seen"],
+    quest: { type: "defeat", target: "moon_jelly" },
+    message: "La cloche pâle se défait en filaments et redescend vers le fond." },
+  { id: "strand_prowler_felled", once: true, setFlags: ["strand_prowler_felled"],
+    quest: { type: "defeat", target: "strand_prowler" },
+    message: "Le rôdeur lâche sa fouille. La mer effacera ses traces en montant." },
+  { id: "heron_observed", once: true, setFlags: ["heron_observed"],
+    quest: { type: "flag", target: "heron_observed" },
+    message: "Le Héron d'Encre s'élève sans hâte. Le croquis, lui, reste." }
 ];

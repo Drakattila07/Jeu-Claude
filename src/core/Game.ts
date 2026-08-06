@@ -23,12 +23,13 @@ import { TextBox, paginateText } from "../ui/TextBox";
 import { EventBus, type GameEvent } from "./EventBus";
 import { Flags } from "../systems/Flags";
 import { QuestSystem } from "../systems/Quest";
-import { Clock } from "./Clock";
+import { Clock, WIND_VECTORS } from "./Clock";
 import { Affinity } from "../systems/Affinity";
 import { NPCS } from "../data/npcs/core";
 import { Npc } from "../entities/Npc";
 import { residentOf } from "../data/npcs/residents";
 import { ZoneVariants } from "../world/ZoneVariants";
+import { VARIANT_LABELS } from "../data/zoneVariants";
 import { Inventory } from "../systems/Inventory";
 import { Alchemy } from "../systems/Alchemy";
 import { Dungeon } from "../systems/Dungeon";
@@ -49,9 +50,9 @@ import { Lighting, type Light } from "../systems/Lighting";
 import { SaveLoad, type SaveData } from "../systems/SaveLoad";
 import { Death, rupeesAfterDeath } from "../systems/Death";
 import { Shop } from "../systems/Shop";
-import { Progression } from "../systems/Progression";
+import { Progression, FORGE_FLAGS } from "../systems/Progression";
 import { Requirements, type WorldState } from "../systems/Requirements";
-import { createZoneMap } from "../world/ZoneMapFactory";
+import { createZoneMap, TIDAL_ZONES } from "../world/ZoneMapFactory";
 import { gatewayFor, oppositeEdge } from "../world/WorldGen";
 import { populateZone } from "../systems/Spawner";
 import { waypointFor, type Waypoint } from "../systems/Waypoint";
@@ -64,6 +65,13 @@ import {
   houseTradeFor, nearInteriorExit, type InteriorKind,
 } from "../world/Interiors";
 import { BurningWorld } from "../world/BurningWorld";
+import { Journal } from "../systems/Journal";
+import { Campfires, CAMPFIRE_WARD } from "../systems/Campfire";
+import { PigeonPost, acceptedByPost } from "../systems/PigeonPost";
+import { TUNES, knownTunes, nextTuneToTeach, type TuneId } from "../systems/Flute";
+import { nextTier, tierAt } from "../systems/Forge";
+import { dreamFor } from "../systems/Dreams";
+import { CAMP_RECIPES } from "../data/recipes";
 import { Fortress } from "../systems/Fortress";
 import {
   createRoomMap, nearFortressExit, roomEntry, ROOM_TILES_X, ROOM_TILES_Y,
@@ -143,9 +151,20 @@ export class Game {
   private readonly shop = new Shop(this.flags, this.inventory);
   private readonly progression = new Progression(this.flags);
   private readonly requirements = new Requirements(this.flags, this.inventory);
+  private readonly journal = new Journal();
+  private readonly campfires = new Campfires();
+  private readonly post = new PigeonPost();
   private interior: InteriorKind | null = null;
   /** Puits devant lequel on se tient, pour y revenir après le menu. */
   private wellPosition: Vec2 | null = null;
+  /**
+   * Ce que la liste de choix ouverte est en train de demander. La boîte ne
+   * servait qu'au puits et son résultat partait droit dans `resolveWellChoice` ;
+   * cinq menus plus tard, il faut savoir à qui l'on parle.
+   */
+  private choiceContext: "well" | "forge" | "camp" | "flute" | "post" = "well";
+  /** Marée à laquelle la carte courante a été bâtie, pour savoir quand la refaire. */
+  private tideLevelOfMap = 1;
   /** Graine du logis visité : chaque porte du monde rend toujours la même pièce. */
   private houseSeed: number | null = null;
   private exteriorReturnPosition = { x: 240, y: 300 };
@@ -283,6 +302,39 @@ export class Game {
     };
   }
 
+  /** Remplit le sac : sert aux planches de contrôle. */
+  debugGive(item: string, count = 1): void {
+    if (!(item in ITEMS)) return;
+    this.inventory.add(item as ItemId, count);
+  }
+
+  /** Cale le jour : la marée et le vent en dépendent. */
+  debugSetDay(day: number): void {
+    this.clock.day = Math.max(1, Math.floor(day));
+  }
+
+  /** Marée et vent courants : contrôle des ajouts côtiers. */
+  debugSea(): { tide: string; level: number; wind: string } {
+    return {
+      tide: this.clock.tide,
+      level: Number(this.clock.tideLevel.toFixed(2)),
+      wind: this.clock.wind,
+    };
+  }
+
+  /** Avancement du carnet : régions, gens, bêtes, secrets, titre. */
+  debugJournal(): { regions: number; gens: number; betes: number; secrets: number;
+    rang: string; complet: number } {
+    return {
+      regions: this.journal.count("regions"),
+      gens: this.journal.count("gens"),
+      betes: this.journal.count("betes"),
+      secrets: this.journal.count("secrets"),
+      rang: this.journal.rank.title,
+      complet: Number((this.journal.completion * 100).toFixed(1)),
+    };
+  }
+
   /** État de l'Arbre-Mère : un combat ne se juge qu'en le regardant tourner. */
   debugBoss(): { hearts: number; max: number; phase: number; exposed: boolean;
     burning: boolean; burnFrames: number; seeds: number; alive: boolean } | null {
@@ -393,7 +445,7 @@ export class Game {
     }
     if (this.choices.active) {
       const picked = this.choices.update(this.input);
-      if (picked) this.resolveWellChoice(picked);
+      if (picked) this.resolveChoice(picked);
       this.input.endFrame();
       return;
     }
@@ -403,7 +455,7 @@ export class Game {
       return;
     }
     if (this.menu.active) {
-      this.menu.update(this.input, this.inventory);
+      this.menu.update(this.input, this.inventory, this.journal);
       const request = this.menu.takeUseRequest();
       if (request) this.useItem(request);
       this.input.endFrame();
@@ -497,6 +549,7 @@ export class Game {
   }
 
   private updateWorld(): void {
+    this.player.wind = WIND_VECTORS[this.clock.wind];
     this.player.update();
     if (this.player.splashed) {
       this.particles.emit(this.player.position.x + 8, this.player.position.y + 14, "splash", 5);
@@ -556,9 +609,24 @@ export class Game {
       width: this.player.hitbox.width,
       height: this.player.hitbox.height,
     };
+    const zoneId = this.currentZone()?.id ?? "";
+    const now = Campfires.absoluteHour(this.clock.day, this.clock.hour, this.clock.minute);
+    const warded = !this.indoors && this.campfires.wards(zoneId, this.player.position, now);
+
     for (const enemy of this.enemies) {
       enemy.update();
       if (!enemy.active) continue;
+      if (enemy.spawn.type === "ink_heron") { this.observeHeron(enemy); continue; }
+
+      // Sous la garde d'un feu, les créatures rôdent mais ne frappent pas :
+      // c'est ce qui fait d'un bivouac autre chose qu'une animation.
+      if (warded && Math.hypot(enemy.position.x - this.player.position.x,
+        enemy.position.y - this.player.position.y) <= CAMPFIRE_WARD) {
+        if (this.frame % 30 === 0) {
+          this.particles.emit(enemy.position.x + 8, enemy.position.y, "smoke", 2);
+        }
+        continue;
+      }
 
       const strike = enemy.takeStrike();
       if (strike) {
@@ -590,6 +658,30 @@ export class Game {
           { x: dx / length, y: dy / length })) this.onPlayerHurt(enemy.definition.damage);
       }
     }
+  }
+
+  /**
+   * Le Héron d'Encre.
+   *
+   * C'est la seule bête du jeu qu'on ne gagne rien à tuer : elle se note. En
+   * approchant assez près sans la faire fuir, on obtient le croquis — et le
+   * bestiaire y gagne la seule entrée qui ne se paie pas en coups.
+   */
+  private observeHeron(heron: Enemy): void {
+    const distance = Math.hypot(heron.position.x - this.player.position.x,
+      heron.position.y - this.player.position.y);
+    if (distance > 44) return;
+    heron.active = false;
+    this.particles.emit(heron.position.x + 8, heron.position.y, "leaf", 18);
+    this.audio.playSfx("secret");
+    if (this.inventory.count("heron_sketch") === 0) this.inventory.add("heron_sketch");
+    this.flags.set("heron_observed");
+    this.journal.noteBeast("ink_heron", this.clock.day);
+    this.journal.noteSecret("heron", "Le Héron d'Encre",
+      "Approché au gué, à l'aube, sans un bruit. Il est reparti sans se presser.",
+      this.clock.day);
+    this.showNotice("Vous croquez le Héron d'Encre avant qu'il ne s'envole.", 240);
+    this.checkRankUp();
   }
 
   private updateBoss(): void {
@@ -765,7 +857,8 @@ export class Game {
     // Un gardien nocturne n'est pas une créature de plus : sa chute est un
     // moment de l'histoire, et c'est elle qui débloque la suite.
     const zoneId = this.currentZone()?.id ?? "";
-    const guardian = nightGuardianFor(zoneId, this.clock.hour, (flag) => this.flags.has(flag));
+    const guardian = nightGuardianFor(zoneId, this.clock.hour,
+      (flag) => this.flags.has(flag), this.clock.tide);
     if (guardian && enemy.spawn.type === guardian.type) {
       const message = this.campaign.trigger(guardian.trigger, this.frame);
       if (message) {
@@ -773,7 +866,12 @@ export class Game {
         this.combat.impact(4, 22);
         this.audio.playSfx("secret");
       }
+      // Certains gardiens n'ont pas de suite scénarisée : leur drapeau doit
+      // tout de même tomber, sinon ils reviennent à chaque visite.
+      this.flags.set(guardian.until);
     }
+    // Toute créature abattue entre au bestiaire, avec sa faiblesse.
+    if (this.journal.noteBeast(enemy.spawn.type, this.clock.day)) this.checkRankUp();
     this.particles.emit(enemy.position.x + 8, enemy.position.y + 8, "smoke", 10);
     this.combat.impact(2, 6);
     const bounty = enemy.definition.bounty;
@@ -974,6 +1072,55 @@ export class Game {
    * Dormir. Un lit rend les forces et fait passer la nuit — de quoi attendre
    * le jour quand une condition l'exige, au lieu de tourner en rond.
    */
+  /**
+   * Récolte dans les trois nouveaux lieux.
+   *
+   * Un verger où l'on ne cueille rien, une bibliothèque où l'on ne lit rien et
+   * une grotte où l'on ne ramasse rien sont trois décors. Chacun rend ce qu'il
+   * a, une fois par jour : c'est la raison d'y revenir.
+   */
+  private tryHarvestIndoors(): boolean {
+    if (this.interior === null) return false;
+    const table: Partial<Record<InteriorKind,
+    { tile: number; item: ItemId; count: number; line: string }>> = {
+      orchard: {
+        tile: TILE.treeTrunk, item: "night_pear", count: 2,
+        line: "Deux poires de nuit se détachent sans résistance.",
+      },
+      library: {
+        tile: TILE.bookshelf, item: "drowned_page", count: 1,
+        line: "Un feuillet se décolle du rayon. L'encre a coulé, le sens tient.",
+      },
+      strand_cave: {
+        tile: TILE.driftwood, item: "tide_pearl", count: 1,
+        line: "Sous le bois flotté, une perle d'estran.",
+      },
+    };
+    const rule = table[this.interior];
+    if (!rule) return false;
+
+    for (const [tileX, tileY] of this.tilesAround()) {
+      if (this.map.tileAt("terrain", tileX, tileY) !== rule.tile) continue;
+      const key = `${this.interior}:${tileX},${tileY}`;
+      if (!this.clock.canHarvest(key, 1)) {
+        this.showNotice("Vous avez déjà pris ce qu'il y avait ici aujourd'hui.", 140);
+        this.audio.playSfx("deny");
+        return true;
+      }
+      this.clock.harvest(key);
+      this.inventory.add(rule.item, rule.count);
+      this.floaters.reward(this.player.position.x + 8, this.player.position.y - 6,
+        `${ITEMS[rule.item].name} ×${rule.count}`);
+      this.particles.emit(this.player.position.x + 8, this.player.position.y, "leaf", 12);
+      this.audio.playSfx("secret");
+      this.showNotice(rule.line, 180);
+      this.journal.noteSecret(`harvest:${this.interior}`,
+        INTERIOR_NAMES[this.interior], rule.line, this.clock.day);
+      return true;
+    }
+    return false;
+  }
+
   private trySleeping(): boolean {
     if (!this.indoors) return false;
     const bed = this.tilesAround()
@@ -985,9 +1132,13 @@ export class Game {
     this.lastScheduleHour = -1;
     this.particles.emit(this.player.position.x + 8, this.player.position.y + 4, "heal", 12);
     this.audio.playSfx("secret");
+    // On rêve. Le rêve suit l'avancement et dit l'objectif autrement que la
+    // liste de quêtes — par une image, ce qui se retient mieux qu'une consigne.
+    const dream = dreamFor((flag) => this.flags.has(flag));
     this.textBox.open(
-      `Vous dormez d'un trait. Au matin du jour ${this.clock.day}, la vallée sent le foin mouillé.`,
-      "REPOS");
+      `${dream.text}\n\nVous vous réveillez au matin du jour ${this.clock.day}.`,
+      dream.title.toUpperCase());
+    this.journal.noteSecret(`dream:${dream.title}`, dream.title, dream.text, this.clock.day);
     return true;
   }
 
@@ -1046,6 +1197,7 @@ export class Game {
     // Rien à portée : la touche ouvre une porte du décor, ou sert à embarquer.
     if (!nearest && !nearestNpc) {
       if (this.trySleeping()) return;
+      if (this.tryHarvestIndoors()) return;
       if (this.tryWellTile()) return;
       if (this.tryDoorTile()) return;
       if (this.tryBoarding()) return;
@@ -1057,12 +1209,28 @@ export class Game {
       return;
     }
     if (!nearest) return;
+    // Les trois gestes qui ouvrent une liste plutôt qu'une réplique.
+    if (nearest.data.kind === "anvil") { this.openForgeMenu(); return; }
+    if (nearest.data.kind === "dovecote") { this.openPostMenu(); return; }
+    if (nearest.data.kind === "campfire") { this.openCampMenu(); return; }
     if (nearest.data.kind === "door") {
+      // Une porte sous condition — la nuit, la marée, le lest — refuse
+      // d'abord et dit ce qui manque, au lieu de s'ouvrir en silence.
+      const gate = this.requirements.check(nearest.data.requires, this.worldState());
+      if (!gate.ok) {
+        this.showNotice(gate.reason, 170);
+        this.textBox.open(gate.reason);
+        this.audio.playSfx("deny");
+        return;
+      }
       if (nearest.data.id === "fortress_gate") this.enterFortress("vertepierre");
       else {
         this.enterInterior(nearest.data.id === "hermitage_door" ? "hermitage"
           : nearest.data.id === "castle_gate" ? "castle"
-            : nearest.data.id === "witch_tower_door" ? "tower" : "cottage");
+            : nearest.data.id === "witch_tower_door" ? "tower"
+              : nearest.data.id === "library_hatch" ? "library"
+                : nearest.data.id === "orchard_gate" ? "orchard"
+                  : nearest.data.id === "strand_cave_mouth" ? "strand_cave" : "cottage");
       }
       return;
     }
@@ -1093,7 +1261,120 @@ export class Game {
     // Chaque jumeau ne connaît que la moitié de la comptine.
     if (npc.data.id === "ryn") this.flags.set("heard_ryn");
     if (npc.data.id === "tam") this.flags.set("heard_tam");
+    if (npc.data.id === "wren") this.teachTune();
+    if (npc.data.id === "odile") this.taunt();
+    if (npc.data.id === "fennec") this.ferry();
+    if (npc.data.id === "soeur_aubel") this.tendWounds();
+    // Une tête rencontrée est une tête notée : le carnet ne se remplit pas
+    // tout seul, il se remplit en allant voir les gens.
+    this.journal.notePerson(npc.data.id, npc.data.name,
+      `Rencontrée ${this.zoneName()}. « ${npc.data.chatter[0]} »`, this.clock.day);
     this.events.publish({ type: "talk", id: npc.data.id, frame: this.frame });
+  }
+
+  /** Nom de la région courante, pour les notes du carnet. */
+  private zoneName(): string {
+    if (this.interior) return `à ${INTERIOR_NAMES[this.interior]}`;
+    if (this.fortress.active) return `à ${this.fortress.name}`;
+    return `à ${this.currentZone()?.name ?? "un endroit sans nom"}`;
+  }
+
+  /**
+   * Wren enseigne un air par visite, dans l'ordre. Elle ne réclame rien : sa
+   * seule condition est d'être venue jusqu'à elle, et elle bouge assez pour
+   * que ce soit une condition.
+   */
+  private teachTune(): void {
+    if (this.inventory.count("willow_flute") === 0) {
+      this.showNotice("Wren mime trois doigts sur une flûte que vous n'avez pas.", 190);
+      return;
+    }
+    const tune = nextTuneToTeach((flag) => this.flags.has(flag));
+    if (!tune) {
+      this.showNotice("« Vous les avez tous les trois. Le reste, c'est du bruit. »", 190);
+      return;
+    }
+    this.flags.set(tune.learnedFlag);
+    this.audio.playSfx("secret");
+    this.particles.emit(this.player.position.x + 8, this.player.position.y, "spark", 18);
+    this.showNotice(`${tune.name.toUpperCase()} appris — ${tune.notes.join(" ")}. ${tune.effect}`, 260);
+    this.journal.noteSecret(`tune_${tune.id}`, tune.name,
+      `${tune.notes.join(" ")} — ${tune.effect}`, this.clock.day);
+    if (knownTunes((flag) => this.flags.has(flag)).length === TUNES.length) {
+      this.journal.noteSecret("tunes_all", "Le répertoire complet",
+        "Trois airs, appris auprès de Wren. Elle n'en connaît pas d'autres.", this.clock.day);
+    }
+  }
+
+  /**
+   * Fennec passe le lac à la rame.
+   *
+   * Il comble le trou entre « on voit l'autre rive » et « on a une coque » :
+   * deux rubis, et la traversée se fait. Le jour où la barque de Sarn est à
+   * vous, il refuse — un passeur ne rame pas pour un armateur.
+   */
+  private ferry(): void {
+    if (this.flags.has("boat")) {
+      this.showNotice("« Vous avez votre coque. Je ne rame pas pour la concurrence. »", 200);
+      return;
+    }
+    const here = this.currentZone()?.id;
+    const target = here === "quai_lac" ? { x: 9, y: 5 }
+      : here === "criques" ? { x: 3, y: 4 } : null;
+    if (!target) return;
+    if (this.player.rupees < 2) {
+      this.showNotice("« Deux rubis la traversée. Le lac ne fait pas crédit. »", 200);
+      this.audio.playSfx("deny");
+      return;
+    }
+    this.player.rupees -= 2;
+    this.textBox.close();
+    this.transition.start(() => {
+      this.camera.zone = { ...target };
+      this.player.position = { x: ZONE_WIDTH / 2, y: ZONE_HEIGHT / 2 };
+      this.loadZoneObjects();
+      this.player.unstick();
+      this.camera.snapTo(this.player.position);
+      this.mapScreen.reveal(this.camera.zone);
+      this.announceZone();
+      this.audio.playSfx("splash");
+      this.showNotice("Fennec rame en silence. La rive d'en face approche.", 190);
+    });
+    this.journal.noteSecret("ferry", "Le passeur du lac",
+      "Fennec traverse pour deux rubis, tant qu'on n'a pas de coque à soi.",
+      this.clock.day);
+  }
+
+  /**
+   * Sœur Aubel soigne contre des fleurs-œil. Elle est la seule à rendre des
+   * cœurs loin d'un puits ou d'un lit, ce qui vaut le détour par les vergers.
+   */
+  private tendWounds(): void {
+    if (this.inventory.count("eye_flower") < 3) {
+      this.showNotice("« Trois fleurs-œil, et je vous remets debout. C'est le tarif. »", 200);
+      return;
+    }
+    this.inventory.consume([{ item: "eye_flower", count: 3 }]);
+    this.inventory.add("red_potion");
+    this.player.hearts = this.player.maxHearts;
+    this.particles.emit(this.player.position.x + 8, this.player.position.y, "heal", 18);
+    this.audio.playSfx("secret");
+    this.showNotice("Sœur Aubel vous remet d'aplomb, et glisse une potion rouge dans le sac.", 220);
+    this.journal.noteSecret("aubel", "L'herboristerie d'Aubel",
+      "Trois fleurs-œil valent un soin complet et une potion rouge.", this.clock.day);
+  }
+
+  /** Odile mesure votre carnet au sien, et le fait savoir. */
+  private taunt(): void {
+    const filled = Math.round(this.journal.completion * 100);
+    const line = filled < 20
+      ? "« Vingt régions relevées pour moi ce mois-ci. Et vous ? »"
+      : filled < 50
+        ? "« Vous progressez. Lentement, mais dans le bon sens. »"
+        : filled < 85
+          ? "« Je commence à vérifier mes marges après votre passage. C'est nouveau. »"
+          : "« Votre carnet vaut le mien. Je déteste l'écrire, mais je l'écris. »";
+    this.showNotice(line, 220);
   }
 
   private useInteractable(nearest: Interactable): void {
@@ -1192,6 +1473,7 @@ export class Game {
    */
   private openWellMenu(at: Vec2): void {
     this.wellPosition = at;
+    this.choiceContext = "well";
     const full = this.player.hearts >= this.player.maxHearts && this.player.stamina >= 100;
     // Un puits tari ne désaltère pas — mais on peut toujours s'y asseoir et
     // laisser tourner les heures. Réserver tout le menu à la source rouverte
@@ -1246,6 +1528,224 @@ export class Game {
     this.showNotice(this.clock.day !== before
       ? `Vous laissez filer la nuit. ${capitalise(moment)} du jour ${this.clock.day}.`
       : `Vous laissez filer les heures. ${capitalise(moment)}, il est ${this.clock.hour}h.`, 190);
+  }
+
+  /** Aiguille la liste de choix vers le lieu qui l'a ouverte. */
+  private resolveChoice(choice: string): void {
+    if (this.choiceContext === "forge") this.resolveForgeChoice(choice);
+    else if (this.choiceContext === "camp") this.resolveCampChoice(choice);
+    else if (this.choiceContext === "flute") this.resolveFluteChoice(choice);
+    else if (this.choiceContext === "post") this.resolvePostChoice(choice);
+    else this.resolveWellChoice(choice);
+  }
+
+  // — La forge de Bram —————————————————————————————————————————
+
+  private openForgeMenu(): void {
+    this.choiceContext = "forge";
+    const level = this.progression.swordLevel;
+    const tier = tierAt(level);
+    const next = nextTier(level);
+    if (!next) {
+      this.choices.open(`FORGE — ${tier.name.toUpperCase()}`, [
+        { id: "cancel", label: "Bram hoche la tête", note: "rien à ajouter" },
+      ]);
+      return;
+    }
+    const ore = this.inventory.count("moon_ore");
+    const enough = ore >= next.ore && this.player.rupees >= next.rupees;
+    this.choices.open(`FORGE — ${tier.name.toUpperCase()}`, [
+      {
+        id: "temper",
+        label: `Forger : ${next.name}`,
+        note: enough ? `${next.ore} minerai · ${next.rupees} r`
+          : `manque ${Math.max(0, next.ore - ore)} min. · ${Math.max(0, next.rupees - this.player.rupees)} r`,
+        disabled: !enough,
+      },
+      { id: "look", label: "Regarder la lame", note: `${tier.damage} dégât${tier.damage > 1 ? "s" : ""}` },
+      { id: "cancel", label: "Remercier et sortir" },
+    ]);
+  }
+
+  private resolveForgeChoice(choice: string): void {
+    if (choice === "look") {
+      const tier = tierAt(this.progression.swordLevel);
+      this.textBox.open(tier.line, "Bram", "bram");
+      return;
+    }
+    if (choice !== "temper") return;
+    const next = nextTier(this.progression.swordLevel);
+    if (!next) return;
+    this.inventory.consume([{ item: "moon_ore", count: next.ore }]);
+    this.player.rupees -= next.rupees;
+    this.flags.set(FORGE_FLAGS[next.level - 1]!);
+    this.progression.apply(this.player);
+    this.particles.emit(this.player.position.x + 8, this.player.position.y, "spark", 22);
+    this.audio.playSfx("secret");
+    this.showNotice(`${next.name} — ${next.damage} dégâts par coup.`, 200);
+    this.textBox.open(next.line, "Bram", "bram");
+    this.journal.noteSecret("forge", "La forge de Bram",
+      `${next.name} sortie de l'enclume au jour ${this.clock.day}.`, this.clock.day);
+  }
+
+  // — Le feu de camp ———————————————————————————————————————————
+
+  private openCampMenu(): void {
+    this.choiceContext = "camp";
+    const zone = this.currentZone();
+    const now = Campfires.absoluteHour(this.clock.day, this.clock.hour, this.clock.minute);
+    const lit = zone !== null && this.campfires.in(zone.id, now).length > 0;
+    const cookable = CAMP_RECIPES.filter((recipe) => this.inventory.hasAll(recipe.ingredients));
+    this.choices.open(lit ? "LE FEU" : "ALLUMER UN FEU", [
+      {
+        id: "light", label: lit ? "Raviver les braises" : "Battre le briquet",
+        note: this.inventory.count("tinder_kit") > 0 ? "6 h de flamme" : "sans nécessaire",
+        disabled: this.inventory.count("tinder_kit") === 0,
+      },
+      {
+        id: "cook", label: "Faire cuire",
+        note: cookable.length > 0 ? cookable[0]!.id.replace("camp_", "") : "rien à cuire",
+        disabled: !lit || cookable.length === 0,
+      },
+      { id: "wait:matin", label: "Veiller jusqu'au matin", note: "09:00", disabled: !lit },
+      { id: "wait:nuit", label: "Veiller jusqu'à la nuit", note: "22:00", disabled: !lit },
+      { id: "cancel", label: "Laisser le feu tranquille" },
+    ]);
+  }
+
+  private resolveCampChoice(choice: string): void {
+    const zone = this.currentZone();
+    if (!zone) return;
+    const now = Campfires.absoluteHour(this.clock.day, this.clock.hour, this.clock.minute);
+    if (choice === "light") {
+      // Un feu allumé sous ses propres pieds reste caché par le personnage :
+      // on le pose devant, si la case est libre, et à ses pieds sinon.
+      const facing = this.player.facingVector();
+      const ahead = {
+        x: this.player.position.x + facing.x * 20,
+        y: this.player.position.y + facing.y * 20,
+      };
+      const tileX = Math.floor((ahead.x + 8) / TILE_SIZE);
+      const tileY = Math.floor((ahead.y + 12) / TILE_SIZE);
+      const spot = this.map.solidFor(tileX, tileY, false) ? this.player.position : ahead;
+      this.campfires.light(zone.id, spot, now);
+      this.particles.emit(spot.x + 8, spot.y + 8, "ember", 24);
+      this.audio.playSfx("secret");
+      this.showNotice("Le feu prend. Il tiendra six heures.", 180);
+      this.journal.noteSecret("campfire", "Le premier feu",
+        "On peut camper n'importe où, avec de l'amadou sec.", this.clock.day);
+      return;
+    }
+    if (choice === "cook") {
+      const recipe = CAMP_RECIPES.find((candidate) => this.inventory.hasAll(candidate.ingredients));
+      if (!recipe) return;
+      this.inventory.consume(recipe.ingredients);
+      this.inventory.add(recipe.result);
+      this.particles.emit(this.player.position.x + 8, this.player.position.y, "smoke", 14);
+      this.audio.playSfx("secret");
+      this.showNotice(recipe.message, 200);
+      return;
+    }
+    if (!choice.startsWith("wait:")) return;
+    const moment = choice.slice(5) as "matin" | "nuit";
+    const before = this.clock.day;
+    this.clock.waitUntil(moment);
+    this.lastScheduleHour = -1;
+    this.reloadNpcs();
+    if (this.clock.day !== before) this.populate();
+    this.player.stamina = 100;
+    this.showNotice(`Vous veillez près du feu. ${capitalise(moment)}, il est ${this.clock.hour}h.`, 190);
+  }
+
+  // — La flûte de saule ————————————————————————————————————————
+
+  private openFluteMenu(): void {
+    this.choiceContext = "flute";
+    const known = knownTunes((flag) => this.flags.has(flag));
+    if (known.length === 0) {
+      this.showNotice("Vous savez tenir la flûte, pas en jouer. Wren, peut-être.", 190);
+      this.audio.playSfx("deny");
+      return;
+    }
+    this.choices.open("FLÛTE DE SAULE", [
+      ...known.map((tune) => ({
+        id: `tune:${tune.id}`, label: tune.name, note: tune.notes.join(" "),
+      })),
+      { id: "cancel", label: "Ranger la flûte" },
+    ]);
+  }
+
+  private resolveFluteChoice(choice: string): void {
+    if (!choice.startsWith("tune:")) return;
+    const id = choice.slice(5) as TuneId;
+    this.audio.playSfx("secret");
+    this.particles.emit(this.player.position.x + 8, this.player.position.y, "spark", 16);
+    if (id === "pluie") {
+      this.flags.set("flute_rain");
+      this.showNotice("Le ciel s'assombrit. La pluie prend l'air au mot.", 200);
+      return;
+    }
+    if (id === "couchant") {
+      const before = this.clock.day;
+      this.clock.waitUntil("soir");
+      this.lastScheduleHour = -1;
+      this.reloadNpcs();
+      if (this.clock.day !== before) this.populate();
+      this.showNotice("Trois notes, et le jour bascule. Il est 19h.", 200);
+      return;
+    }
+    // L'air du chat : le familier arrive où que l'on soit.
+    this.familiar = new LanternCat({ x: this.player.position.x + 40, y: this.player.position.y });
+    this.showNotice("Un miaulement, une lueur : le Chat-Lanterne vous a entendue.", 200);
+  }
+
+  // — La poste aux pigeons —————————————————————————————————————
+
+  private openPostMenu(): void {
+    this.choiceContext = "post";
+    const waiting = this.post.collect(this.clock.day);
+    if (waiting) {
+      this.inventory.add(waiting.item, waiting.count);
+      this.particles.emit(this.player.position.x + 8, this.player.position.y, "spark", 18);
+      this.audio.playSfx("secret");
+      this.floaters.reward(this.player.position.x + 8, this.player.position.y - 6,
+        `${ITEMS[waiting.item].name} ×${waiting.count}`);
+      this.textBox.open(waiting.text, waiting.from, "colombin");
+      this.journal.noteSecret("post", "La poste aux pigeons",
+        "Un objet confié le matin revient transformé le lendemain.", this.clock.day);
+      return;
+    }
+    if (this.post.pending) {
+      this.textBox.open(this.post.status(this.clock.day), "Colombin", "colombin");
+      return;
+    }
+    const sendable = this.inventory.snapshot()
+      .filter((entry) => acceptedByPost(entry.id))
+      .slice(0, 5);
+    if (sendable.length === 0) {
+      this.textBox.open("« Rien dans votre sac ne trouverait preneur. Revenez chargée. »",
+        "Colombin", "colombin");
+      return;
+    }
+    this.choices.open("CONFIER AU PIGEON", [
+      ...sendable.map((entry) => ({
+        id: `send:${entry.id}`, label: ITEMS[entry.id].name, note: `×${entry.count}`,
+      })),
+      { id: "cancel", label: "Garder son sac" },
+    ]);
+  }
+
+  private resolvePostChoice(choice: string): void {
+    if (!choice.startsWith("send:")) return;
+    const item = choice.slice(5) as ItemId;
+    if (!this.inventory.remove(item)) return;
+    if (!this.post.send(item, this.clock.day)) {
+      this.inventory.add(item);
+      return;
+    }
+    this.particles.emit(this.player.position.x + 8, this.player.position.y - 8, "smoke", 12);
+    this.audio.playSfx("secret");
+    this.showNotice("Le pigeon part vers le nord. Repassez demain.", 190);
   }
 
   private blessFromFamiliar(): void {
@@ -1311,6 +1811,23 @@ export class Game {
 
   private useItem(id: ItemId): void {
     const definition = ITEMS[id];
+    // La flûte ne se consomme pas : elle ouvre son répertoire. C'est aussi le
+    // seul endroit où l'on pense à la chercher, faute d'une touche libre.
+    if (id === "willow_flute") {
+      this.menu.active = false;
+      this.openFluteMenu();
+      return;
+    }
+    if (id === "tinder_kit") {
+      this.menu.active = false;
+      if (this.indoors || this.player.sailing) {
+        this.showNotice("Pas de feu ici. Il faut de la terre sous les pieds.", 150);
+        this.audio.playSfx("deny");
+        return;
+      }
+      this.openCampMenu();
+      return;
+    }
     const effect = itemEffect(id);
     if (!effect || !this.inventory.remove(id)) {
       this.audio.playSfx("deny");
@@ -1633,6 +2150,7 @@ export class Game {
       weather: this.clock.weather,
       rupees: this.player.rupees,
       explored: this.mapScreen.exploredCount,
+      tide: this.clock.tide,
     };
   }
 
@@ -1657,9 +2175,28 @@ export class Game {
     const variant = this.variants.resolve(zone.id, {
       flags: new Set(this.flags.snapshot()), isNight: this.clock.isNight,
     });
-    this.hud.announce(zone.name, variant === "default"
-      ? (zone.safe ? "Refuge" : `Menace ${"·".repeat(Math.max(1, zone.danger))}`)
-      : variant);
+    // Un identifiant de variante n'est pas un sous-titre : « v_niveau_bas »
+    // s'affichait tel quel sous le nom de la région.
+    const danger = zone.safe ? "Refuge" : `Menace ${"·".repeat(Math.max(1, zone.danger))}`;
+    this.hud.announce(zone.name, VARIANT_LABELS[variant] ?? danger);
+
+    // La région passe au carnet à la première traversée. C'est le relevé de
+    // terrain : ce qu'on a vu, à quelle heure, par quel temps.
+    const fresh = this.journal.noteRegion(zone.id, zone.name,
+      `${zone.safe ? "Refuge." : `Menace ${zone.danger}/3.`} Relevée ${this.clock.phase}, `
+      + `${this.clock.weather === "rain" ? "sous la pluie" : "par temps clair"}.`,
+      this.clock.day);
+    if (fresh) this.checkRankUp();
+  }
+
+  /** Annonce un titre franchi. Le carnet décerne, le récit se tait. */
+  private checkRankUp(): void {
+    const rank = this.journal.rank;
+    if (this.flags.has(`rank:${rank.title}`) || rank.at === 0) return;
+    this.flags.set(`rank:${rank.title}`);
+    this.showNotice(`TITRE : ${rank.title.toUpperCase()} — ${rank.motto}`, 280);
+    this.audio.playSfx("secret");
+    this.particles.emit(this.player.position.x + 8, this.player.position.y, "spark", 20);
   }
 
   /**
@@ -1676,7 +2213,33 @@ export class Game {
     this.audio.playSfx("secret");
   }
 
+  /**
+   * Refait la carte quand la mer a bougé pour de bon.
+   *
+   * On ne régénère pas à chaque frame : seul un franchissement de palier — la
+   * grève se découvre, ou l'eau revient — vaut une reconstruction. Le joueur
+   * n'est jamais déplacé, et comme la marée ne fait qu'ajouter du praticable
+   * en descendant, on ne peut pas se retrouver noyé dans un mur.
+   */
+  private refreshTideIfNeeded(): void {
+    const zone = this.currentZone();
+    if (!zone || this.indoors || this.transition.active) return;
+    if (!TIDAL_ZONES.has(zone.id)) return;
+    const level = this.clock.tideLevel;
+    const band = (value: number): number => value < 0.25 ? 0 : value < 0.4 ? 1 : value < 0.6 ? 2 : 3;
+    if (band(level) === band(this.tideLevelOfMap)) return;
+    const rising = level > this.tideLevelOfMap;
+    this.tideLevelOfMap = level;
+    this.useMap(new TileMap(createZoneMap(zone, level), this.tileSet));
+    // En remontant, la mer peut reprendre la case où l'on se tenait.
+    this.player.unstick();
+    this.showNotice(rising
+      ? "La mer remonte sur l'estran."
+      : "La mer se retire. Le sable apparaît.", 170);
+  }
+
   private refreshScheduleIfNeeded(): void {
+    this.refreshTideIfNeeded();
     if (this.clock.hour === this.lastScheduleHour) return;
     this.lastScheduleHour = this.clock.hour;
     if (this.interior || this.transition.active) return;
@@ -1691,7 +2254,8 @@ export class Game {
     this.projectiles = [];
     const zone = this.currentZone();
     if (zone) {
-      this.useMap(new TileMap(createZoneMap(zone), this.tileSet));
+      this.useMap(new TileMap(createZoneMap(zone, this.clock.tideLevel), this.tileSet));
+      this.tideLevelOfMap = this.clock.tideLevel;
     }
     this.interactables = zone
       ? INTERACTABLES.filter((data) => data.zone === zone.id)
@@ -1712,7 +2276,7 @@ export class Game {
     if (!zone || this.interior) return;
     this.lastPopulatedDay = this.clock.day;
     const guardian = nightGuardianFor(zone.id, this.clock.hour,
-      (flag) => this.flags.has(flag));
+      (flag) => this.flags.has(flag), this.clock.tide);
     const spawns: readonly EnemySpawn[] = populateZone({
       zone, map: this.map, day: this.clock.day,
       playerX: this.player.position.x, playerY: this.player.position.y,
@@ -1774,15 +2338,21 @@ export class Game {
       this.familiar = kind === "tower" ? new LanternCat({ x: 300, y: 180 }) : null;
       this.boss = null;
       this.hud.announce(INTERIOR_NAMES[kind]);
-      this.showNotice(kind === "cottage"
-        ? "Le tapis rouge et le feu rendent la pièce accueillante."
-        : kind === "hermitage"
-          ? "L'ermitage sent la pierre chaude, le bois et les cartes anciennes."
-          : kind === "tower"
-            ? "Les fioles tintent. Maëlis et son Chat-Lanterne vous observent."
-            : this.flags.has("half_demon_skull")
-              ? "Le château vaincu résonne encore de votre ancienne bataille."
-              : "Les Gardes de Cendre ferment les rangs devant le trône.", 150);
+      // Chaque lieu dit ce qu'il est. La cascade retombait sur la réplique du
+      // Château, si bien qu'on entrait dans la Bibliothèque en lisant que les
+      // Gardes de Cendre fermaient les rangs.
+      const arrivals: Readonly<Record<InteriorKind, string>> = {
+        cottage: "Le tapis rouge et le feu rendent la pièce accueillante.",
+        hermitage: "L'ermitage sent la pierre chaude, le bois et les cartes anciennes.",
+        tower: "Les fioles tintent. Maëlis et son Chat-Lanterne vous observent.",
+        library: "L'eau court entre les rayonnages. Le papier a tenu, allez savoir comment.",
+        orchard: "Les poires de nuit pèsent aux branches. Elles n'étaient pas là ce matin.",
+        strand_cave: "Le sable est encore mouillé. La mer reviendra la chercher.",
+        castle: this.flags.has("half_demon_skull")
+          ? "Le château vaincu résonne encore de votre ancienne bataille."
+          : "Les Gardes de Cendre ferment les rangs devant le trône.",
+      };
+      this.showNotice(arrivals[kind], 150);
     });
   }
 
@@ -1891,6 +2461,9 @@ export class Game {
       checkpoint: this.death.snapshot(),
       purchases: this.shop.snapshot(),
       fortress: this.fortress.snapshot(),
+      journal: this.journal.snapshot(),
+      campfires: this.campfires.snapshot(),
+      post: this.post.snapshot(),
     };
   }
 
@@ -1917,6 +2490,9 @@ export class Game {
     this.death.restore(data.checkpoint);
     this.shop.restore(data.purchases ?? []);
     this.fortress.restore(data.fortress);
+    this.journal.restore(data.journal);
+    this.campfires.restore(data.campfires);
+    this.post.restore(data.post);
     this.progression.apply(this.player);
     this.quests.refresh();
   }
@@ -1966,6 +2542,19 @@ export class Game {
       if (!this.camera.isVisible(object.position.x, object.position.y, 16, 16)) continue;
       drawables.push({ entity: object, y: object.position.y + 15 });
     }
+    // Les feux allumés par le joueur : ils ne viennent pas des données du
+    // monde, donc ils ne passent pas par la liste des objets interactifs.
+    const zone = this.currentZone();
+    if (zone && !this.indoors) {
+      const now = Campfires.absoluteHour(this.clock.day, this.clock.hour, this.clock.minute);
+      for (const fire of this.campfires.in(zone.id, now)) {
+        if (!this.camera.isVisible(fire.x, fire.y, 16, 16)) continue;
+        drawables.push({
+          entity: { draw: (target) => this.drawCampfire(target, fire.x, fire.y) },
+          y: fire.y + 14,
+        });
+      }
+    }
     for (const npc of this.npcs) drawables.push({ entity: npc, y: npc.position.y + 16 });
     for (const enemy of this.enemies) {
       if (!enemy.active) continue;
@@ -1989,6 +2578,26 @@ export class Game {
     for (const drawable of drawables) drawable.entity.draw(ctx);
   }
 
+  /** Un feu de bivouac : bûches croisées, flamme qui bat, cercle de pierres. */
+  private drawCampfire(ctx: CanvasRenderingContext2D, x: number, y: number): void {
+    ctx.save();
+    ctx.fillStyle = PALETTE.stoneDark;
+    for (const [dx, dy] of [[-1, 12], [4, 14], [10, 13], [14, 11]] as const) {
+      ctx.fillRect(x + dx, y + dy, 3, 2);
+    }
+    ctx.fillStyle = PALETTE.woodDark;
+    ctx.fillRect(x + 1, y + 9, 14, 3);
+    ctx.fillRect(x + 4, y + 6, 8, 3);
+    const beat = Math.floor(this.frame / 5) % 3;
+    ctx.fillStyle = PALETTE.red;
+    ctx.fillRect(x + 4, y - beat, 8, 9 + beat);
+    ctx.fillStyle = PALETTE.yellow;
+    ctx.fillRect(x + 5, y + 2 - beat, 6, 6);
+    ctx.fillStyle = PALETTE.cream;
+    ctx.fillRect(x + 7, y + 4 - beat, 2, 3);
+    ctx.restore();
+  }
+
   private applyLighting(): void {
     const lights: Light[] = [];
     const zone = this.currentZone();
@@ -2007,6 +2616,14 @@ export class Game {
         x: projectile.position.x, y: projectile.position.y,
         radius: 52, color: projectile.style.glow,
       });
+    }
+    // Un bivouac doit se voir de loin dans le noir : c'est ce qui le rend
+    // utile, et ce qui donne envie d'en allumer un avant la nuit.
+    if (zone && !this.indoors) {
+      const now = Campfires.absoluteHour(this.clock.day, this.clock.hour, this.clock.minute);
+      for (const fire of this.campfires.in(zone.id, now)) {
+        lights.push({ x: fire.x + 8, y: fire.y + 8, radius: 118, color: "#ffb45a" });
+      }
     }
     if (this.dragon?.active) {
       for (const flame of this.dragon.flames) {
@@ -2059,7 +2676,8 @@ export class Game {
     this.hud.draw(this.renderer, this.player, this.clock,
       interiorName ?? zone?.name ?? "INCONNU",
       fighting ? undefined : this.quests.activeObjective()?.hint,
-      heading);
+      heading,
+      !this.indoors && zone !== null && TIDAL_ZONES.has(zone.id));
     if (!this.indoors && !this.menu.active) {
       this.mapScreen.drawMini(ctx, this.camera.zone, VIEW_WIDTH - 74, VIEW_HEIGHT - 70,
         waypoint?.zone, this.frame);
@@ -2086,7 +2704,7 @@ export class Game {
     this.shop.draw(this.renderer, this.player);
     this.textBox.draw(this.renderer);
     this.menu.draw(this.renderer, this.inventory, this.mapScreen, this.quests,
-      this.camera.zone, waypoint?.zone, waypoint?.label, this.frame);
+      this.camera.zone, waypoint?.zone, waypoint?.label, this.frame, this.journal);
     this.fishing.draw(this.renderer);
     this.transition.draw(ctx);
     this.death.draw(this.renderer);

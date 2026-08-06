@@ -31,6 +31,11 @@ export class Player extends Entity {
   stamina = MAX_STAMINA;
   /** À la barre : l'eau devient praticable, la terre ne l'est plus. */
   sailing = false;
+  /**
+   * Vent courant, posé par le jeu à chaque image. Le joueur ne connaît pas
+   * l'horloge : lui passer un vecteur évite de lui donner tout le monde.
+   */
+  wind: Readonly<Vec2> = { x: 0, y: 0 };
   private drift = { x: 0, y: 0 };
   private demon = false;
   attackFrame = -1;
@@ -170,9 +175,16 @@ export class Player extends Entity {
    */
   private updateSailing(): void {
     const wanted = this.input.direction();
-    const top = 2.5;
-    this.drift.x = (this.drift.x + wanted.x * 0.14) * 0.972;
-    this.drift.y = (this.drift.y + wanted.y * 0.14) * 0.972;
+    // Le vent : au portant on file, au près on peine. Le cap comptait pour
+    // rien — barrer revenait à marcher en bleu, avec de l'inertie.
+    const wind = this.wind;
+    const heading = Math.hypot(wanted.x, wanted.y);
+    const alignment = heading > 0
+      ? (wanted.x * wind.x + wanted.y * wind.y) / heading : 0;
+    const push = 1 + alignment * 0.45;
+    const top = 2.5 * (1 + alignment * 0.3);
+    this.drift.x = (this.drift.x + wanted.x * 0.14 * push + wind.x * 0.012) * 0.972;
+    this.drift.y = (this.drift.y + wanted.y * 0.14 * push + wind.y * 0.012) * 0.972;
     const speed = Math.hypot(this.drift.x, this.drift.y);
     if (speed > top) {
       this.drift.x = (this.drift.x / speed) * top;

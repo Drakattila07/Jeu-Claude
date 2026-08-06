@@ -4,7 +4,9 @@ import type { Requirement } from "../systems/Requirements";
 export type InteractableKind =
   | "well" | "sign" | "door" | "chest" | "pot" | "bush" | "cauldron" | "valve"
   | "roots" | "footprints" | "seal" | "mechanism" | "pickup" | "secret"
-  | "offering" | "shrine";
+  | "offering" | "shrine"
+  // L'enclume de Bram, le foyer qu'on allume, le perchoir de Colombin.
+  | "anvil" | "campfire" | "dovecote";
 
 export interface InteractableData {
   readonly id: string;
@@ -143,4 +145,58 @@ export const INTERACTABLES = [
       refusal: "L'autel attend une écaille. Le dragon la porte encore.",
     },
   },
+
+  // — Les trois nouveaux lieux —
+
+  {
+    id: "library_hatch", zone: "grotte_noyee", kind: "door", x: 256, y: 208,
+    text: "Descendre dans la Bibliothèque Noyée.",
+    requires: {
+      items: [{ item: "lead_boots", count: 1 }],
+      refusal: "Une trappe sous trois mètres d'eau. On ne descend pas sans lest.",
+    },
+  },
+  {
+    id: "orchard_gate", zone: "verger_haut", kind: "door", x: 208, y: 160,
+    text: "Pousser la claie du Verger de Nuit.",
+    requires: {
+      night: true,
+      refusal: "La claie est ouverte, mais les branches sont nues. Sœur Aubel disait : après vingt heures.",
+    },
+  },
+  {
+    id: "strand_cave_mouth", zone: "greve_de_maree", kind: "door", x: 384, y: 288,
+    text: "Entrer dans la Grotte de l'Estran.",
+    requires: {
+      tide: "basse",
+      refusal: "L'entrée est sous l'eau. Il faudrait attendre que la mer se retire.",
+    },
+  },
+
+  // — Les nouveaux gestes : forger, camper, poster —
+
+  { id: "bram_anvil", zone: "hameau_nord", kind: "anvil", x: 224, y: 160,
+    text: "L'enclume de Bram, tiède même la nuit." },
+  { id: "colombin_dovecote", zone: "hameau_nord", kind: "dovecote", x: 320, y: 288,
+    text: "Le pigeonnier de Colombin. Ça roucoule là-dedans." },
+  { id: "wren_stone", zone: "place_puits", kind: "shrine", x: 352, y: 304,
+    text: "Une pierre plate où l'on s'assied pour jouer. Wren y a laissé des marques.",
+    requires: {
+      flags: ["tune_pluie"],
+      refusal: "Trois encoches sur la pierre. Il faudrait connaître au moins un air.",
+    },
+  },
+  { id: "willow_flute_gift", zone: "ilot_saule", kind: "pickup", x: 176, y: 208,
+    text: "Une flûte de saule, oubliée au pied de l'arbre. Wren la cherchait.",
+    grants: { item: "willow_flute", count: 1 } },
+  { id: "tinder_kit_chest", zone: "lisiere_sentier", kind: "chest", x: 288, y: 224,
+    text: "Un nécessaire à feu dans une boîte de fer-blanc : amadou sec, silex, patience.",
+    grants: { item: "tinder_kit", count: 1 } },
+  { id: "strand_pearls", zone: "greve_de_maree", kind: "bush", x: 208, y: 336,
+    text: "Le sable nu rend deux perles d'estran.",
+    requires: {
+      tide: "basse",
+      refusal: "La mer couvre encore le banc. Rien à ramasser.",
+    },
+    grants: { item: "tide_pearl", count: 2 } },
 ] as const satisfies readonly InteractableData[];

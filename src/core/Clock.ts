@@ -2,6 +2,22 @@ import { RNG } from "./RNG";
 
 export type Weather = "clear" | "rain";
 
+/** État de la marée. L'estran ne se découvre qu'à basse mer. */
+export type Tide = "basse" | "montante" | "haute" | "descendante";
+
+/** Aire des vents : huit rhumbs, ça suffit à barrer. */
+export type WindDirection = "N" | "NE" | "E" | "SE" | "S" | "SO" | "O" | "NO";
+
+const WIND_ROSE: readonly WindDirection[] = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"];
+
+/** Vecteur unitaire d'un rhumb, en repère écran (y vers le bas). */
+export const WIND_VECTORS: Readonly<Record<WindDirection, { readonly x: number; readonly y: number }>> = {
+  N: { x: 0, y: -1 }, NE: { x: 0.7071, y: -0.7071 },
+  E: { x: 1, y: 0 }, SE: { x: 0.7071, y: 0.7071 },
+  S: { x: 0, y: 1 }, SO: { x: -0.7071, y: 0.7071 },
+  O: { x: -1, y: 0 }, NO: { x: -0.7071, y: -0.7071 },
+};
+
 /** Frames de simulation par minute de jeu : une journée dure 24 minutes réelles. */
 export const FRAMES_PER_GAME_MINUTE = 60;
 
@@ -57,6 +73,45 @@ export class Clock {
       this.day = current;
       return value;
     });
+  }
+
+  /**
+   * Marée.
+   *
+   * Deux basses mers par jour, comme dehors. Le cycle dure douze heures et
+   * décale d'une heure chaque jour : la grève ne se découvre jamais deux
+   * matins de suite au même moment, et il faut donc regarder le ciel plutôt
+   * qu'apprendre un horaire par cœur.
+   */
+  get tide(): Tide {
+    const phase = (this.minuteOfDay / 60 + (this.day - 1)) % 12;
+    if (phase < 2 || phase >= 11) return "basse";
+    if (phase < 5) return "montante";
+    if (phase < 8) return "haute";
+    return "descendante";
+  }
+
+  /** Hauteur d'eau, de 0 (estran nu) à 1 (pleine mer). */
+  get tideLevel(): number {
+    const phase = (this.minuteOfDay / 60 + (this.day - 1)) % 12;
+    return (1 - Math.cos((phase / 12) * Math.PI * 2)) / 2;
+  }
+
+  /** Heures à patienter avant la prochaine basse mer. */
+  hoursUntilLowTide(): number {
+    const phase = (this.minuteOfDay / 60 + (this.day - 1)) % 12;
+    if (phase < 2) return 0;
+    return Math.max(0, 11 - phase);
+  }
+
+  /**
+   * Vent du jour. Il tourne de trois heures en trois heures : assez lent pour
+   * qu'on puisse en tenir compte, assez vif pour qu'on ne s'y installe pas.
+   */
+  get wind(): WindDirection {
+    const step = Math.floor(this.minuteOfDay / 180);
+    const rng = new RNG(this.seed ^ Math.imul(this.day * 8 + step, 0x85ebca6b));
+    return WIND_ROSE[rng.int(0, WIND_ROSE.length - 1)]!;
   }
 
   canHarvest(resourceId: string, regrowDays: number): boolean {

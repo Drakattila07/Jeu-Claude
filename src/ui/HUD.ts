@@ -35,13 +35,18 @@ export class HUD {
   clearAnnouncement(): void { this.titleFrames = 0; }
 
   draw(renderer: Renderer, player: Player, clock: Clock, zoneName: string, objective?: string,
-    heading?: { readonly dx: number; readonly dy: number } | null): void {
+    heading?: { readonly dx: number; readonly dy: number } | null,
+    coastal = false): void {
     const { ctx } = renderer;
     ctx.save();
     this.drawHearts(ctx, player);
     this.drawStamina(ctx, player);
     this.drawPurse(renderer, player);
     this.drawClock(renderer, clock);
+    // La marée sur la côte, le vent à la barre : deux informations qui ne
+    // servent qu'où elles servent, et qui n'encombrent pas le reste du temps.
+    if (coastal) this.drawTide(renderer, clock);
+    if (player.sailing) this.drawWind(renderer, clock);
     if (player.isDemon) this.drawDemonBadge(renderer);
     if (objective) this.drawObjective(renderer, objective, heading);
     this.drawZoneTitle(renderer, zoneName);
@@ -127,6 +132,43 @@ export class HUD {
       ctx.fillRect(iconX + 1, 25, 7, 3);
     }
     drawText(ctx, time, x + 11, 21, { color: PALETTE.cream });
+  }
+
+  /** Jauge de marée : hauteur d'eau, état, et l'attente jusqu'au reflux. */
+  private drawTide(renderer: Renderer, clock: Clock): void {
+    const { ctx } = renderer;
+    const tide = clock.tide;
+    const label = tide === "basse" ? "MER BASSE"
+      : tide === "haute" ? "PLEINE MER"
+        : tide === "montante" ? "MONTANTE" : "DESCENDANTE";
+    const width = measureText(label) + 22;
+    const x = VIEW_WIDTH - width - 8;
+    const y = 34;
+    ctx.fillStyle = "rgba(10,8,16,0.6)";
+    ctx.fillRect(x - 3, y, width + 6, 12);
+
+    // Petite colonne d'eau : le niveau se lit avant le mot.
+    const level = clock.tideLevel;
+    ctx.fillStyle = PALETTE.stoneDark;
+    ctx.fillRect(x + 1, y + 2, 4, 8);
+    ctx.fillStyle = tide === "basse" ? PALETTE.sandLight : PALETTE.waterLight;
+    const height = Math.max(1, Math.round(level * 8));
+    ctx.fillRect(x + 1, y + 10 - height, 4, height);
+
+    drawText(ctx, label, x + 9, y + 1,
+      { color: tide === "basse" ? PALETTE.sandLight : PALETTE.stoneLight });
+  }
+
+  /** Rose des vents : le rhumb décide si l'on file ou si l'on peine. */
+  private drawWind(renderer: Renderer, clock: Clock): void {
+    const { ctx } = renderer;
+    const label = `VENT ${clock.wind}`;
+    const width = measureText(label) + 8;
+    const x = VIEW_WIDTH - width - 8;
+    const y = 48;
+    ctx.fillStyle = "rgba(10,8,16,0.6)";
+    ctx.fillRect(x - 3, y, width + 6, 12);
+    drawText(ctx, label, x + 2, y + 1, { color: PALETTE.waterLight });
   }
 
   private drawDemonBadge(renderer: Renderer): void {

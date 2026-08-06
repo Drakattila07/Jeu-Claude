@@ -78,5 +78,72 @@ export const NPCS = [
   ], chatter: [
     "Vertepierre garde ce que la mer réclame.", "Trois portes, trois clés. C'était l'usage.",
     "Le Chevalier n'a jamais quitté la dernière salle.", "N'y allez pas sans épée. Ni sans raison."
+  ]},
+
+  // — Les nouveaux venus —
+
+  /**
+   * Wren ne tient pas en place : elle fait la tournée des trois villages dans
+   * la journée. C'est elle qui enseigne les airs de la flûte de saule.
+   */
+  { id: "wren", name: "Wren la Baladine", color: "purple", schedule: [
+    { start: 6, end: 11, zone: "hameau_nord", x: 288, y: 224 },
+    { start: 11, end: 16, zone: "place_puits", x: 320, y: 256 },
+    { start: 16, end: 21, zone: "hameau_sud", x: 288, y: 256 },
+    { start: 21, end: 24, zone: "quai_lac", x: 192, y: 288 }
+  ], chatter: [
+    "Trois airs, pas un de plus. Le reste, c'est du bruit.",
+    "Un air se paie en écoute, pas en rubis.",
+    "La pluie a une note. La nuit en a une autre.",
+    "Le saule donne le meilleur bois : il a l'habitude de pleurer."
+  ]},
+
+  /**
+   * Fennec passe le lac à la rame pour qui n'a pas encore de coque. Il
+   * disparaît le jour où l'on possède la barque de Sarn — et il le prend mal.
+   */
+  { id: "fennec", name: "Fennec le Passeur", color: "water", schedule: [
+    { start: 5, end: 13, zone: "quai_lac", x: 352, y: 304 },
+    { start: 13, end: 21, zone: "criques", x: 208, y: 288 }
+  ], chatter: [
+    "Deux rubis la traversée. Le lac ne fait pas crédit.",
+    "J'ai ramé avant que vous ne sachiez marcher.",
+    "Une barque à soi, c'est bien. Un passeur, c'est mieux renseigné.",
+    "Le fond du lac garde des choses. N'y regardez pas trop."
+  ]},
+
+  { id: "soeur_aubel", name: "Sœur Aubel", color: "leaf", schedule: [
+    { start: 5, end: 12, zone: "verger_haut", x: 224, y: 240 },
+    { start: 12, end: 20, zone: "vergers_est", x: 272, y: 208 },
+    { start: 20, end: 24, zone: "verger_haut", x: 224, y: 240 }
+  ], chatter: [
+    "Je soigne. Je ne juge pas. C'est déjà beaucoup de travail.",
+    "Trois fleurs-œil valent une potion. Le calcul est honnête.",
+    "Le verger de nuit ne donne qu'à ceux qui attendent la nuit.",
+    "Un remède mal payé guérit moins bien. Personne ne sait pourquoi."
+  ]},
+
+  /**
+   * Odile relève les mêmes régions que vous, en avance. Elle sert de mesure :
+   * son avance se calcule sur le carnet, et elle le fait remarquer.
+   */
+  { id: "odile", name: "Odile la Rivale", color: "roof", schedule: [
+    { start: 7, end: 12, zone: "lisiere_carrefour", x: 224, y: 128 },
+    { start: 12, end: 17, zone: "riviere_pont", x: 256, y: 208 },
+    { start: 17, end: 23, zone: "place_puits", x: 96, y: 240 }
+  ], chatter: [
+    "Vous relevez encore à pied ? Charmant.",
+    "J'ai vendu ma carte de la Lisière avant que vous n'y entriez.",
+    "Un blanc sur une carte, c'est un aveu.",
+    "Nous ferions une bonne équipe. C'est bien le problème."
+  ]},
+
+  { id: "maitre_pigeon", name: "Colombin", color: "stone", schedule: [
+    { start: 0, end: 24, zone: "hameau_nord", x: 352, y: 288 }
+  ], chatter: [
+    "Roucoule. Le pigeon, pas moi.",
+    "Une lettre part le matin, revient le lendemain. C'est la poste.",
+    "Mes bêtes ne se perdent jamais. Les gens, si.",
+    "Confiez-moi un objet, je vous trouve à qui il manque."
   ]}
 ] as const satisfies readonly NpcData[];

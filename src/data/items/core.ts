@@ -89,6 +89,60 @@ export const ITEMS = {
     name: "Écaille de dragon", stack: 1,
     description: "Encore tiède. Elle pèse le poids d'une main.",
   },
+
+  // — La flûte, le camp, le verger, la poste —
+
+  /**
+   * Le minerai de lune existait comme cible de quête sans jamais exister
+   * comme objet : on en « ramassait » trois sans rien avoir dans le sac.
+   */
+  moon_ore: {
+    name: "Minerai de lune", stack: 12,
+    description: "Il ne brille que sous la pluie. Bram le paie en trempes.",
+  },
+  willow_flute: {
+    name: "Flûte de saule", stack: 1,
+    description: "Trois trous, trois airs. Wren jure qu'il n'en faut pas plus.",
+  },
+  tinder_kit: {
+    name: "Nécessaire à feu", stack: 1,
+    description: "Amadou, silex, patience. De quoi tenir une nuit dehors.",
+  },
+  night_pear: {
+    name: "Poire de nuit", stack: 12,
+    description: "Elle ne mûrit qu'après vingt heures. Sucrée, presque suspecte.",
+    effect: { heal: 2 },
+  },
+  smoked_fish: {
+    name: "Poisson fumé", stack: 9,
+    description: "Cuit au feu de camp. Tient au corps et au moral.",
+    effect: { heal: 3, stamina: 60 },
+  },
+  root_stew: {
+    name: "Ragoût de racines", stack: 6,
+    description: "Amer, chaud, réconfortant. Le trio gagnant d'un bivouac.",
+    effect: { heal: 2, stamina: 100 },
+  },
+  heron_sketch: {
+    name: "Croquis du Héron", stack: 1,
+    description: "Trois traits d'encre. Vous l'avez approché d'assez près.",
+  },
+  drowned_page: {
+    name: "Feuillet noyé", stack: 9,
+    description: "L'encre a coulé, le sens tient encore. La Bibliothèque en manque.",
+  },
+  postal_token: {
+    name: "Jeton de poste", stack: 9,
+    description: "Colombin le rend contre un envoi. Un pigeon, un jeton.",
+  },
+  tide_pearl: {
+    name: "Perle d'estran", stack: 4,
+    description: "Ramassée sur le sable nu. La mer la reprend si on tarde.",
+  },
+  sword_temper: {
+    name: "Trempe de Bram", stack: 3,
+    description: "Un certificat de forge. Trois paliers, trois trempes.",
+  },
 } as const satisfies Record<string, ItemDefinition>;
 
 export type ItemId = keyof typeof ITEMS;
@@ -108,3 +162,19 @@ export function itemEffect(id: ItemId): ItemEffect | undefined {
 /** Objets consommables, dans l'ordre où la touche « objet » les propose. */
 export const USABLE_ITEMS: readonly ItemId[] = (Object.keys(ITEMS) as ItemId[])
   .filter((id) => itemEffect(id) !== undefined);
+
+/**
+ * Objets qui *font* quelque chose sans se consommer.
+ *
+ * Le sac ne savait qu'avaler : un objet sans `effect` était rangé au rayon
+ * « objet de quête » et le menu refusait de le valider. La flûte et le
+ * nécessaire à feu ouvrent leur propre liste et ne disparaissent pas.
+ */
+export const ACTIONABLE_ITEMS: ReadonlySet<ItemId> = new Set<ItemId>([
+  "willow_flute", "tinder_kit",
+]);
+
+/** Vrai si le sac doit laisser valider cet objet. */
+export function isUsable(id: ItemId): boolean {
+  return itemEffect(id) !== undefined || ACTIONABLE_ITEMS.has(id);
+}

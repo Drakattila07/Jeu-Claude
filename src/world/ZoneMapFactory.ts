@@ -1408,7 +1408,8 @@ function doorAnchorOf(anchors: readonly ZoneAnchor[]): { readonly x: number; rea
   };
 }
 
-export function createProceduralMap(zone: WorldZoneData, anchors: readonly ZoneAnchor[] = []): TiledMapData {
+export function createProceduralMap(zone: WorldZoneData, anchors: readonly ZoneAnchor[] = [],
+  tideLevel = 1): TiledMapData {
   const grid = makeGrid(zone);
 
   for (let y = 0; y < H; y += 1) {
@@ -1487,6 +1488,10 @@ export function createProceduralMap(zone: WorldZoneData, anchors: readonly ZoneA
   // encore l'emporter, et le hameau se retrouvait sans son seul point d'eau.
   if (zone.biome === "village") raiseWell(grid);
 
+  // La marée en dernier, une fois la connexité assurée : elle ne fait
+  // qu'ajouter du praticable, donc elle ne peut rien invalider.
+  if (TIDAL_ZONES.has(zone.id)) uncoverStrand(grid.ground, grid.terrain, tideLevel);
+
   const layers: Record<LayerName, number[]> = {
     ground: grid.ground,
     terrain: grid.terrain,
@@ -1510,7 +1515,80 @@ export function anchorsFor(zoneId: string): readonly ZoneAnchor[] {
     }));
 }
 
-/** Carte complète d'une zone, contenu narratif compris. */
-export function createZoneMap(zone: WorldZoneData): TiledMapData {
-  return createProceduralMap(zone, anchorsFor(zone.id));
+/**
+ * Régions que la marée découvre.
+ *
+ * Une côte qui ne bouge pas n'est qu'un décor peint. Sur celles-ci, la basse
+ * mer rend praticable la frange d'eau peu profonde — et la pleine mer la
+ * reprend, avec ce qu'on y a laissé.
+ */
+export const TIDAL_ZONES: ReadonlySet<string> = new Set([
+  "greve_de_maree", "criques", "rade_de_maree", "quai_des_carenes",
+  "port_maree", "sente_du_cap", "cap_du_phare", "quai_lac",
+]);
+
+/**
+ * Découvre l'estran.
+ *
+ * On ne remplace que de l'eau peu profonde par du sable : l'opération ne fait
+ * qu'ajouter du praticable, si bien qu'aucune vérification de connexité déjà
+ * passée ne peut être invalidée. L'inverse — noyer du sol à marée haute —
+ * casserait cette garantie, et c'est précisément pourquoi on ne le fait pas.
+ */
+function uncoverStrand(ground: number[], terrain: number[], level: number): void {
+  if (level >= 0.6) return;
+  // L'eau d'une côte vit dans la couche de sol, pas dans le terrain : c'est
+  // elle qu'il faut assécher. Le terrain ne sert qu'à ne pas découvrir une
+  // case déjà occupée par un rocher.
+  const reach = level < 0.2 ? 3 : level < 0.4 ? 2 : 1;
+  const wet = new Set<number>([TILE.water, TILE.deepWater, TILE.openSea, TILE.swell]);
+
+  /** Vrai si une case voisine, dans le rayon, sort de l'ensemble donné. */
+  const touchesOutside = (x: number, y: number, inside: ReadonlySet<number>): boolean => {
+    for (let dy = -reach; dy <= reach; dy += 1) {
+      for (let dx = -reach; dx <= reach; dx += 1) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+        if (!inside.has(ground[index(nx, ny)]!)) return true;
+      }
+    }
+    return false;
+  };
+
+  /** Cases d'un type donné qui bordent autre chose que `inside`. */
+  const fringe = (kind: number, inside: ReadonlySet<number>): number[] => {
+    const found: number[] = [];
+    for (let y = 1; y < H - 1; y += 1) {
+      for (let x = 1; x < W - 1; x += 1) {
+        if (ground[index(x, y)] !== kind) continue;
+        // Une case déjà occupée par un rocher ne se découvre pas.
+        if (terrain[index(x, y)] !== TILE.empty) continue;
+        if (touchesOutside(x, y, inside)) found.push(index(x, y));
+      }
+    }
+    return found;
+  };
+
+  // La mer baisse d'un cran : le fond qui borde du guéable ou de la terre
+  // devient guéable à son tour, et le guéable qui borde la terre devient du
+  // sable. On collecte avant d'écrire — repeindre au fil de la lecture ferait
+  // servir la case découverte de rivage à la suivante, et la mer se
+  // retirerait de proche en proche jusqu'au large.
+  const deep = new Set<number>([TILE.deepWater, TILE.openSea, TILE.swell]);
+  const shoaled = fringe(TILE.deepWater, deep);
+  const dried = fringe(TILE.water, wet);
+  for (const cell of shoaled) ground[cell] = TILE.water;
+  for (const cell of dried) ground[cell] = level < 0.25 ? TILE.shoreSand : TILE.pebbles;
+}
+
+/**
+ * Carte complète d'une zone, contenu narratif compris.
+ *
+ * `tideLevel` va de 0 (estran nu) à 1 (pleine mer). Il n'a d'effet que sur les
+ * régions côtières ; ailleurs la carte reste strictement identique, ce qui
+ * garde la génération déterministe pour les quatre-vingt-deux autres.
+ */
+export function createZoneMap(zone: WorldZoneData, tideLevel = 1): TiledMapData {
+  return createProceduralMap(zone, anchorsFor(zone.id), tideLevel);
 }

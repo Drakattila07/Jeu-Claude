@@ -3,9 +3,10 @@ import { ENEMY_TYPES, NIGHT_GUARDIANS, nightGuardianFor } from "../data/enemies"
 import { CAMPAIGN_TRIGGERS } from "../data/campaignTriggers";
 import { QUESTS } from "../data/quests/core";
 import { WORLD_ZONES } from "../data/world";
-import { createZoneMap } from "../world/ZoneMapFactory";
+import { createZoneMap, TIDAL_ZONES } from "../world/ZoneMapFactory";
 import { TileMap } from "../world/TileMap";
 import { TileSet } from "../world/TileSet";
+import { isNavalZone } from "../world/WorldGen";
 
 const never = (): boolean => false;
 const always = (): boolean => true;
@@ -49,10 +50,25 @@ describe("gardiens nocturnes", () => {
     const tileSet = new TileSet();
     for (const guardian of NIGHT_GUARDIANS) {
       const zone = WORLD_ZONES.find((candidate) => candidate.id === guardian.zone)!;
-      const map = new TileMap(createZoneMap(zone), tileSet);
+      // Une créature de haute mer vit dans l'eau : la juger à la solidité de
+      // marche la déclarerait « dans le décor » partout où elle a sa place.
+      const sailing = isNavalZone(zone);
+      const level = guardian.tide === "basse" ? 0 : 1;
+      const map = new TileMap(createZoneMap(zone, level), tileSet);
       const tileX = Math.floor(guardian.x / 16);
       const tileY = Math.floor(guardian.y / 16);
-      expect(map.isSolid(tileX, tileY), `${guardian.zone} : gardien dans le décor`).toBe(false);
+      expect(map.solidFor(tileX, tileY, sailing),
+        `${guardian.zone} : gardien dans le décor`).toBe(false);
+    }
+  });
+
+  it("ne poste jamais un gardien de marée hors d'une région à marée", () => {
+    // Un rôdeur d'estran dans une région sans estran ne se montrerait jamais :
+    // la condition serait vraie, la grève inexistante.
+    for (const guardian of NIGHT_GUARDIANS) {
+      if (guardian.tide === undefined) continue;
+      expect(TIDAL_ZONES.has(guardian.zone),
+        `${guardian.zone} n'a pas de marée`).toBe(true);
     }
   });
 

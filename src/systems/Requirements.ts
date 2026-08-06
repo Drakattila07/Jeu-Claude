@@ -1,5 +1,5 @@
 import type { ItemId } from "../data/items/core";
-import type { Weather } from "../core/Clock";
+import type { Tide, Weather } from "../core/Clock";
 import type { Flags } from "./Flags";
 import type { Inventory } from "./Inventory";
 
@@ -19,6 +19,8 @@ export interface Requirement {
   readonly day?: boolean;
   /** Météo imposée : le minerai de lune ne brille que sous la pluie. */
   readonly weather?: Weather;
+  /** Marée imposée : la Grotte de l'Estran n'a d'entrée qu'à mer basse. */
+  readonly tide?: Tide;
   /** Rubis minimum à détenir (non consommés ici). */
   readonly rupees?: number;
   /** Nombre de zones explorées minimum. */
@@ -32,6 +34,7 @@ export interface WorldState {
   readonly weather: Weather;
   readonly rupees: number;
   readonly explored: number;
+  readonly tide?: Tide;
 }
 
 export type RequirementCheck =
@@ -50,6 +53,9 @@ export class Requirements {
     if (requirement.night && !world.isNight) return { ok: false, reason: requirement.refusal };
     if (requirement.day && world.isNight) return { ok: false, reason: requirement.refusal };
     if (requirement.weather && world.weather !== requirement.weather) {
+      return { ok: false, reason: requirement.refusal };
+    }
+    if (requirement.tide && world.tide !== requirement.tide) {
       return { ok: false, reason: requirement.refusal };
     }
     if (requirement.rupees !== undefined && world.rupees < requirement.rupees) {

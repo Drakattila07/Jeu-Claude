@@ -24,8 +24,12 @@ npm run dev
 | X | parler, fouiller, entrer chez l'habitant, embarquer, accoster, dormir |
 | C | utiliser le premier remède du sac · pêcher au quai |
 | F | forme demi-démon, une fois le Crâne obtenu |
-| Entrée | sac, quêtes, carte et aide |
+| Entrée | sac, carnet, quêtes, carte et aide |
 | M | carte de la vallée |
+
+Deux objets s'utilisent depuis le sac sans s'y consumer : la flûte de saule
+ouvre son répertoire, le nécessaire à feu monte un bivouac. L'onglet **carnet**
+tient le relevé — régions, gens, bêtes, secrets — et votre titre.
 
 Une manette est prise en charge : stick ou croix pour marcher, A pour agir,
 X pour l'épée, gâchettes pour l'esquive.
@@ -54,7 +58,7 @@ X pour l'épée, gâchettes pour l'esquive.
 - **Un combat lisible.** Chaque créature annonce son attaque ; l'esquive et le
   contre-coup existent. Frapper pendant l'annonce l'interrompt et fait mal.
   Les ennemis vaincus lâchent rubis et cœurs.
-- **Un monde peuplé.** Dix-neuf villageois avec des emplois du temps, une faune
+- **Un monde peuplé.** Vingt-quatre villageois avec des emplois du temps, une faune
   propre à chaque milieu qui se renouvelle chaque matin, et des régions classées
   de « refuge » à « hostile ».
 - **Des portes qui s'ouvrent.** Toutes, pas seulement les quatre lieux du
@@ -79,6 +83,41 @@ X pour l'épée, gâchettes pour l'esquive.
 - **De vrais secrets.** Sept chandelles allumées de nuit, une veine de minerai
   qui n'apparaît que sous la pluie, deux moitiés de comptine entendues
   séparément. Le refus vous dit toujours ce qui manque.
+- **Un carnet qui se remplit tout seul.** Vous êtes cartographe : chaque région
+  traversée, chaque tête rencontrée, chaque bête abattue et chaque secret percé
+  s'y inscrit, daté. Le bestiaire donne une faiblesse par créature. C'est le
+  carnet — et non le récit — qui décerne vos titres, d'Apprentie à Mémoire de
+  la Vallée.
+- **La marée.** Deux basses mers par jour, décalées d'une heure chaque
+  matin : impossible d'apprendre un horaire, il faut regarder. Le reflux
+  découvre l'estran, dégage des passages et ouvre une grotte que la pleine mer
+  referme. Un rôdeur y fouille le sable tant que la mer le laisse.
+- **Le vent.** Au portant la barque file, au près elle peine. Le rhumb tourne
+  toutes les trois heures et s'affiche à la barre : le cap cesse d'être une
+  formalité.
+- **Une flûte de saule.** Wren la baladine fait la tournée des villages et
+  enseigne trois airs, un par visite : appeler la pluie, faire basculer le
+  jour, appeler le Chat-Lanterne.
+- **Le bivouac.** Un nécessaire à feu, et l'on campe où l'on veut. Le feu tient
+  six heures, cuit ce qu'on lui donne, laisse passer les heures et tient les
+  créatures à distance dans son cercle de lumière.
+- **Une vraie forge.** Bram trempe la lame en trois paliers contre du minerai
+  de lune et des rubis. Les dégâts par coup montent de un à quatre — et cette
+  fois le compte est honoré.
+- **On rêve en dormant.** Chaque lit rend un rêve accordé à l'avancement, qui
+  dit l'objectif par une image plutôt que par une consigne.
+- **Une poste aux pigeons.** Confiez un objet à Colombin ; la réponse arrive le
+  lendemain, d'un habitant à qui il manquait précisément cela.
+- **Trois lieux sous condition.** La Bibliothèque Noyée ne s'ouvre qu'avec des
+  bottes de plomb, le Verger de Nuit ne donne qu'après vingt heures, la Grotte
+  de l'Estran n'a d'entrée qu'à mer basse. Chacun se récolte une fois par jour.
+- **Cinq visages de plus.** Wren la baladine, Fennec le passeur (deux rubis la
+  traversée, tant que vous n'avez pas de coque), Sœur Aubel qui soigne contre
+  trois fleurs-œil, Odile la rivale qui mesure son carnet au vôtre, et
+  Colombin.
+- **Quatre bêtes de plus.** Le Héron d'Encre, qu'on ne gagne rien à tuer et
+  tout à approcher ; le Golem de tourbe ; la Méduse de lune ; le Rôdeur de
+  l'estran.
 
 Le puits soigne, sauvegarde et sert de point de renaissance une fois la source
 rouverte. À zéro cœur on renaît au dernier puits touché en laissant un quart de
@@ -87,7 +126,7 @@ sa bourse, ou l'on recharge la sauvegarde.
 ## Développement
 
 ```bash
-npm test              # 170 tests unitaires
+npm test              # 212 tests unitaires
 npm run validate:data # cohérence des données et du monde généré
 npm run build         # vérification de types, bundle, préparation du site
 ```
