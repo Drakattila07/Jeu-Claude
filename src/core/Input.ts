@@ -1,6 +1,9 @@
 export const ACTIONS = [
   "Up", "Down", "Left", "Right",
   "A", "Attack", "B", "Start", "Select", "Dash", "Map", "Cancel",
+  // Le bouclier : une garde ne peut pas partager sa touche avec l'esquive,
+  // sinon lever le bouclier revient à rouler.
+  "Guard",
 ] as const;
 export type Action = (typeof ACTIONS)[number];
 
@@ -12,6 +15,7 @@ const KEY_BINDINGS: Readonly<Record<string, Action>> = {
   KeyC: "B", KeyL: "B",
   ShiftLeft: "Dash", ShiftRight: "Dash",
   KeyF: "Select", KeyR: "Select",
+  KeyE: "Guard", KeyQ: "Guard",
   Enter: "Start", KeyI: "Start",
   Tab: "Map", KeyM: "Map",
   Escape: "Cancel", Backspace: "Cancel",
@@ -20,7 +24,8 @@ const KEY_BINDINGS: Readonly<Record<string, Action>> = {
 /** Boutons de manette, disposition XInput standard. */
 const PAD_BUTTONS: Readonly<Record<number, Action>> = {
   0: "A", 1: "Cancel", 2: "B", 3: "Attack",
-  4: "Select", 5: "Dash", 6: "Map", 7: "Dash",
+  // La gâchette gauche tient le bouclier ; la carte passe au clic de stick.
+  4: "Select", 5: "Dash", 6: "Guard", 7: "Dash", 8: "Map",
   9: "Start", 12: "Up", 13: "Down", 14: "Left", 15: "Right",
 };
 

@@ -1,5 +1,5 @@
 import { PALETTE } from "../data/palette";
-import { SHOP_STOCK, type ShopEntry } from "../data/shop";
+import { SHOP_STOCK, priceAt, type ShopEntry } from "../data/shop";
 import type { Input } from "../core/Input";
 import { VIEW_HEIGHT, VIEW_WIDTH, type Renderer } from "../core/Renderer";
 import type { Player } from "../entities/Player";
@@ -20,6 +20,14 @@ export class Shop {
   private cursor = 0;
   private feedback = "";
   private feedbackFrames = 0;
+  /**
+   * Rayon ouvert. Le magasin ne connaissait que celui du Colporteur : Mira
+   * n'aurait jamais pu vendre quoi que ce soit sans dupliquer la classe.
+   */
+  private catalogue: readonly ShopEntry[] = SHOP_STOCK;
+  private title = "LE COLPORTEUR";
+  /** Région où l'on marchande : elle décide de l'écart de prix. */
+  private zoneId = "";
 
   constructor(
     private readonly flags: Flags,
@@ -29,19 +37,26 @@ export class Shop {
 
   /** Rayon visible : les lignes verrouillées ou déjà achetées disparaissent. */
   get stock(): readonly ShopEntry[] {
-    return SHOP_STOCK.filter((entry) => {
+    return this.catalogue.filter((entry) => {
       if (entry.requires && !this.flags.has(entry.requires)) return false;
       if (entry.once && this.bought.has(entry.id)) return false;
       return true;
     });
   }
 
-  open(): void {
+  open(catalogue: readonly ShopEntry[] = SHOP_STOCK, title = "LE COLPORTEUR",
+    zoneId = ""): void {
     this.active = true;
+    this.catalogue = catalogue;
+    this.title = title;
+    this.zoneId = zoneId;
     this.cursor = 0;
     this.feedback = "";
     this.feedbackFrames = 0;
   }
+
+  /** Prix affiché ici même : un port ne vend pas au tarif d'un hameau. */
+  priceOf(entry: ShopEntry): number { return priceAt(entry.price, this.zoneId); }
 
   close(): void { this.active = false; }
 
@@ -67,8 +82,9 @@ export class Shop {
     if (!input.wasPressed("A")) return { kind: "none" };
 
     const entry = stock[this.cursor]!;
-    if (player.rupees < entry.price) {
-      const missing = entry.price - player.rupees;
+    const price = this.priceOf(entry);
+    if (player.rupees < price) {
+      const missing = price - player.rupees;
       this.feedback = `Il manque ${missing} rubis.`;
       this.feedbackFrames = 120;
       return { kind: "poor", missing };
@@ -78,7 +94,7 @@ export class Shop {
       this.feedbackFrames = 120;
       return { kind: "full" };
     }
-    player.rupees -= entry.price;
+    player.rupees -= price;
     if (entry.item) this.inventory.add(entry.item);
     if (entry.flag) this.flags.set(entry.flag);
     if (entry.once) this.bought.add(entry.id);
@@ -109,7 +125,7 @@ export class Shop {
     ctx.strokeStyle = PALETTE.yellow;
     ctx.lineWidth = 1;
     ctx.strokeRect(left + 0.5, 22.5, width - 1, VIEW_HEIGHT - 45);
-    renderer.pixelText("LE COLPORTEUR", centre, 30, PALETTE.yellow, "center");
+    renderer.pixelText(this.title, centre, 30, PALETTE.yellow, "center");
     ctx.fillStyle = PALETTE.ink;
     ctx.fillRect(left + 12, 46, 7, 9);
     ctx.fillStyle = PALETTE.leafLight;
@@ -128,7 +144,8 @@ export class Shop {
       const index = scroll + row;
       const y = 64 + row * 16;
       const selected = index === this.cursor;
-      const affordable = player.rupees >= entry.price;
+      const price = this.priceOf(entry);
+      const affordable = player.rupees >= price;
       if (selected) {
         ctx.fillStyle = PALETTE.pineDark;
         ctx.fillRect(left + 8, y - 3, width - 16, 15);
@@ -137,7 +154,7 @@ export class Shop {
       }
       renderer.pixelText(entry.label, left + 18, y,
         affordable ? PALETTE.cream : PALETTE.stoneDark);
-      renderer.pixelText(String(entry.price), left + width - 16, y,
+      renderer.pixelText(String(price), left + width - 16, y,
         affordable ? PALETTE.yellow : PALETTE.stoneDark, "right");
     });
     if (scroll > 0) renderer.pixelText("↑", left + width - 12, 64, PALETTE.stoneDark);

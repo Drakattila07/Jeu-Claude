@@ -143,6 +143,45 @@ export const ITEMS = {
     name: "Trempe de Bram", stack: 3,
     description: "Un certificat de forge. Trois paliers, trois trempes.",
   },
+
+  // — Bouclier, graines, chronique, teintures —
+
+  oak_shield: {
+    name: "Rondache de chêne", stack: 1,
+    description: "Lourde, honnête. E ou Q pour la lever ; au dernier moment, elle pare.",
+  },
+  bitter_seed: {
+    name: "Graines de racine", stack: 20,
+    description: "Amères jusque dans le sachet. Deux jours de terre et d'eau.",
+  },
+  spore_pouch: {
+    name: "Sachet de spores", stack: 20,
+    description: "Ça sent la cave. Une nuit suffit à les faire lever.",
+  },
+  eye_seed: {
+    name: "Pépins de Fleur-Œil", stack: 20,
+    description: "Ils vous regardent déjà. Trois jours, et ils seront plusieurs.",
+  },
+  chronicle_page: {
+    name: "Feuillet de la Chronique", stack: 12,
+    description: "Douze en tout. La Bibliothèque Noyée sait les relier.",
+  },
+  watering_can: {
+    name: "Arrosoir de fer-blanc", stack: 1,
+    description: "Cabossé, étanche. Une planche par jour, pas deux.",
+  },
+  dye_pot: {
+    name: "Pot de teinture", stack: 6,
+    description: "Garance, guède, safran. Le manteau y passe et n'en revient pas pareil.",
+  },
+  bigger_satchel: {
+    name: "Besace doublée", stack: 1,
+    description: "Un double fond cousu par Sarn. Tout y tient deux fois mieux.",
+  },
+  mule_bridle: {
+    name: "Licol du mulet", stack: 1,
+    description: "Il s'appelle Grognon. Le nom n'est pas de vous.",
+  },
 } as const satisfies Record<string, ItemDefinition>;
 
 export type ItemId = keyof typeof ITEMS;
@@ -171,7 +210,7 @@ export const USABLE_ITEMS: readonly ItemId[] = (Object.keys(ITEMS) as ItemId[])
  * nécessaire à feu ouvrent leur propre liste et ne disparaissent pas.
  */
 export const ACTIONABLE_ITEMS: ReadonlySet<ItemId> = new Set<ItemId>([
-  "willow_flute", "tinder_kit",
+  "willow_flute", "tinder_kit", "dye_pot",
 ]);
 
 /** Vrai si le sac doit laisser valider cet objet. */

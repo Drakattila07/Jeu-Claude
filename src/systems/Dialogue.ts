@@ -1,15 +1,16 @@
 import { DIALOGUES, type DialogueId } from "../data/dialogues/core";
+import type { Weather } from "../core/Clock";
 
 export interface DialogueContext {
   readonly flags: ReadonlySet<string>;
-  readonly weather: "clear" | "rain";
+  readonly weather: Weather;
   readonly hour: number;
 }
 
 interface Conditions {
   readonly flag?: string;
   readonly flagMissing?: string;
-  readonly weather?: "clear" | "rain";
+  readonly weather?: Weather;
   readonly night?: boolean;
 }
 

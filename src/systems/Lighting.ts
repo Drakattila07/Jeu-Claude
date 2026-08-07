@@ -122,7 +122,12 @@ export class Lighting {
     // qu'on n'y distingue plus le mobilier hors des halos.
     const base = options.interior ? [178, 158, 148] as const : ambientAt(options.minuteOfDay);
     const tint = biomeTint(options.biome);
-    const rain = options.weather === "rain" ? 0.76 : 1;
+    // Chaque ciel assombrit à sa manière : l'orage plus que la pluie, la
+    // brume à peine, la neige presque pas — elle renvoie la lumière.
+    const skies: Readonly<Record<Weather, number>> = {
+      clear: 1, rain: 0.76, storm: 0.62, fog: 0.86, snow: 0.94,
+    };
+    const rain = skies[options.weather];
     const gloom = 1 - Math.min(0.6, options.gloom ?? 0);
     return [
       Math.min(255, base[0] * tint[0] * rain * gloom),

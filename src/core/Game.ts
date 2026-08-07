@@ -5,12 +5,12 @@ import {
 } from "./Renderer";
 import { TileMap } from "../world/TileMap";
 import { TileSet, TILE } from "../world/TileSet";
-import { Player } from "../entities/Player";
+import { Player, RIPOSTE_FRAMES } from "../entities/Player";
 import type { Rect, Vec2 } from "../entities/Entity";
 import { Camera, type Edge } from "./Camera";
 import { Transition } from "../ui/Transition";
 import { ZoneRegistry } from "../world/Zone";
-import { INTERACTABLES } from "../data/interactables";
+import { ALL_INTERACTABLES } from "../data/interactables";
 import { WORLD_ZONES, isOpenSea } from "../data/world";
 import { Interactable, ZoneObjectState } from "../entities/Interactable";
 import { Combat, overlaps } from "../systems/Combat";
@@ -72,6 +72,13 @@ import { TUNES, knownTunes, nextTuneToTeach, type TuneId } from "../systems/Flut
 import { nextTier, tierAt } from "../systems/Forge";
 import { dreamFor } from "../systems/Dreams";
 import { CAMP_RECIPES } from "../data/recipes";
+import { Garden, CROPS, cropBySeed, PLOT_COUNT } from "../systems/Garden";
+import { ComboTracker, TECHNIQUES, knownTechniques, nextTechnique } from "../systems/Techniques";
+import { CHRONICLE, CHRONICLE_TOTAL } from "../data/chronicle";
+import { festivalAt } from "../data/festivals";
+import { pickFish } from "../data/fish";
+import { HERBALIST_STOCK } from "../data/shop";
+import { CAT_REACH } from "../entities/LanternCat";
 import { Fortress } from "../systems/Fortress";
 import {
   createRoomMap, nearFortressExit, roomEntry, ROOM_TILES_X, ROOM_TILES_Y,
@@ -154,6 +161,16 @@ export class Game {
   private readonly journal = new Journal();
   private readonly campfires = new Campfires();
   private readonly post = new PigeonPost();
+  private readonly garden = new Garden();
+  private readonly combo = new ComboTracker();
+  /** Planche du potager devant laquelle on se tient. */
+  private plotIndex = 0;
+  /** Dernier jour où la pluie a arrosé le potager. */
+  private lastRainDay = -1;
+  /** Dernière fête célébrée, pour ne pas la rejouer à chaque pas. */
+  private lastFestival = "";
+  /** Image de la dernière roulade : l'Estoc s'arme dessus. */
+  private lastRollFrame = -999;
   private interior: InteriorKind | null = null;
   /** Puits devant lequel on se tient, pour y revenir après le menu. */
   private wellPosition: Vec2 | null = null;
@@ -162,7 +179,8 @@ export class Game {
    * servait qu'au puits et son résultat partait droit dans `resolveWellChoice` ;
    * cinq menus plus tard, il faut savoir à qui l'on parle.
    */
-  private choiceContext: "well" | "forge" | "camp" | "flute" | "post" = "well";
+  private choiceContext: "well" | "forge" | "camp" | "flute" | "post"
+  | "plot" | "travel" | "dye" | "kerdec" = "well";
   /** Marée à laquelle la carte courante a été bâtie, pour savoir quand la refaire. */
   private tideLevelOfMap = 1;
   /** Graine du logis visité : chaque porte du monde rend toujours la même pièce. */
@@ -478,12 +496,7 @@ export class Game {
     }
     if (this.fishing.active) {
       const result = this.fishing.update(this.input);
-      if (result === "caught") {
-        this.player.rupees += 8;
-        this.floaters.reward(this.player.position.x + 8, this.player.position.y - 6, "+8");
-        this.quests.notify("collect", "fish", this.frame);
-        this.audio.playSfx("secret");
-      }
+      if (result === "caught") this.landFish();
       this.input.endFrame();
       return;
     }
@@ -493,8 +506,8 @@ export class Game {
       return;
     }
     if (this.input.wasPressed("B")) {
-      if (this.currentZone()?.id === "quai_lac" && !this.interior) {
-        if (this.flags.has("fishing_unlocked")) this.fishing.start(this.clock.day);
+      if (this.canFishHere()) {
+        if (this.flags.has("fishing_unlocked")) this.fishing.start(this.clock.day, this.frame);
         else this.textBox.open("Il vous manque une canne. Nessa en a perdu une dans la Lisière.");
         this.input.endFrame();
         return;
@@ -558,7 +571,12 @@ export class Game {
     if (this.player.isRolling && this.frame % 3 === 0) {
       this.particles.emit(this.player.position.x + 8, this.player.position.y + 14, "dust", 3);
     }
+    // On retient la fin de la roulade : c'est elle qui arme l'Estoc.
+    if (this.player.isRolling) this.lastRollFrame = this.frame;
     this.burnOnLava();
+    this.waterGardenWithRain();
+    this.checkFestival();
+    this.sufferWeather();
     this.familiar?.update();
     this.updateNpcs();
     this.updateEnemies();
@@ -586,6 +604,78 @@ export class Game {
     if (harm <= 0) return;
     this.particles.emit(this.player.position.x + 8, this.player.position.y + 12, "ember", 2);
     if (this.player.takeDamage(harm, { x: 0, y: -1 })) this.onPlayerHurt(harm);
+  }
+
+  /**
+   * Ce que le ciel vous fait.
+   *
+   * La météo n'était qu'un filtre : il pleuvait, on voyait moins bien, fin.
+   * L'orage frappe à découvert, la neige mord si l'on reste immobile, et la
+   * brume ne se contente pas d'être jolie — elle rapproche les créatures sans
+   * qu'on les voie venir.
+   */
+  private sufferWeather(): void {
+    if (this.indoors) return;
+    const weather = this.clock.weather;
+    if (weather === "storm" && this.weather.lightning
+      && this.currentZone()?.safe !== true && this.frame % 7 === 0) {
+      // La foudre ne tombe qu'à découvert : sous un feu de camp, on est à l'abri.
+      const zoneId = this.currentZone()?.id ?? "";
+      const now = Campfires.absoluteHour(this.clock.day, this.clock.hour, this.clock.minute);
+      if (this.campfires.wards(zoneId, this.player.position, now)) return;
+      if (this.player.takeDamage(1, { x: 0, y: 1 })) {
+        this.onPlayerHurt(1);
+        this.combat.impact(5, 18);
+        this.showNotice("La foudre tombe tout près. Trouvez un toit ou un feu.", 170);
+      }
+      return;
+    }
+    if (weather === "snow" && this.frame % 90 === 0) {
+      // Le froid ronge l'élan, pas les cœurs : on continue, plus lentement.
+      this.player.stamina = Math.max(0, this.player.stamina - 4);
+    }
+  }
+
+  /**
+   * On pêche là où l'on borde de l'eau.
+   *
+   * La pêche n'existait qu'au Quai du Lac, ce qui en faisait une curiosité
+   * plutôt qu'une activité. Il suffit maintenant d'avoir de l'eau devant soi.
+   */
+  private canFishHere(): boolean {
+    if (this.indoors || this.player.sailing) return false;
+    return this.tilesAround().some(([x, y]) => this.map.isWater(x, y));
+  }
+
+  /**
+   * Une prise.
+   *
+   * L'espèce dépend du lieu, de l'heure, de la saison, du ciel et de la marée.
+   * Chaque première prise entre au carnet : la pêche devient une collection
+   * plutôt qu'un distributeur de huit rubis.
+   */
+  private landFish(): void {
+    const context = {
+      biome: this.currentZone()?.biome,
+      night: this.clock.isNight,
+      season: this.clock.season,
+      weather: this.clock.weather,
+      tide: this.clock.tide,
+    };
+    const roll = ((Math.imul(this.frame, 0x9e3779b1) >>> 8) % 10000) / 10000;
+    const fish = pickFish(context, roll);
+    this.player.rupees = Math.min(this.progression.rupeeCap, this.player.rupees + fish.value);
+    this.floaters.reward(this.player.position.x + 8, this.player.position.y - 6,
+      `${fish.name}  +${fish.value}`);
+    this.quests.notify("collect", "fish", this.frame);
+    this.audio.playSfx("secret");
+    this.particles.emit(this.player.position.x + 8, this.player.position.y + 8, "splash", 10);
+    const fresh = this.journal.record("betes", `fish:${fish.id}`, fish.name, fish.note,
+      this.clock.day);
+    if (fresh) {
+      this.showNotice(`PREMIÈRE PRISE — ${fish.name}. ${fish.note}`, 240);
+      this.checkRankUp();
+    }
   }
 
   private updateNpcs(): void {
@@ -637,7 +727,7 @@ export class Game {
           this.audio.playSfx("charge");
         } else {
           const blade = { x: strike.x - 12, y: strike.y - 12, width: 24, height: 24 };
-          if (overlaps(blade, playerBox)
+          if (overlaps(blade, playerBox) && !this.tryBlock(strike.direction, enemy)
             && this.player.takeDamage(strike.damage, strike.direction)) {
             this.onPlayerHurt(strike.damage);
           }
@@ -654,10 +744,64 @@ export class Game {
         const dx = this.player.position.x - enemy.position.x;
         const dy = this.player.position.y - enemy.position.y;
         const length = Math.max(1, Math.hypot(dx, dy));
-        if (this.player.takeDamage(enemy.definition.damage,
-          { x: dx / length, y: dy / length })) this.onPlayerHurt(enemy.definition.damage);
+        const push = { x: dx / length, y: dy / length };
+        if (!this.tryBlock(push, enemy)
+          && this.player.takeDamage(enemy.definition.damage, push)) {
+          this.onPlayerHurt(enemy.definition.damage);
+        }
       }
     }
+    this.updateFamiliarCombat();
+  }
+
+  /**
+   * Bouclier.
+   *
+   * Rend vrai quand le coup a été arrêté — auquel cas il ne blesse pas. Une
+   * parade parfaite sonne la créature et ouvre la fenêtre de riposte : c'est
+   * la seule façon d'obtenir un avantage plutôt que de simplement survivre.
+   */
+  private tryBlock(direction: Readonly<Vec2>, enemy?: Enemy): boolean {
+    const result = this.player.block(direction);
+    if (!result) return false;
+    const at = { x: this.player.position.x + 8, y: this.player.position.y + 8 };
+    if (result === "parfait") {
+      this.audio.playSfx("secret");
+      this.combat.impact(3, 10);
+      this.particles.emit(at.x, at.y, "spark", 18);
+      this.floaters.push(at.x, at.y - 10, "PARADE !", PALETTE.yellow);
+      if (enemy) enemy.stagger(RIPOSTE_FRAMES);
+      this.journal.noteSecret("parade", "La parade parfaite",
+        "Lever le bouclier au dernier moment sonne l'adversaire et ouvre une riposte.",
+        this.clock.day);
+      return true;
+    }
+    this.audio.playSfx("deny");
+    this.combat.impact(1, 4);
+    this.particles.emit(at.x, at.y, "dust", 8);
+    this.floaters.push(at.x, at.y - 10, "bloqué", PALETTE.stoneLight);
+    return true;
+  }
+
+  /**
+   * Le familier au combat.
+   *
+   * Une fois nourri, le Chat-Lanterne suit et lâche une flammèche sur ce qui
+   * approche. Il n'abat rien seul — c'est un compagnon, pas une seconde épée.
+   */
+  private updateFamiliarCombat(): void {
+    const cat = this.familiar;
+    if (!cat?.isFollowing || !cat.ready) return;
+    const target = this.enemies.find((enemy) => enemy.active
+      && cat.distanceTo(enemy.position) <= CAT_REACH);
+    if (!target || !cat.spark()) return;
+    const dx = target.position.x - cat.position.x;
+    const dy = target.position.y - cat.position.y;
+    const length = Math.max(1, Math.hypot(dx, dy));
+    this.projectiles.push(new Projectile(
+      { x: cat.position.x + 8, y: cat.position.y + 6 },
+      { x: dx / length, y: dy / length }, "ember", "player"));
+    this.particles.emit(cat.position.x + 8, cat.position.y, "ember", 5);
   }
 
   /**
@@ -763,6 +907,25 @@ export class Game {
     if (this.player.swordActive) this.resolveSwordHits();
   }
 
+  /** Nomme la technique qui vient de porter, et consomme ce qui l'armait. */
+  private announceTechnique(technique: "estoc" | "fauche" | "riposte" | null): void {
+    this.combo.strike(this.frame);
+    if (!technique) return;
+    const names: Readonly<Record<string, string>> = {
+      estoc: "ESTOC", fauche: "FAUCHE", riposte: "RIPOSTE",
+    };
+    this.floaters.push(this.player.position.x + 8, this.player.position.y - 16,
+      names[technique]!, PALETTE.yellow);
+    this.combat.impact(technique === "riposte" ? 4 : 2, 10);
+    this.audio.playSfx("spin");
+    this.particles.emit(this.player.position.x + 8, this.player.position.y + 8, "ring", 12);
+    if (technique === "riposte") this.player.riposteFrames = 0;
+    if (technique === "fauche") this.combo.break();
+    if (technique === "estoc") this.lastRollFrame = -999;
+    this.journal.noteSecret(`tech:${technique}`, names[technique]!,
+      TECHNIQUES.find((entry) => entry.id === technique)!.effect, this.clock.day);
+  }
+
   private castFireball(): void {
     const facing = this.player.facingVector();
     this.projectiles.push(new Projectile(
@@ -772,11 +935,29 @@ export class Game {
     this.igniteAround(this.player.position.x + 8, this.player.position.y + 8);
   }
 
+  /**
+   * Technique armée par la situation courante.
+   *
+   * Une technique ne s'active pas au bouton : elle récompense un placement.
+   * L'estoc suit une roulade, la riposte suit une parade, la fauche vient au
+   * troisième coup d'un enchaînement.
+   */
+  private activeTechnique(): "estoc" | "fauche" | "riposte" | null {
+    if (this.flags.has("tech_riposte") && this.player.canRiposte) return "riposte";
+    if (this.flags.has("tech_estoc") && this.frame - this.lastRollFrame <= 22) return "estoc";
+    if (this.flags.has("tech_fauche") && this.combo.rank >= 3) return "fauche";
+    return null;
+  }
+
   private resolveSwordHits(): void {
     const sword = this.player.attackHitbox();
     const spinning = this.player.isSpinning;
     this.resolveDragonHit(sword, spinning);
-    const damage = this.player.attackDamage * (spinning ? 2 : 1);
+    // La technique multiplie ; le coup tournoyant multipliait déjà. Les deux
+    // ne se cumulent pas : on ne veut pas d'un coup à douze.
+    const technique = this.activeTechnique();
+    const bonus = technique === "riposte" ? 3 : technique === "estoc" ? 2 : 1;
+    const damage = this.player.attackDamage * (spinning ? 2 : bonus);
 
     if (this.boss?.active) {
       const inWave = this.player.isDemon
@@ -801,25 +982,38 @@ export class Game {
       }
     }
 
+    // La Fauche balaie : au troisième coup, la portée devient un cercle.
+    const sweep = technique === "fauche"
+      ? { x: this.player.position.x - 22, y: this.player.position.y - 20,
+        width: 60, height: 56 }
+      : null;
+    let touched = false;
+
     for (const enemy of this.enemies) {
       if (!enemy.active) continue;
       const inWave = this.player.isDemon
         && Math.hypot(enemy.position.x - this.player.position.x,
           enemy.position.y - this.player.position.y) <= this.player.fireRadius;
-      if (!overlaps(sword, enemy.bounds) && !inWave) continue;
+      const reached = overlaps(sword, enemy.bounds)
+        || (sweep !== null && overlaps(sweep, enemy.bounds));
+      if (!reached && !inWave) continue;
       // Interrompre une annonce compte comme un contre : le coup fait mal.
       const parry = enemy.isTelegraphing;
       if (!this.combat.confirmHit(enemy.spawn.id, spinning || parry)) continue;
+      touched = true;
       const total = damage + (parry ? 1 : 0);
       const defeated = enemy.hit(total, this.player.position);
       this.audio.playSfx("hit");
-      this.floaters.damage(enemy.position.x + 8, enemy.position.y - 2, total, spinning || parry);
+      this.floaters.damage(enemy.position.x + 8, enemy.position.y - 2, total,
+        spinning || parry || technique !== null);
       this.particles.spray(enemy.position.x + 8, enemy.position.y + 8, "blood", {
         x: enemy.position.x - this.player.position.x,
         y: enemy.position.y - this.player.position.y,
       }, 5);
       if (defeated) this.onEnemyDefeated(enemy);
     }
+
+    if (touched) this.announceTechnique(technique);
 
     for (const npc of this.npcs) {
       const inWave = this.player.isDemon
@@ -1079,6 +1273,47 @@ export class Game {
    * une grotte où l'on ne ramasse rien sont trois décors. Chacun rend ce qu'il
    * a, une fois par jour : c'est la raison d'y revenir.
    */
+  /**
+   * Lire la Chronique.
+   *
+   * Les feuillets se ramassent partout et ne disent rien tant qu'on ne les
+   * relie pas. Le pupitre de la Bibliothèque Noyée les lit dans l'ordre : un
+   * par visite, tant qu'il en reste au sac.
+   */
+  private tryReadChronicle(): boolean {
+    if (this.interior !== "library") return false;
+    const atLectern = this.tilesAround()
+      .some(([x, y]) => this.map.tileAt("terrain", x, y) === TILE.shrineStone);
+    if (!atLectern) return false;
+
+    const read = CHRONICLE.filter((page) => this.flags.has(`page:${page.number}`)).length;
+    if (this.inventory.count("chronicle_page") === 0) {
+      this.showNotice(read === 0
+        ? "Le pupitre attend un feuillet. Il en traîne douze dans la vallée."
+        : `${read}/${CHRONICLE_TOTAL} feuillets reliés. Il en manque encore.`, 200);
+      this.audio.playSfx("deny");
+      return true;
+    }
+    const page = CHRONICLE.find((candidate) => !this.flags.has(`page:${candidate.number}`));
+    if (!page) {
+      this.showNotice("La Chronique est complète. Les cairns, maintenant.", 200);
+      return true;
+    }
+    this.inventory.remove("chronicle_page");
+    this.flags.set(`page:${page.number}`);
+    this.audio.playSfx("secret");
+    this.particles.emit(this.player.position.x + 8, this.player.position.y, "spark", 12);
+    this.textBox.open(page.text, `CHRONIQUE ${page.number}/${CHRONICLE_TOTAL} — ${page.title}`);
+    this.journal.noteSecret(`chronicle:${page.number}`,
+      `Chronique ${page.number} — ${page.title}`, page.text, this.clock.day);
+    if (read + 1 === CHRONICLE_TOTAL) {
+      this.flags.set("chronicle_complete");
+      this.showNotice("LA CHRONIQUE EST COMPLÈTE — les quatre cairns vous attendent.", 300);
+    }
+    this.checkRankUp();
+    return true;
+  }
+
   private tryHarvestIndoors(): boolean {
     if (this.interior === null) return false;
     const table: Partial<Record<InteriorKind,
@@ -1197,6 +1432,7 @@ export class Game {
     // Rien à portée : la touche ouvre une porte du décor, ou sert à embarquer.
     if (!nearest && !nearestNpc) {
       if (this.trySleeping()) return;
+      if (this.tryReadChronicle()) return;
       if (this.tryHarvestIndoors()) return;
       if (this.tryWellTile()) return;
       if (this.tryDoorTile()) return;
@@ -1209,10 +1445,15 @@ export class Game {
       return;
     }
     if (!nearest) return;
-    // Les trois gestes qui ouvrent une liste plutôt qu'une réplique.
+    // Les gestes qui ouvrent une liste plutôt qu'une réplique.
     if (nearest.data.kind === "anvil") { this.openForgeMenu(); return; }
     if (nearest.data.kind === "dovecote") { this.openPostMenu(); return; }
     if (nearest.data.kind === "campfire") { this.openCampMenu(); return; }
+    if (nearest.data.kind === "plot") {
+      const index = Number(nearest.data.id.replace("plot_", "")) - 1;
+      this.openPlotMenu(Math.max(0, Math.min(PLOT_COUNT - 1, index)));
+      return;
+    }
     if (nearest.data.kind === "door") {
       // Une porte sous condition — la nuit, la marée, le lest — refuse
       // d'abord et dit ce qui manque, au lieu de s'ouvrir en silence.
@@ -1265,11 +1506,46 @@ export class Game {
     if (npc.data.id === "odile") this.taunt();
     if (npc.data.id === "fennec") this.ferry();
     if (npc.data.id === "soeur_aubel") this.tendWounds();
+    if (npc.data.id === "kerdec") this.openKerdecMenu();
+    if (npc.data.id === "mira") this.shop.open(HERBALIST_STOCK);
+    if (npc.data.id === "doyenne_maree") this.tellTide();
+    if (npc.data.id === "jardinier") this.explainGarden();
     // Une tête rencontrée est une tête notée : le carnet ne se remplit pas
     // tout seul, il se remplit en allant voir les gens.
     this.journal.notePerson(npc.data.id, npc.data.name,
       `Rencontrée ${this.zoneName()}. « ${npc.data.chatter[0]} »`, this.clock.day);
     this.events.publish({ type: "talk", id: npc.data.id, frame: this.frame });
+  }
+
+  /**
+   * Les cairns.
+   *
+   * Trois d'entre eux ne font que parler ; le quatrième exige les douze
+   * feuillets. Toucher les quatre referme la Chronique et donne à la vallée
+   * le dernier mot qu'elle n'avait jamais eu.
+   */
+  private onCairnTouched(id: string): void {
+    this.flags.set(`cairn:${id}`);
+    const touched = ["cairn_nord", "cairn_sud", "cairn_est", "cairn_ouest"]
+      .filter((cairn) => this.flags.has(`cairn:${cairn}`)).length;
+    this.journal.noteSecret(id, "Le Cairn des Douze",
+      `Pierre ${touched}/4 relevée. Le dernier n'accepte que la Chronique complète.`,
+      this.clock.day);
+    this.audio.playSfx("secret");
+    if (touched < 4) {
+      this.showNotice(`CAIRN ${touched}/4. Les autres pierres attendent.`, 220);
+      return;
+    }
+    this.flags.set("cairn_complete");
+    this.combat.impact(5, 30);
+    this.particles.emit(this.player.position.x + 8, this.player.position.y, "ring", 30);
+    this.textBox.open(
+      "Les quatre cairns s'accordent, et la vallée dit enfin ce qu'elle taisait : "
+      + "elle n'a jamais eu besoin d'être sauvée. Elle avait besoin d'être lue. "
+      + "Votre carnet vient de finir le travail que douze scribes ont laissé en plan.",
+      "LE CAIRN DES DOUZE");
+    this.showNotice("LE CAIRN DES DOUZE — la Chronique est close.", 320);
+    this.checkRankUp();
   }
 
   /** Nom de la région courante, pour les notes du carnet. */
@@ -1364,6 +1640,39 @@ export class Game {
       "Trois fleurs-œil valent un soin complet et une potion rouge.", this.clock.day);
   }
 
+  /**
+   * La Doyenne compte les marées.
+   *
+   * Attendre la mer basse en tournant en rond était la seule façon de savoir
+   * quand la Grotte de l'Estran s'ouvrait. Elle donne l'heure, et c'est tout
+   * ce qu'elle sait faire.
+   */
+  private tellTide(): void {
+    const wait = this.clock.hoursUntilLowTide();
+    const line = wait <= 0
+      ? "« La mer est basse en ce moment même. Ne traînez pas. »"
+      : wait < 2
+        ? `« Elle se retire bientôt. Comptez ${wait.toFixed(1)} heure. »`
+        : `« Pas avant ${wait.toFixed(0)} heures. Allez faire autre chose. »`;
+    this.showNotice(line, 220);
+    this.journal.noteSecret("doyenne", "La Doyenne des Marées",
+      "Elle donne l'heure du prochain reflux. Elle ne prédit rien : elle compte.",
+      this.clock.day);
+  }
+
+  /** Sévère explique le potager — une fois, sèchement. */
+  private explainGarden(): void {
+    const ripe = Array.from({ length: PLOT_COUNT }, (_, index) =>
+      this.garden.status(index, this.clock.day)).filter((status) => status === "mûre").length;
+    const thirsty = Array.from({ length: PLOT_COUNT }, (_, index) =>
+      this.garden.status(index, this.clock.day)).filter((status) => status === "assoiffée").length;
+    this.showNotice(ripe > 0
+      ? `« ${ripe} planche(s) sont mûres. Vous comptez les laisser pourrir ? »`
+      : thirsty > 0
+        ? `« ${thirsty} planche(s) ont soif. L'arrosoir est là pour ça. »`
+        : "« Six planches. Semez, arrosez, revenez. Ce n'est pas un métier compliqué. »", 220);
+  }
+
   /** Odile mesure votre carnet au sien, et le fait savoir. */
   private taunt(): void {
     const filled = Math.round(this.journal.completion * 100);
@@ -1407,6 +1716,24 @@ export class Game {
     const sideMessage = "changed" in result && result.changed
       ? this.sideActivities.trigger(nearest.data.id, this.frame) : null;
     const opened = "changed" in result && result.changed;
+    // Trois objets ne se rangent pas au sac : ils changent ce qu'on est.
+    if (opened && nearest.data.grants?.item === "oak_shield") {
+      this.player.hasShield = true;
+      this.showNotice("RONDACHE DE CHÊNE — E ou Q pour lever la garde. Au dernier moment, elle pare.", 300);
+      this.journal.noteSecret("bouclier", "La rondache de chêne",
+        "Lever la garde ralentit ; la lever au dernier moment pare et ouvre une riposte.",
+        this.clock.day);
+    }
+    if (opened && nearest.data.grants?.item === "mule_bridle") {
+      this.player.mounted = true;
+      this.showNotice("GROGNON accepte le licol. Vous allez nettement plus vite sur les chemins.", 280);
+    }
+    if (opened && nearest.data.grants?.item === "bigger_satchel") {
+      this.flags.set("satchel_upgraded");
+      this.inventory.setRoomy(true);
+      this.showNotice("BESACE DOUBLÉE — chaque pile monte d'une moitié.", 240);
+    }
+    if (opened && nearest.data.kind === "cairn") this.onCairnTouched(nearest.data.id);
     if (opened && nearest.data.grants) {
       // Un coffre peut remettre un objet nommé : c'est ce qui permet aux
       // quêtes de collecte d'exister sans déclencheur scénarisé.
@@ -1474,6 +1801,13 @@ export class Game {
   private openWellMenu(at: Vec2): void {
     this.wellPosition = at;
     this.choiceContext = "well";
+    // Toucher une margelle l'inscrit au réseau : c'est ce qui rend le voyage
+    // rapide progressif plutôt que donné.
+    const zoneId = this.currentZone()?.id;
+    if (zoneId && this.flags.set(`well:${zoneId}`)) {
+      this.journal.noteSecret("puits", "Le réseau des puits",
+        "Un puits touché devient une destination. L'eau communique.", this.clock.day);
+    }
     const full = this.player.hearts >= this.player.maxHearts && this.player.stamina >= 100;
     // Un puits tari ne désaltère pas — mais on peut toujours s'y asseoir et
     // laisser tourner les heures. Réserver tout le menu à la source rouverte
@@ -1488,6 +1822,7 @@ export class Game {
         disabled: dry || full,
       },
       { id: "save", label: "Graver son passage", note: "sauvegarde" },
+      { id: "travel", label: "Partir d'un trait", note: "vers un autre puits" },
       { id: "wait:matin", label: "Attendre le matin", note: "09:00" },
       { id: "wait:midi", label: "Attendre midi", note: "13:00" },
       { id: "wait:soir", label: "Attendre le soir", note: "19:00" },
@@ -1505,6 +1840,10 @@ export class Game {
       this.particles.emit(at.x + 8, at.y + 4, "heal", 18);
       this.audio.playSfx("secret");
       this.showNotice("L'eau est glacée. Vous repartez d'aplomb.", 160);
+      return;
+    }
+    if (choice === "travel") {
+      this.openTravelMenu();
       return;
     }
     if (choice === "save") {
@@ -1536,6 +1875,10 @@ export class Game {
     else if (this.choiceContext === "camp") this.resolveCampChoice(choice);
     else if (this.choiceContext === "flute") this.resolveFluteChoice(choice);
     else if (this.choiceContext === "post") this.resolvePostChoice(choice);
+    else if (this.choiceContext === "plot") this.resolvePlotChoice(choice);
+    else if (this.choiceContext === "travel") this.resolveTravelChoice(choice);
+    else if (this.choiceContext === "dye") this.resolveDyeChoice(choice);
+    else if (this.choiceContext === "kerdec") this.resolveKerdecChoice(choice);
     else this.resolveWellChoice(choice);
   }
 
@@ -1694,8 +2037,10 @@ export class Game {
       this.showNotice("Trois notes, et le jour bascule. Il est 19h.", 200);
       return;
     }
-    // L'air du chat : le familier arrive où que l'on soit.
+    // L'air du chat : le familier arrive où que l'on soit, et suit s'il est
+    // déjà des vôtres.
     this.familiar = new LanternCat({ x: this.player.position.x + 40, y: this.player.position.y });
+    if (this.flags.has("cat_follows")) this.familiar.follow(this.player.position);
     this.showNotice("Un miaulement, une lueur : le Chat-Lanterne vous a entendue.", 200);
   }
 
@@ -1748,11 +2093,246 @@ export class Game {
     this.showNotice("Le pigeon part vers le nord. Repassez demain.", 190);
   }
 
+  // — Le potager ————————————————————————————————————————————
+
+  private openPlotMenu(index: number): void {
+    this.choiceContext = "plot";
+    this.plotIndex = index;
+    const day = this.clock.day;
+    const status = this.garden.status(index, day);
+    const seeds = CROPS.filter((crop) => this.inventory.count(crop.seed) > 0);
+    const canWater = this.inventory.count("watering_can") > 0;
+
+    this.choices.open(`PLANCHE ${index + 1} — ${status.toUpperCase()}`, [
+      ...seeds.map((crop) => ({
+        id: `sow:${crop.seed}`,
+        label: `Semer : ${crop.name}`,
+        note: `${crop.days} j · ${crop.season}`,
+        disabled: status !== "vide",
+      })),
+      {
+        id: "water", label: "Arroser",
+        note: canWater ? (status === "assoiffée" ? "elle en réclame" : "un peu d'eau") : "pas d'arrosoir",
+        disabled: !canWater || status === "vide",
+      },
+      {
+        id: "harvest", label: "Récolter",
+        note: status === "mûre" ? "prête" : "pas encore",
+        disabled: status !== "mûre",
+      },
+      { id: "cancel", label: "Laisser pousser" },
+    ]);
+  }
+
+  private resolvePlotChoice(choice: string): void {
+    const day = this.clock.day;
+    const index = this.plotIndex;
+    if (choice.startsWith("sow:")) {
+      const seed = choice.slice(4) as ItemId;
+      const crop = cropBySeed(seed);
+      if (!crop || !this.inventory.remove(seed)) return;
+      this.garden.sow(index, crop, day);
+      this.particles.emit(this.player.position.x + 8, this.player.position.y + 8, "leaf", 10);
+      this.audio.playSfx("pickup");
+      this.showNotice(`${crop.name} semée. ${crop.days} jour(s) et de l'eau.`, 180);
+      this.journal.noteSecret("potager", "Le potager de Sévère",
+        "Six planches au Hameau Sud. Semer, arroser, récolter — la pluie compte pour un arrosage.",
+        day);
+      return;
+    }
+    if (choice === "water") {
+      if (!this.garden.water(index, day)) {
+        this.showNotice("Cette planche a eu son eau aujourd'hui.", 150);
+        this.audio.playSfx("deny");
+        return;
+      }
+      this.particles.emit(this.player.position.x + 8, this.player.position.y + 10, "bubble", 8);
+      this.audio.playSfx("splash");
+      this.showNotice("L'eau pénètre lentement. C'est bon signe.", 150);
+      return;
+    }
+    if (choice !== "harvest") return;
+    const picked = this.garden.harvest(index, day, this.clock.season);
+    if (!picked) return;
+    this.inventory.add(picked.crop.harvest, picked.count);
+    this.floaters.reward(this.player.position.x + 8, this.player.position.y - 6,
+      `${ITEMS[picked.crop.harvest].name} ×${picked.count}`);
+    this.particles.emit(this.player.position.x + 8, this.player.position.y, "leaf", 16);
+    this.audio.playSfx("secret");
+    this.showNotice(picked.crop.season === this.clock.season
+      ? picked.crop.line
+      : `${picked.crop.line} La saison n'y était pas : la récolte est maigre.`, 200);
+  }
+
+  /** La pluie arrose le potager une fois par jour, sans qu'on y soit. */
+  private waterGardenWithRain(): void {
+    if (this.lastRainDay === this.clock.day) return;
+    this.lastRainDay = this.clock.day;
+    const soaked = this.garden.rainfall(this.clock.day, this.clock.weather);
+    if (soaked > 0 && this.currentZone()?.id === "hameau_sud") {
+      this.showNotice(`La pluie a arrosé ${soaked} planche(s) pour vous.`, 170);
+    }
+  }
+
+  // — Les fêtes ——————————————————————————————————————————————
+
+  /**
+   * Fête du jour. Le jour de jeu s'affichait sans jamais rien signifier :
+   * quatre fois par cycle, il désigne un lieu où quelque chose se passe.
+   */
+  private checkFestival(): void {
+    const zone = this.currentZone();
+    if (!zone || this.indoors) return;
+    const festival = festivalAt(zone.id, this.clock.season, this.clock.dayOfSeason);
+    if (!festival || this.lastFestival === `${festival.id}:${this.clock.day}`) return;
+    this.lastFestival = `${festival.id}:${this.clock.day}`;
+    this.hud.announce(festival.name.toUpperCase(), "aujourd'hui");
+    this.showNotice(festival.announce, 260);
+    if (this.flags.has(`festival:${festival.id}`)) return;
+    this.flags.set(`festival:${festival.id}`);
+    this.inventory.add(festival.gift.item, festival.gift.count);
+    this.textBox.open(festival.text, festival.name.toUpperCase());
+    this.floaters.reward(this.player.position.x + 8, this.player.position.y - 6,
+      `${ITEMS[festival.gift.item].name} ×${festival.gift.count}`);
+    this.audio.playSfx("secret");
+    this.journal.noteSecret(`festival:${festival.id}`, festival.name,
+      festival.text, this.clock.day);
+    this.checkRankUp();
+  }
+
+  // — Voyage entre puits ————————————————————————————————————
+
+  /**
+   * Le réseau des puits.
+   *
+   * La vallée fait quatre-vingt-dix régions et l'on traverse la même forêt
+   * pour la vingtième fois. Un puits déjà touché devient une destination :
+   * c'est le seul raccourci du jeu, et il se mérite région par région.
+   */
+  private openTravelMenu(): void {
+    this.choiceContext = "travel";
+    const here = this.camera.zone;
+    const known = WORLD_ZONES.filter((zone) =>
+      this.flags.has(`well:${zone.id}`) && !(zone.x === here.x && zone.y === here.y));
+    if (known.length === 0) {
+      this.showNotice("Vous n'avez encore bu qu'à ce puits-ci.", 170);
+      this.audio.playSfx("deny");
+      return;
+    }
+    this.choices.open("PARTIR D'UN TRAIT", [
+      ...known.slice(0, 8).map((zone) => ({
+        id: `go:${zone.x},${zone.y}`,
+        label: zone.name,
+        note: zone.safe ? "refuge" : "à découvert",
+      })),
+      { id: "cancel", label: "Rester ici" },
+    ]);
+  }
+
+  private resolveTravelChoice(choice: string): void {
+    if (!choice.startsWith("go:")) return;
+    const [x, y] = choice.slice(3).split(",").map(Number);
+    if (x === undefined || y === undefined) return;
+    this.textBox.close();
+    this.transition.start(() => {
+      this.camera.zone = { x, y };
+      this.player.position = { x: ZONE_WIDTH / 2, y: ZONE_HEIGHT / 2 };
+      this.loadZoneObjects();
+      this.player.unstick();
+      this.camera.snapTo(this.player.position);
+      this.mapScreen.reveal(this.camera.zone);
+      this.announceZone();
+      this.audio.playSfx("secret");
+      this.showNotice("L'eau des puits communique. Vous aussi, maintenant.", 190);
+    });
+  }
+
+  // — Teintures ——————————————————————————————————————————————
+
+  private openDyeMenu(): void {
+    this.choiceContext = "dye";
+    const dyes: readonly { id: string; label: string; note: string }[] = [
+      { id: "dye:garance", label: "Garance", note: "rouge profond" },
+      { id: "dye:guede", label: "Guède", note: "bleu d'orage" },
+      { id: "dye:safran", label: "Safran", note: "jaune de midi" },
+      { id: "dye:none", label: "Retour au vert d'origine", note: "" },
+    ];
+    this.choices.open("TEINDRE LE MANTEAU", [
+      ...dyes.map((dye) => ({ ...dye, disabled: this.inventory.count("dye_pot") === 0 })),
+      { id: "cancel", label: "Garder celui-là" },
+    ]);
+  }
+
+  private resolveDyeChoice(choice: string): void {
+    if (!choice.startsWith("dye:")) return;
+    if (!this.inventory.remove("dye_pot")) return;
+    const tone = choice.slice(4);
+    for (const flag of ["dye:garance", "dye:guede", "dye:safran"]) this.flags.delete(flag);
+    if (tone !== "none") this.flags.set(`dye:${tone}`);
+    this.player.cloak = tone === "none" ? null : tone;
+    this.particles.emit(this.player.position.x + 8, this.player.position.y + 8, "spark", 14);
+    this.audio.playSfx("secret");
+    this.showNotice(tone === "none"
+      ? "Le manteau retrouve son vert de départ."
+      : `Le manteau prend la teinte : ${tone}.`, 170);
+  }
+
+  // — Kerdec, maître d'armes ————————————————————————————————
+
+  private openKerdecMenu(): void {
+    this.choiceContext = "kerdec";
+    const next = nextTechnique((flag) => this.flags.has(flag));
+    const known = knownTechniques((flag) => this.flags.has(flag));
+    if (!next) {
+      this.textBox.open("« Je n'ai plus rien. Va t'en servir, c'est tout ce qui reste. »",
+        "Kerdec le Manchot", "kerdec");
+      return;
+    }
+    this.choices.open(`LEÇON — ${known.length}/${TECHNIQUES.length}`, [
+      {
+        id: "learn", label: next.name,
+        note: this.player.rupees >= next.price ? `${next.price} r` : `manque ${next.price - this.player.rupees} r`,
+        disabled: this.player.rupees < next.price,
+      },
+      { id: "ask", label: "Demander à quoi ça sert", note: "" },
+      { id: "cancel", label: "Saluer et partir" },
+    ]);
+  }
+
+  private resolveKerdecChoice(choice: string): void {
+    const next = nextTechnique((flag) => this.flags.has(flag));
+    if (!next) return;
+    if (choice === "ask") {
+      this.textBox.open(`${next.trigger} ${next.effect}`, "Kerdec le Manchot", "kerdec");
+      return;
+    }
+    if (choice !== "learn" || this.player.rupees < next.price) return;
+    this.player.rupees -= next.price;
+    this.flags.set(next.learnedFlag);
+    this.player.techniques.add(next.id);
+    this.audio.playSfx("secret");
+    this.particles.emit(this.player.position.x + 8, this.player.position.y, "ring", 16);
+    this.showNotice(`${next.name.toUpperCase()} apprise — ${next.trigger}`, 260);
+    this.textBox.open(next.lesson, "Kerdec le Manchot", "kerdec");
+    this.journal.noteSecret(`lesson:${next.id}`, next.name,
+      `${next.trigger} ${next.effect}`, this.clock.day);
+  }
+
   private blessFromFamiliar(): void {
     const alreadyBlessed = this.flags.has("lantern_cat_blessing");
     this.flags.set("lantern_cat_blessing");
     this.player.hearts = this.player.maxHearts;
     this.player.stamina = 100;
+    // Un poisson fumé achète sa fidélité : il quitte son perchoir et suit.
+    if (this.inventory.count("smoked_fish") > 0 && !this.flags.has("cat_follows")) {
+      this.inventory.remove("smoked_fish");
+      this.flags.set("cat_follows");
+      this.familiar!.follow(this.player.position);
+      this.showNotice("Le Chat-Lanterne avale le poisson et vous emboîte le pas.", 240);
+      this.journal.noteSecret("chat", "Le Chat-Lanterne",
+        "Un poisson fumé et il vous suit. Il lâche une flammèche sur ce qui approche.",
+        this.clock.day);
+    }
     this.textBox.open(this.familiar!.blessingMessage(alreadyBlessed), "Chat-Lanterne", "chat");
     this.showNotice("La bénédiction féline restaure tous vos cœurs.", 120);
     this.particles.emit(this.familiar!.position.x + 8, this.familiar!.position.y + 8, "heal", 18);
@@ -1777,6 +2357,7 @@ export class Game {
   private updateShop(): void {
     const purchase = this.shop.update(this.input, this.player);
     if (purchase.kind !== "bought") return;
+    if (purchase.entry.flag === "satchel_upgraded") this.inventory.setRoomy(true);
     this.audio.playSfx("secret");
     this.particles.emit(this.player.position.x + 8, this.player.position.y + 8, "spark", 10);
     if (!purchase.entry.trigger) return;
@@ -1816,6 +2397,11 @@ export class Game {
     if (id === "willow_flute") {
       this.menu.active = false;
       this.openFluteMenu();
+      return;
+    }
+    if (id === "dye_pot") {
+      this.menu.active = false;
+      this.openDyeMenu();
       return;
     }
     if (id === "tinder_kit") {
@@ -2258,7 +2844,7 @@ export class Game {
       this.tideLevelOfMap = this.clock.tideLevel;
     }
     this.interactables = zone
-      ? INTERACTABLES.filter((data) => data.zone === zone.id)
+      ? ALL_INTERACTABLES.filter((data) => data.zone === zone.id)
         .map((data) => new Interactable(data, this.objectState))
       : [];
     this.lastScheduleHour = this.clock.hour;
@@ -2464,6 +3050,7 @@ export class Game {
       journal: this.journal.snapshot(),
       campfires: this.campfires.snapshot(),
       post: this.post.snapshot(),
+      garden: this.garden.snapshot(),
     };
   }
 
@@ -2493,6 +3080,13 @@ export class Game {
     this.journal.restore(data.journal);
     this.campfires.restore(data.campfires);
     this.post.restore(data.post);
+    this.garden.restore(data.garden);
+    // Ce qui n'est pas dans le sac se relit dans les drapeaux.
+    this.inventory.setRoomy(this.flags.has("satchel_upgraded"));
+    this.player.hasShield = this.inventory.count("oak_shield") > 0;
+    this.player.mounted = this.inventory.count("mule_bridle") > 0;
+    this.player.cloak = ["garance", "guede", "safran"]
+      .find((tone) => this.flags.has(`dye:${tone}`)) ?? null;
     this.progression.apply(this.player);
     this.quests.refresh();
   }

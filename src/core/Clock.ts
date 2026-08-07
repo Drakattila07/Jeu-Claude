@@ -1,6 +1,20 @@
 import { RNG } from "./RNG";
 
-export type Weather = "clear" | "rain";
+/**
+ * Temps qu'il fait.
+ *
+ * Deux états — beau ou pluie — ne faisaient pas un climat : la brume avale la
+ * vue, l'orage frappe, la neige ralentit. Chacun agit sur le jeu, sinon ce ne
+ * serait qu'un filtre de plus.
+ */
+export type Weather = "clear" | "rain" | "fog" | "storm" | "snow";
+
+/** Saison courante. Le cycle fait huit jours : deux par saison. */
+export type Season = "printemps" | "été" | "automne" | "hiver";
+
+const SEASONS: readonly Season[] = ["printemps", "été", "automne", "hiver"];
+/** Jours de jeu que dure une saison. */
+export const DAYS_PER_SEASON = 2;
 
 /** État de la marée. L'estran ne se découvre qu'à basse mer. */
 export type Tide = "basse" | "montante" | "haute" | "descendante";
@@ -60,9 +74,43 @@ export class Clock {
     return "soir";
   }
 
+  /** Saison courante : elle décide du climat et de ce qui pousse. */
+  get season(): Season {
+    const index = Math.floor((this.day - 1) / DAYS_PER_SEASON) % SEASONS.length;
+    return SEASONS[index]!;
+  }
+
+  /** Jour dans la saison, à partir de 1. */
+  get dayOfSeason(): number {
+    return ((this.day - 1) % DAYS_PER_SEASON) + 1;
+  }
+
+  /**
+   * Temps du jour, tiré selon la saison.
+   *
+   * Le tirage était le même toute l'année : trente pour cent de pluie, un
+   * point c'est tout. Chaque saison a maintenant son ciel — il neige l'hiver,
+   * il orage l'été, la brume monte à l'automne.
+   */
   get weather(): Weather {
     const rng = new RNG(this.seed ^ Math.imul(this.day, 0x9e3779b1));
-    return rng.next() < 0.3 ? "rain" : "clear";
+    const roll = rng.next();
+    const table: Readonly<Record<Season, readonly (readonly [Weather, number])[]>> = {
+      printemps: [["rain", 0.34], ["fog", 0.48], ["storm", 0.54]],
+      été: [["storm", 0.16], ["rain", 0.28], ["fog", 0.34]],
+      automne: [["fog", 0.30], ["rain", 0.55], ["storm", 0.62]],
+      hiver: [["snow", 0.42], ["fog", 0.58], ["rain", 0.64]],
+    };
+    for (const [weather, threshold] of table[this.season]) {
+      if (roll < threshold) return weather;
+    }
+    return "clear";
+  }
+
+  /** Vrai si le ciel bouche la vue : brume, neige, orage. */
+  get isMurky(): boolean {
+    const weather = this.weather;
+    return weather === "fog" || weather === "snow" || weather === "storm";
   }
 
   weatherHistory(days = 3): readonly Weather[] {

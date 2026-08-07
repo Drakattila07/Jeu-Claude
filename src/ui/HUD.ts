@@ -43,6 +43,7 @@ export class HUD {
     this.drawStamina(ctx, player);
     this.drawPurse(renderer, player);
     this.drawClock(renderer, clock);
+    this.drawSeason(renderer, player, clock);
     // La marée sur la côte, le vent à la barre : deux informations qui ne
     // servent qu'où elles servent, et qui n'encombrent pas le reste du temps.
     if (coastal) this.drawTide(renderer, clock);
@@ -113,13 +114,23 @@ export class HUD {
     ctx.fillStyle = "rgba(10,8,16,0.6)";
     ctx.fillRect(x - 3, 20, width + 6, 12);
     const iconX = x + 1;
-    if (clock.weather === "rain") {
-      ctx.fillStyle = PALETTE.stoneLight;
+    if (clock.weather === "rain" || clock.weather === "storm") {
+      ctx.fillStyle = clock.weather === "storm" ? PALETTE.stoneDark : PALETTE.stoneLight;
       ctx.fillRect(iconX, 23, 8, 4);
-      ctx.fillStyle = PALETTE.waterLight;
+      ctx.fillStyle = clock.weather === "storm" ? PALETTE.yellow : PALETTE.waterLight;
       ctx.fillRect(iconX + 1, 28, 1, 3);
       ctx.fillRect(iconX + 4, 28, 1, 3);
       ctx.fillRect(iconX + 6, 27, 1, 3);
+    } else if (clock.weather === "snow") {
+      ctx.fillStyle = PALETTE.white;
+      ctx.fillRect(iconX + 3, 23, 2, 8);
+      ctx.fillRect(iconX, 26, 8, 2);
+      ctx.fillRect(iconX + 1, 24, 6, 6);
+    } else if (clock.weather === "fog") {
+      ctx.fillStyle = PALETTE.stoneLight;
+      ctx.fillRect(iconX, 24, 8, 2);
+      ctx.fillRect(iconX + 1, 27, 7, 2);
+      ctx.fillRect(iconX, 30, 6, 1);
     } else if (clock.isNight) {
       ctx.fillStyle = PALETTE.cream;
       ctx.fillRect(iconX + 1, 23, 6, 7);
@@ -132,6 +143,22 @@ export class HUD {
       ctx.fillRect(iconX + 1, 25, 7, 3);
     }
     drawText(ctx, time, x + 11, 21, { color: PALETTE.cream });
+  }
+
+  /**
+   * La saison, à gauche sous la jauge d'élan.
+   *
+   * À droite elle recouvrait la bourse : ce coin est déjà pris par l'heure,
+   * la marée et le vent.
+   */
+  private drawSeason(renderer: Renderer, player: Player, clock: Clock): void {
+    const { ctx } = renderer;
+    const rows = Math.ceil(Math.ceil(player.maxHearts / 2) / 10);
+    const y = 8 + rows * 11 + 8;
+    const label = clock.season.toUpperCase();
+    ctx.fillStyle = "rgba(10,8,16,0.55)";
+    ctx.fillRect(7, y, measureText(label) + 8, 11);
+    drawText(ctx, label, 11, y + 1, { color: PALETTE.grassLight });
   }
 
   /** Jauge de marée : hauteur d'eau, état, et l'attente jusqu'au reflux. */

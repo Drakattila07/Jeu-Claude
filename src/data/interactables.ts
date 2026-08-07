@@ -1,12 +1,15 @@
 import type { ItemId } from "./items/core";
 import type { Requirement } from "../systems/Requirements";
+import { CHRONICLE } from "./chronicle";
 
 export type InteractableKind =
   | "well" | "sign" | "door" | "chest" | "pot" | "bush" | "cauldron" | "valve"
   | "roots" | "footprints" | "seal" | "mechanism" | "pickup" | "secret"
   | "offering" | "shrine"
   // L'enclume de Bram, le foyer qu'on allume, le perchoir de Colombin.
-  | "anvil" | "campfire" | "dovecote";
+  | "anvil" | "campfire" | "dovecote"
+  // Les planches du potager, le pupitre de la Bibliothèque, les cairns.
+  | "plot" | "lectern" | "cairn";
 
 export interface InteractableData {
   readonly id: string;
@@ -199,4 +202,72 @@ export const INTERACTABLES = [
       refusal: "La mer couvre encore le banc. Rien à ramasser.",
     },
     grants: { item: "tide_pearl", count: 2 } },
+
+  // — Le potager de Sévère : six planches, aux Champs Ouest —
+  //   Il était d'abord au Hameau Sud, où ses ancres perçaient une façade :
+  //   un carré de légumes a sa place aux champs, pas entre deux maisons.
+
+  { id: "plot_1", zone: "champs_ouest", kind: "plot", x: 128, y: 176, text: "Première planche." },
+  { id: "plot_2", zone: "champs_ouest", kind: "plot", x: 176, y: 176, text: "Deuxième planche." },
+  { id: "plot_3", zone: "champs_ouest", kind: "plot", x: 224, y: 176, text: "Troisième planche." },
+  { id: "plot_4", zone: "champs_ouest", kind: "plot", x: 128, y: 224, text: "Quatrième planche." },
+  { id: "plot_5", zone: "champs_ouest", kind: "plot", x: 176, y: 224, text: "Cinquième planche." },
+  { id: "plot_6", zone: "champs_ouest", kind: "plot", x: 224, y: 224, text: "Sixième planche." },
+
+  // — Le Cairn des Douze : quatre pierres, une par point cardinal —
+
+  { id: "cairn_nord", zone: "aiguille_nord", kind: "cairn", x: 256, y: 128,
+    text: "CAIRN DU NORD — « Compte les feuillets, pas les pas. »" },
+  { id: "cairn_sud", zone: "ile_du_phare", kind: "cairn", x: 176, y: 320,
+    text: "CAIRN DU SUD — « Douze pages, douze pierres, une seule main pour les tenir. »" },
+  { id: "cairn_est", zone: "remparts_est", kind: "cairn", x: 352, y: 224,
+    text: "CAIRN DE L'EST — « Ce que tu n'as pas lu, tu ne l'as pas vu. »" },
+  {
+    id: "cairn_ouest", zone: "marais_noir", kind: "cairn", x: 128, y: 288,
+    text: "Les quatre cairns s'accordent. La Chronique est complète, et la vallée vous doit une histoire.",
+    requires: {
+      items: [{ item: "chronicle_page", count: 12 }],
+      refusal: "CAIRN DE L'OUEST — la pierre reste froide. Il manque des feuillets à la Chronique.",
+    },
+  },
+
+  // — Bouclier, arrosoir, licol, teintures —
+
+  { id: "oak_shield_chest", zone: "cour_statues", kind: "chest", x: 352, y: 288,
+    text: "Une rondache de chêne, cerclée de fer, oubliée sous une statue.",
+    grants: { item: "oak_shield", count: 1 } },
+  { id: "watering_can_pickup", zone: "champs_ouest", kind: "pickup", x: 288, y: 200,
+    text: "L'arrosoir de fer-blanc de Sévère, cabossé mais étanche.",
+    grants: { item: "watering_can", count: 1 } },
+  { id: "mule_bridle_chest", zone: "grange", kind: "chest", x: 288, y: 240,
+    text: "Un licol pend à la poutre. Au fond du box, quelque chose souffle.",
+    grants: { item: "mule_bridle", count: 1 } },
+  { id: "dye_pots_chest", zone: "vergers_est", kind: "chest", x: 176, y: 288,
+    text: "Trois pots de teinture : garance, guède, safran.",
+    grants: { item: "dye_pot", count: 3 } },
+  { id: "satchel_gift", zone: "quai_des_carenes", kind: "chest", x: 240, y: 208,
+    text: "Sarn a cousu un double fond dans une vieille besace. Elle est pour vous.",
+    grants: { item: "bigger_satchel", count: 1 } },
 ] as const satisfies readonly InteractableData[];
+
+/**
+ * Feuillets de la Chronique, posés d'après leur déclaration.
+ *
+ * Les écrire un par un dans la liste ci-dessus aurait dupliqué douze fois la
+ * même forme, et l'on aurait fini par désaccorder le texte du feuillet et sa
+ * position.
+ */
+export const CHRONICLE_PICKUPS: readonly InteractableData[] = CHRONICLE.map((page) => ({
+  id: `chronicle_${page.number}`,
+  zone: page.zone,
+  kind: "pickup" as const,
+  x: page.x,
+  y: page.y,
+  text: `Feuillet ${page.number} de la Chronique — « ${page.title} »`,
+  grants: { item: "chronicle_page" as const, count: 1 },
+}));
+
+/** Tous les objets du monde, feuillets compris. */
+export const ALL_INTERACTABLES: readonly InteractableData[] = [
+  ...INTERACTABLES, ...CHRONICLE_PICKUPS,
+];

@@ -31,6 +31,8 @@ export class Enemy extends Entity {
   hearts: number;
   aiFrame = 0;
   flashFrames = 0;
+  /** Frames pendant lesquelles une parade parfaite la laisse sonnée. */
+  private staggerFrames = 0;
   knockbackFrames = 0;
   state: EnemyState = "idle";
   private stateFrames = 0;
@@ -68,6 +70,21 @@ export class Enemy extends Entity {
   /** Vrai pendant l'annonce : c'est le signal donné au joueur. */
   get isTelegraphing(): boolean { return this.state === "windup"; }
 
+  /**
+   * Sonne la créature : elle reste plantée le temps indiqué.
+   *
+   * C'est la récompense d'une parade parfaite. Sans cet état, parer au bon
+   * moment n'offrait rien de plus que parer au hasard.
+   */
+  stagger(frames: number): void {
+    if (!this.active) return;
+    this.staggerFrames = Math.max(this.staggerFrames, frames);
+    this.pendingStrike = null;
+    this.enter("recover");
+  }
+
+  get isStaggered(): boolean { return this.staggerFrames > 0; }
+
   /** Récupère et consomme l'attaque déclenchée pendant cette frame. */
   takeStrike(): EnemyStrike | null {
     const strike = this.pendingStrike;
@@ -95,6 +112,11 @@ export class Enemy extends Entity {
     this.aiFrame += 1;
     this.stateFrames += 1;
     if (this.flashFrames > 0) this.flashFrames -= 1;
+    // Sonnée : elle ne pense plus, elle encaisse.
+    if (this.staggerFrames > 0) {
+      this.staggerFrames -= 1;
+      return;
+    }
     if (this.knockbackFrames > 0) {
       const factor = this.knockbackFrames / 7;
       this.step(this.knockback.x * factor, this.knockback.y * factor);

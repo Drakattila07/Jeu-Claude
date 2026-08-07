@@ -36,10 +36,16 @@ export class Interactable extends Entity {
       width: this.hitbox.width, height: this.hitbox.height };
   }
 
-  /** Kinds qui ne se déclenchent qu'une fois puis restent consommés. */
+  /**
+   * Kinds qui ne se déclenchent qu'une fois puis restent consommés.
+   *
+   * Un cairn absent de cette liste ne « changeait » jamais : il refusait
+   * correctement sans la Chronique, puis ne faisait rien une fois complète —
+   * le geste ne se déclarait accompli nulle part.
+   */
   private static readonly ONE_SHOT = new Set<string>([
     "chest", "seal", "roots", "mechanism", "footprints", "pickup", "secret",
-    "offering", "shrine",
+    "offering", "shrine", "cairn",
   ]);
 
   get isSpent(): boolean { return this.state.get(this.data.zone, this.data.id); }

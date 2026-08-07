@@ -145,5 +145,42 @@ export const NPCS = [
     "Une lettre part le matin, revient le lendemain. C'est la poste.",
     "Mes bêtes ne se perdent jamais. Les gens, si.",
     "Confiez-moi un objet, je vous trouve à qui il manque."
+  ]},
+
+  // — Le maître d'armes, le jardinier, la doyenne des marées —
+
+  /**
+   * Kerdec enseigne trois techniques, dans l'ordre et contre rubis. Il campe
+   * sur la Terrasse du Vent : il faut monter jusqu'à lui, ce qui fait partie
+   * de la leçon.
+   */
+  { id: "kerdec", name: "Kerdec le Manchot", color: "stone", schedule: [
+    { start: 6, end: 20, zone: "terrasse_vent", x: 240, y: 240 },
+    { start: 20, end: 24, zone: "terrasse_vent", x: 176, y: 288 }
+  ], chatter: [
+    "J'ai perdu le bras droit. J'enseigne du gauche. Ça vaut leçon.",
+    "Frapper, tout le monde sait. Choisir quand, presque personne.",
+    "Une garde n'est pas un abri. C'est une invitation.",
+    "Reviens quand tu auras mal quelque part. On parlera."
+  ]},
+
+  { id: "jardinier", name: "Sévère le Jardinier", color: "leaf", schedule: [
+    { start: 5, end: 13, zone: "hameau_sud", x: 128, y: 288 },
+    { start: 13, end: 19, zone: "champs_ouest", x: 208, y: 240 },
+    { start: 19, end: 24, zone: "hameau_sud", x: 128, y: 288 }
+  ], chatter: [
+    "Six planches. Pas sept. J'ai essayé sept, une fois.",
+    "On arrose le matin. Le soir, c'est pour les impatients.",
+    "La pluie fait mon travail et ne me demande rien. J'ai du mal avec elle.",
+    "Une graine hors saison pousse quand même. Mal, mais quand même."
+  ]},
+
+  { id: "doyenne_maree", name: "La Doyenne des Marées", color: "water", schedule: [
+    { start: 0, end: 24, zone: "port_maree", x: 128, y: 176 }
+  ], chatter: [
+    "Je ne prédis rien. Je compte, c'est tout.",
+    "La mer se retire deux fois par jour, et jamais à la même heure.",
+    "Demandez-moi l'heure du reflux. C'est la seule chose que je sais.",
+    "Mon père comptait déjà. Son père aussi. Nous n'avons jamais eu de montre."
   ]}
 ] as const satisfies readonly NpcData[];

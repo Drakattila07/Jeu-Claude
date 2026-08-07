@@ -4,6 +4,7 @@ import type { FortressSnapshot } from "./Fortress";
 import type { JournalEntry } from "./Journal";
 import type { CampfireState } from "./Campfire";
 import type { Parcel } from "./PigeonPost";
+import type { Plot } from "./Garden";
 
 export interface SaveData {
   readonly version: 1;
@@ -35,6 +36,8 @@ export interface SaveData {
   readonly journal?: Record<string, JournalEntry[]>;
   readonly campfires?: readonly CampfireState[];
   readonly post?: Parcel | null;
+  /** Planches du potager. Optionnel : une vieille sauvegarde repart en friche. */
+  readonly garden?: readonly Plot[];
 }
 
 interface StorageLike {

@@ -20,6 +20,18 @@ export const ROLL_COST = 34;
 
 const HITBOX: Rect = { x: 3, y: 9, width: 10, height: 7 };
 
+/**
+ * Fenêtre de parade parfaite, en frames après la levée du bouclier.
+ *
+ * Assez large pour être atteignable au jugé, assez étroite pour qu'on ne
+ * l'obtienne pas en gardant le bouton enfoncé.
+ */
+export const PARRY_WINDOW = 10;
+/** Endurance dépensée par un coup encaissé au bouclier. */
+export const BLOCK_COST = 22;
+/** Ouverture offerte par une parade parfaite : l'ennemi est sonné. */
+export const RIPOSTE_FRAMES = 34;
+
 export class Player extends Entity {
   direction: Direction = "down";
   walkFrame = 0;
@@ -52,6 +64,18 @@ export class Player extends Entity {
   private rollDirection = { x: 0, y: 1 };
   private knockback = { x: 0, y: 0 };
   private staminaLock = 0;
+  /** Bouclier au poing : posé par le jeu quand l'objet est au sac. */
+  hasShield = false;
+  /** Frames depuis la levée du bouclier ; -1 s'il est baissé. */
+  guardFrames = -1;
+  /** Ouverture gagnée par une parade parfaite, à dépenser en riposte. */
+  riposteFrames = 0;
+  /** Techniques d'épée apprises, par identifiant. */
+  readonly techniques = new Set<string>();
+  /** Teinture du manteau : `null` pour le vert d'origine. */
+  cloak: string | null = null;
+  /** À dos de mulet : plus vite sur les chemins, jamais sur l'eau. */
+  mounted = false;
 
   constructor(private readonly input: Input, private map: TileMap) {
     super({ x: 240, y: 336 }, HITBOX);
@@ -65,7 +89,10 @@ export class Player extends Entity {
     return this.demon;
   }
   get isDemon(): boolean { return this.demon; }
-  get speed(): number { return this.demon ? 2.6 : 1.85; }
+  get speed(): number {
+    const base = this.demon ? 2.6 : 1.85;
+    return this.mounted && !this.sailing ? base * 1.55 : base;
+  }
   get attackDamage(): number { return (this.demon ? 2 : 1) + this.swordBonus; }
   get fireRadius(): number { return this.demon ? 40 : 0; }
   get isRolling(): boolean { return this.rollFrames > 0; }
@@ -105,6 +132,7 @@ export class Player extends Entity {
 
   update(): void {
     this.splashed = false;
+    this.updateGuard();
     if (this.invulnerabilityFrames > 0) this.invulnerabilityFrames -= 1;
     if (this.flashFrames > 0) this.flashFrames -= 1;
     if (this.rollCooldown > 0) this.rollCooldown -= 1;
@@ -153,6 +181,9 @@ export class Player extends Entity {
     // Pendant l'élan de l'épée, on reste planté : le coup a du poids.
     if (this.attackFrame >= 0 && this.attackFrame <= 5) { dx = 0; dy = 0; }
     if (this.isCharging) { dx *= 0.42; dy *= 0.42; }
+    // Bouclier levé : on avance au pas. Une garde qui n'entrave rien serait
+    // gratuite, et l'on traverserait le jeu bouclier au poing.
+    if (this.isGuarding) { dx *= 0.35; dy *= 0.35; }
 
     if (Math.abs(dx) > Math.abs(dy) && dx !== 0) this.direction = dx > 0 ? "right" : "left";
     else if (dy !== 0) this.direction = dy > 0 ? "down" : "up";
@@ -219,6 +250,53 @@ export class Player extends Entity {
     this.chargeFrames = 0;
   }
 
+  /**
+   * Garde.
+   *
+   * Le bouclier ne se lève qu'à l'arrêt et hors attaque : c'est ce qui
+   * l'empêche de devenir un état permanent qu'on traverse le jeu à porter.
+   */
+  get isGuarding(): boolean { return this.guardFrames >= 0; }
+  /** Vrai pendant la fenêtre où un coup encaissé devient une parade parfaite. */
+  get inParryWindow(): boolean {
+    return this.guardFrames >= 0 && this.guardFrames < PARRY_WINDOW;
+  }
+  get canRiposte(): boolean { return this.riposteFrames > 0; }
+
+  private updateGuard(): void {
+    if (this.riposteFrames > 0) this.riposteFrames -= 1;
+    const wants = this.hasShield && !this.sailing && this.attackFrame < 0
+      && this.rollFrames <= 0 && this.knockbackFrames <= 0
+      && this.input.isDown("Guard") && this.stamina > 0;
+    if (!wants) { this.guardFrames = -1; return; }
+    this.guardFrames += 1;
+  }
+
+  /**
+   * Encaisse au bouclier. Rend « parfait » si le coup tombe dans la fenêtre,
+   * « bloqué » s'il est simplement arrêté, et rien du tout si la garde est
+   * baissée ou l'endurance à sec.
+   */
+  block(direction: Readonly<Vec2>): "parfait" | "bloqué" | null {
+    if (!this.isGuarding) return null;
+    // On ne pare que ce qui vient d'en face : un coup dans le dos passe.
+    const facing = this.facingVector();
+    if (facing.x * -direction.x + facing.y * -direction.y < 0.2) return null;
+    if (this.inParryWindow) {
+      this.riposteFrames = RIPOSTE_FRAMES;
+      this.invulnerabilityFrames = Math.max(this.invulnerabilityFrames, 20);
+      this.guardFrames = PARRY_WINDOW;
+      return "parfait";
+    }
+    if (this.stamina < BLOCK_COST) return null;
+    this.stamina -= BLOCK_COST;
+    this.staminaLock = 30;
+    this.invulnerabilityFrames = Math.max(this.invulnerabilityFrames, 14);
+    this.knockbackFrames = KNOCKBACK_FRAMES;
+    this.knockback = { x: direction.x * 1.6, y: direction.y * 1.6 };
+    return "bloqué";
+  }
+
   facingVector(): Vec2 {
     if (this.direction === "up") return { x: 0, y: -1 };
     if (this.direction === "down") return { x: 0, y: 1 };
@@ -281,6 +359,18 @@ export class Player extends Entity {
 
   get isDead(): boolean { return this.hearts <= 0; }
 
+  /**
+   * Couleurs du manteau. La forme démoniaque prime sur la teinture : on ne
+   * choisit pas la couleur du feu.
+   */
+  private get cloakTone(): { readonly dark: string; readonly light: string } {
+    if (this.demon) return { dark: PALETTE.roofDark, light: PALETTE.red };
+    if (this.cloak === "garance") return { dark: PALETTE.red, light: PALETTE.rose };
+    if (this.cloak === "guede") return { dark: PALETTE.deepWater, light: PALETTE.waterLight };
+    if (this.cloak === "safran") return { dark: PALETTE.wood, light: PALETTE.yellow };
+    return { dark: PALETTE.leaf, light: PALETTE.leafLight };
+  }
+
   draw(ctx: CanvasRenderingContext2D): void {
     if (this.invulnerabilityFrames > 0 && this.rollFrames <= 0
       && Math.floor(this.invulnerabilityFrames / 4) % 2 === 0) return;
@@ -319,9 +409,9 @@ export class Player extends Entity {
     ctx.fillRect(x + 2, y + 6 + bob, 12, 8);
     ctx.fillStyle = this.demon ? PALETTE.purple : PALETTE.pineDark;
     ctx.fillRect(x + 3, y + 7 + bob, 10, 7);
-    ctx.fillStyle = this.demon ? PALETTE.red : PALETTE.leaf;
+    ctx.fillStyle = this.demon ? PALETTE.red : this.cloakTone.dark;
     ctx.fillRect(x + 4, y + 7 + bob, 3, 6);
-    ctx.fillStyle = this.demon ? PALETTE.yellow : PALETTE.leafLight;
+    ctx.fillStyle = this.demon ? PALETTE.yellow : this.cloakTone.light;
     ctx.fillRect(x + 5, y + 8 + bob, 1, 4);
 
     if (this.direction !== "up") {
@@ -343,12 +433,29 @@ export class Player extends Entity {
 
     ctx.fillStyle = PALETTE.ink;
     ctx.fillRect(x + 1, y + 2 + bob, 13, 4);
-    ctx.fillStyle = this.demon ? PALETTE.roofDark : PALETTE.leaf;
+    ctx.fillStyle = this.cloakTone.dark;
     ctx.fillRect(x + 2, y + 1 + bob, 12, 4);
-    ctx.fillStyle = this.demon ? PALETTE.red : PALETTE.leafLight;
+    ctx.fillStyle = this.cloakTone.light;
     ctx.fillRect(x + (this.direction === "left" ? 1 : 3), y + bob, 9, 2);
     ctx.fillStyle = PALETTE.pineDark;
     ctx.fillRect(x + 11, y + 4 + bob, 4, 3);
+
+    // La rondache, levée. Elle clignote pendant la fenêtre de parade : c'est
+    // le seul retour qui apprend au joueur où se trouve le bon moment.
+    if (this.isGuarding) {
+      const facing = this.facingVector();
+      // Centré sur l'axe du regard : posé plus bas, la rondache couvrait le
+      // chapeau dès qu'on regardait vers le haut.
+      const sx = x + 5 + facing.x * 11;
+      const sy = y + 5 + facing.y * 11;
+      ctx.fillStyle = PALETTE.ink;
+      ctx.fillRect(sx - 1, sy - 1, 9, 11);
+      ctx.fillStyle = this.inParryWindow ? PALETTE.yellow : PALETTE.wood;
+      ctx.fillRect(sx, sy, 7, 9);
+      ctx.fillStyle = this.inParryWindow ? PALETTE.cream : PALETTE.woodDark;
+      ctx.fillRect(sx + 2, sy + 3, 3, 3);
+    }
+
     if (this.demon) {
       ctx.fillStyle = PALETTE.cream;
       ctx.fillRect(x + 2, y - 3 + bob, 2, 5);

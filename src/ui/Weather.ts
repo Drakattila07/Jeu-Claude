@@ -59,20 +59,37 @@ export class WeatherOverlay {
       if (mote.y < -4) mote.y = VIEW_HEIGHT + 4;
     }
 
-    if (weather === "rain") {
+    // Pluie et orage font tomber de l'eau ; l'orage la fait tomber de biais et
+    // beaucoup plus vite, et sa foudre ne se fait pas attendre.
+    if (weather === "rain" || weather === "storm") {
+      const gust = weather === "storm" ? 2.4 : 1;
       for (const drop of this.drops) {
-        drop.x += drop.vx;
-        drop.y += drop.vy;
+        drop.x += drop.vx * gust;
+        drop.y += drop.vy * gust;
         if (drop.y > VIEW_HEIGHT) { drop.y = -8; drop.x = (drop.x + 137) % VIEW_WIDTH; }
         if (drop.x < -8) drop.x += VIEW_WIDTH + 16;
       }
       if (this.flash > 0) this.flash -= 1;
       else if (this.frame > this.nextFlash) {
-        this.flash = 8;
-        this.nextFlash = this.frame + 520 + (this.frame % 400);
+        this.flash = weather === "storm" ? 14 : 8;
+        const wait = weather === "storm" ? 150 : 520;
+        this.nextFlash = this.frame + wait + (this.frame % (wait / 2));
+      }
+    }
+
+    // La neige tombe droit et lentement : elle se distingue de la pluie à
+    // l'œil, ce qui est le minimum qu'on attende d'une neige.
+    if (weather === "snow") {
+      for (const drop of this.drops) {
+        drop.x += Math.sin((this.frame + drop.y) / 40) * 0.3;
+        drop.y += 0.5 + (drop.tone * 0.18);
+        if (drop.y > VIEW_HEIGHT) { drop.y = -6; drop.x = (drop.x + 89) % VIEW_WIDTH; }
       }
     }
   }
+
+  /** Vrai pendant l'éclair : le jeu s'en sert pour frapper au bon moment. */
+  get lightning(): boolean { return this.flash > 0; }
 
   draw(ctx: CanvasRenderingContext2D, camera: Camera, weather: Weather,
     biome: Biome | undefined, night: boolean): void {
@@ -81,12 +98,16 @@ export class WeatherOverlay {
     const driftX = -(camera.x * 0.12) % VIEW_WIDTH;
     const driftY = -(camera.y * 0.12) % VIEW_HEIGHT;
 
-    if (biome === "peaks") this.drawSnow(ctx, driftX, driftY);
-    else if (biome === "marsh" || biome === "reeds") this.drawMist(ctx);
+    // Le temps qu'il fait passe avant le décor : une neige d'hiver doit tomber
+    // sur les champs comme sur les cimes, sinon la saison ne se voit nulle part.
+    if (weather === "snow") this.drawSnowfall(ctx);
+    else if (biome === "peaks") this.drawSnow(ctx, driftX, driftY);
+    else if (weather === "fog" || biome === "marsh" || biome === "reeds") this.drawMist(ctx);
     else if (night && (biome === "forest" || biome === "witch")) this.drawFireflies(ctx, driftX, driftY);
     else this.drawMotes(ctx, driftX, driftY, biome);
 
-    if (weather === "rain") this.drawRain(ctx);
+    if (weather === "rain" || weather === "storm") this.drawRain(ctx, weather === "storm");
+    if (weather === "fog") this.drawFogBank(ctx);
     ctx.restore();
   }
 
@@ -142,19 +163,45 @@ export class WeatherOverlay {
     ctx.globalAlpha = 1;
   }
 
-  private drawRain(ctx: CanvasRenderingContext2D): void {
+  /** Chute de neige plein cadre : flocons ronds, lents, sans traînée. */
+  private drawSnowfall(ctx: CanvasRenderingContext2D): void {
+    ctx.globalAlpha = 0.85;
+    for (const drop of this.drops) {
+      ctx.fillStyle = drop.tone === 0 ? PALETTE.white : PALETTE.cream;
+      const size = drop.tone === 0 ? 2 : 1;
+      ctx.fillRect(Math.round(drop.x), Math.round(drop.y), size, size);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  /** Nappe de brouillard : elle mange le fond de l'image, pas les bords. */
+  private drawFogBank(ctx: CanvasRenderingContext2D): void {
+    ctx.globalAlpha = 0.26;
+    ctx.fillStyle = PALETTE.stoneLight;
+    ctx.fillRect(0, 0, VIEW_WIDTH, VIEW_HEIGHT);
+    ctx.globalAlpha = 0.12;
+    ctx.fillStyle = PALETTE.white;
+    for (let band = 0; band < 5; band += 1) {
+      const y = ((this.frame * 0.22 + band * 47) % (VIEW_HEIGHT + 40)) - 20;
+      ctx.fillRect(0, Math.round(y), VIEW_WIDTH, 12);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  private drawRain(ctx: CanvasRenderingContext2D, storm = false): void {
     if (this.flash > 0) {
-      ctx.globalAlpha = this.flash / 14;
+      ctx.globalAlpha = this.flash / (storm ? 18 : 14);
       ctx.fillStyle = PALETTE.white;
       ctx.fillRect(0, 0, VIEW_WIDTH, VIEW_HEIGHT);
     }
-    ctx.globalAlpha = 0.5;
+    ctx.globalAlpha = storm ? 0.68 : 0.5;
     ctx.strokeStyle = PALETTE.waterLight;
     ctx.lineWidth = 1;
     ctx.beginPath();
     for (const drop of this.drops) {
+      const slant = storm ? 6 : 2;
       ctx.moveTo(Math.round(drop.x), Math.round(drop.y));
-      ctx.lineTo(Math.round(drop.x - 2), Math.round(drop.y + drop.size));
+      ctx.lineTo(Math.round(drop.x - slant), Math.round(drop.y + drop.size * (storm ? 1.6 : 1)));
     }
     ctx.stroke();
     // Impacts au sol : la pluie touche quelque chose, elle ne traverse pas.

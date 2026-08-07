@@ -1,5 +1,5 @@
 import type { Biome, WorldZoneData } from "../data/world";
-import { INTERACTABLES } from "../data/interactables";
+import { ALL_INTERACTABLES } from "../data/interactables";
 import type { LayerName, TiledLayer, TiledMapData } from "./TileMap";
 import { TILE, TileSet } from "./TileSet";
 import { ZONE_TILES_X, ZONE_TILES_Y, TILE_SIZE } from "../core/Renderer";
@@ -726,7 +726,7 @@ function buildVillage(grid: Grid, gates: readonly GateInfo[]): void {
  * reçoit du système d'ancres : on ne le double pas.
  */
 function raiseWell(grid: Grid): void {
-  const declared = INTERACTABLES.some((entry) =>
+  const declared = ALL_INTERACTABLES.some((entry) =>
     entry.zone === grid.zone.id && entry.kind === "well");
   if (declared) return;
   const hubX = Math.floor(W / 2);
@@ -1506,7 +1506,7 @@ export function createProceduralMap(zone: WorldZoneData, anchors: readonly ZoneA
 
 /** Points de contenu à préserver dans une zone, déduits des objets déclarés. */
 export function anchorsFor(zoneId: string): readonly ZoneAnchor[] {
-  return INTERACTABLES
+  return ALL_INTERACTABLES
     .filter((entry) => entry.zone === zoneId)
     .map((entry): ZoneAnchor => ({
       x: entry.x,

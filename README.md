@@ -22,7 +22,8 @@ npm run dev
 | Espace | épée — **maintenir** pour charger un coup tournoyant |
 | Maj | esquive roulée, invincible pendant le roulé |
 | X | parler, fouiller, entrer chez l'habitant, embarquer, accoster, dormir |
-| C | utiliser le premier remède du sac · pêcher au quai |
+| C | utiliser le premier remède du sac · pêcher au bord de l'eau |
+| E ou Q | lever le bouclier — **au dernier moment**, il pare |
 | F | forme demi-démon, une fois le Crâne obtenu |
 | Entrée | sac, carnet, quêtes, carte et aide |
 | M | carte de la vallée |
@@ -58,7 +59,7 @@ X pour l'épée, gâchettes pour l'esquive.
 - **Un combat lisible.** Chaque créature annonce son attaque ; l'esquive et le
   contre-coup existent. Frapper pendant l'annonce l'interrompt et fait mal.
   Les ennemis vaincus lâchent rubis et cœurs.
-- **Un monde peuplé.** Vingt-quatre villageois avec des emplois du temps, une faune
+- **Un monde peuplé.** Vingt-sept villageois avec des emplois du temps, une faune
   propre à chaque milieu qui se renouvelle chaque matin, et des régions classées
   de « refuge » à « hostile ».
 - **Des portes qui s'ouvrent.** Toutes, pas seulement les quatre lieux du
@@ -118,6 +119,42 @@ X pour l'épée, gâchettes pour l'esquive.
 - **Quatre bêtes de plus.** Le Héron d'Encre, qu'on ne gagne rien à tuer et
   tout à approcher ; le Golem de tourbe ; la Méduse de lune ; le Rôdeur de
   l'estran.
+- **Un bouclier, et une parade qui compte.** Lever la garde ralentit et coûte
+  de l'endurance. La lever au dernier moment sonne l'adversaire et ouvre une
+  riposte. Un coup dans le dos passe quand même.
+- **Trois techniques d'épée.** Kerdec le Manchot les enseigne dans l'ordre, sur
+  la Terrasse du Vent. L'Estoc suit une roulade, la Fauche vient au troisième
+  coup d'un enchaînement, la Riposte suit une parade parfaite. Aucune ne
+  s'active au bouton : chacune récompense un placement.
+- **Un familier qui se bat.** Un poisson fumé, et le Chat-Lanterne quitte son
+  perchoir, vous suit, et lâche une flammèche sur ce qui approche.
+- **Quatre saisons et cinq ciels.** Le cycle fait huit jours. Il neige l'hiver,
+  il orage l'été, la brume monte à l'automne. La foudre frappe à découvert — un
+  feu de camp abrite —, le froid ronge l'élan, la brume avale la vue.
+- **Quatre fêtes.** La Foire aux Graines, la Fête des Lanternes, la Veillée des
+  Moissons, la Nuit Longue. Chacune tombe un jour précis, dans un lieu précis,
+  et laisse quelque chose. Le jour affiché veut enfin dire quelque chose.
+- **Un potager.** Six planches aux Champs Ouest. On sème, on arrose, on récolte
+  — et la pluie fait le travail à votre place. Hors saison, la récolte est
+  maigre mais elle vient.
+- **Le réseau des puits.** Chaque margelle touchée devient une destination :
+  c'est le seul raccourci du jeu, et il se gagne région par région.
+- **Un mulet.** Grognon attend à la Grange. Nettement plus vite sur les
+  chemins, inutile sur l'eau.
+- **Une herboriste et des prix qui bougent.** Mira vend enfin ce qu'elle
+  cultive. Un port paie cher ce qui pousse ; un hameau brade. Acheter loin et
+  revendre près devient un métier.
+- **Une besace doublée et un manteau teint.** Sarn coud un double fond, les
+  piles montent d'une moitié. Garance, guède ou safran : la teinte se voit.
+- **La Chronique de la Vallée.** Douze feuillets dispersés, reliés au pupitre
+  de la Bibliothèque Noyée, un par visite. Ils disent pourquoi le canal a été
+  bâti et ce que les arbres ont à voir là-dedans. Quatre cairns aux quatre
+  points cardinaux la referment — le dernier n'accepte que la Chronique
+  complète.
+- **Des poissons qui ne se ressemblent pas.** Dix espèces, chacune liée au
+  lieu, à l'heure, à la saison, au ciel ou à la marée. On pêche partout où l'on
+  borde de l'eau, et chaque première prise entre au bestiaire. Le Roi du Lac ne
+  mord qu'en été, sous l'orage.
 
 Le puits soigne, sauvegarde et sert de point de renaissance une fois la source
 rouverte. À zéro cœur on renaît au dernier puits touché en laissant un quart de
@@ -126,7 +163,7 @@ sa bourse, ou l'on recharge la sauvegarde.
 ## Développement
 
 ```bash
-npm test              # 212 tests unitaires
+npm test              # 265 tests unitaires
 npm run validate:data # cohérence des données et du monde généré
 npm run build         # vérification de types, bundle, préparation du site
 ```

@@ -2,11 +2,28 @@ import { ITEMS, type ItemId } from "../data/items/core";
 
 export class Inventory {
   private readonly counts = new Map<ItemId, number>();
+  /**
+   * Besace doublée : chaque pile monte d'une moitié.
+   *
+   * On ramassait plus qu'on ne pouvait porter, et le surplus disparaissait
+   * sans un mot. Sarn coud un double fond ; le plafond suit.
+   */
+  private roomy = false;
+
+  setRoomy(active: boolean): void { this.roomy = active; }
+  get isRoomy(): boolean { return this.roomy; }
+
+  /** Plafond d'une pile, doublure comprise. */
+  capacity(item: ItemId): number {
+    const base = ITEMS[item].stack;
+    // Un objet unique le reste : doubler une carte marine n'a pas de sens.
+    return base <= 1 || !this.roomy ? base : Math.ceil(base * 1.5);
+  }
 
   count(item: ItemId): number { return this.counts.get(item) ?? 0; }
-  isFull(item: ItemId): boolean { return this.count(item) >= ITEMS[item].stack; }
+  isFull(item: ItemId): boolean { return this.count(item) >= this.capacity(item); }
   add(item: ItemId, amount = 1): number {
-    const next = Math.min(ITEMS[item].stack, this.count(item) + amount);
+    const next = Math.min(this.capacity(item), this.count(item) + amount);
     this.counts.set(item, next);
     return next;
   }
