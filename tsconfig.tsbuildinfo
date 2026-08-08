@@ -1,1 +1,0 @@
-{"root":["./src/main.ts","./src/core/game.ts","./src/core/input.ts","./src/core/renderer.ts","./src/data/palette.ts","./src/tests/game-loop.test.ts","./vite.config.ts"],"errors":true,"version":"5.9.3"}
