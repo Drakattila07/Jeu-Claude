@@ -23,13 +23,17 @@ export class Transition {
     if (this.frame >= 16) this.active = false;
   }
 
+
+
   draw(ctx: CanvasRenderingContext2D): void {
     if (!this.active) return;
-    const alpha = this.frame <= 8 ? this.frame / 8 : (16 - this.frame) / 8;
+    const progress = this.frame <= 8 ? this.frame / 8 : (16 - this.frame) / 8;
+    const width = (VIEW_WIDTH / 2) * progress;
+
     ctx.save();
-    ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
     ctx.fillStyle = PALETTE.ink;
-    ctx.fillRect(0, 0, VIEW_WIDTH, VIEW_HEIGHT);
+    ctx.fillRect(0, 0, width, VIEW_HEIGHT);
+    ctx.fillRect(VIEW_WIDTH - width, 0, width, VIEW_HEIGHT);
     ctx.restore();
   }
 }

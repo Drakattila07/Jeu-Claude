@@ -1,3 +1,4 @@
+import { drawNineSlice } from "./NineSlice";
 import { PALETTE } from "../data/palette";
 import type { Input } from "../core/Input";
 import { VIEW_HEIGHT, VIEW_WIDTH, type Renderer } from "../core/Renderer";
@@ -107,16 +108,7 @@ export class TextBox {
     const width = VIEW_WIDTH - BOX_MARGIN * 2;
 
     ctx.save();
-    ctx.fillStyle = "rgba(12,14,24,0.93)";
-    ctx.fillRect(BOX_MARGIN, top, width, BOX_HEIGHT);
-    ctx.fillStyle = PALETTE.sandLight;
-    ctx.fillRect(BOX_MARGIN, top, width, 1);
-    ctx.fillRect(BOX_MARGIN, top + BOX_HEIGHT - 1, width, 1);
-    ctx.fillRect(BOX_MARGIN, top, 1, BOX_HEIGHT);
-    ctx.fillRect(BOX_MARGIN + width - 1, top, 1, BOX_HEIGHT);
-    ctx.fillStyle = PALETTE.woodDark;
-    ctx.fillRect(BOX_MARGIN + 2, top + 2, width - 4, 1);
-    ctx.fillRect(BOX_MARGIN + 2, top + BOX_HEIGHT - 3, width - 4, 1);
+    drawNineSlice(ctx, BOX_MARGIN, top, width, BOX_HEIGHT, "dark");
 
     let textX = BOX_MARGIN + 12;
     if (this.portrait) {

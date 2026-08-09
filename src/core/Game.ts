@@ -3105,9 +3105,16 @@ export class Game {
     ctx.save();
     ctx.translate(this.camera.offsetX + shake.x, this.camera.offsetY + shake.y);
 
-    this.map.drawBase(ctx, this.camera, this.frame);
+    this.map.drawBase(ctx, this.camera, this.frame, WIND_VECTORS[this.clock.wind]);
     this.drawSortedEntities(ctx);
-    this.map.drawOver(ctx, this.camera, this.frame);
+    this.map.drawOver(ctx, this.camera, this.frame, WIND_VECTORS[this.clock.wind]);
+    const ptx = Math.floor(this.player.position.x / 16);
+    const pty = Math.floor((this.player.position.y - 8) / 16);
+    const overTileId = this.map.tileAt("decor_above", ptx, pty);
+    const kind = this.tileSet.properties(overTileId).kind;
+    if (kind !== "empty") {
+       this.player.drawSilhouette(ctx);
+    }
     this.burning.draw(ctx, this.currentSceneId(), this.frame);
     for (const projectile of this.projectiles) projectile.draw(ctx, this.frame);
     this.particles.draw(ctx);
@@ -3122,6 +3129,7 @@ export class Game {
       this.indoors ? undefined : this.currentZone()?.biome, this.clock.isNight);
     drawVignette(ctx, this.indoors ? 0.55 : 0.42);
 
+    this.combat.drawFlash(ctx);
     this.drawInterface();
   }
 
@@ -3244,6 +3252,7 @@ export class Game {
 
     const denseForest = zone?.id === "lisiere_carrefour" && !this.flags.has("lantern");
     this.lighting.draw(this.renderer, this.camera, lights, {
+      frame: this.frame,
       minuteOfDay: this.clock.minuteOfDay,
       weather: this.clock.weather,
       biome: this.interior ? undefined : zone?.biome,

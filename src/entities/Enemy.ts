@@ -1,3 +1,5 @@
+import { ombrePortee } from "../ui/Dither";
+const WALK_BOB = [0, -1, 0, 0, 0, -1, 0, 0] as const;
 import { PALETTE } from "../data/palette";
 import { ENEMY_TYPES, type EnemyDefinition, type EnemySpawn } from "../data/enemies";
 import { ZONE_HEIGHT, ZONE_WIDTH } from "../core/Renderer";
@@ -246,14 +248,31 @@ export class Enemy extends Entity {
     return !this.active;
   }
 
+
+  private drawReflet(ctx: CanvasRenderingContext2D, x: number, y: number): void {
+    const tx = Math.floor(x / 16);
+    const ty = Math.floor(y / 16);
+    const isWater = this.map?.isWater(tx, ty) || this.map?.isWater(tx, ty + 1) || this.map?.isWater(tx, ty - 1) || this.map?.isWater(tx + 1, ty) || this.map?.isWater(tx - 1, ty);
+    if (isWater) {
+      ctx.save();
+      ctx.translate(x + 8, y + 16); ctx.scale(1, -0.4); ctx.translate(-(x + 8), -y - 16);
+      ctx.globalAlpha = 0.2; ctx.fillStyle = PALETTE.ink; ctx.fillRect(x + 2, y, 12, 16);
+      ctx.restore();
+    }
+  }
+
   draw(ctx: CanvasRenderingContext2D): void {
     if (!this.active) return;
+    const walkingBob = (this.state as string) === "patrol" || (this.state as string) === "chase" ? WALK_BOB[Math.floor(this.aiFrame / 5) % WALK_BOB.length]! : 0;
     const hop = this.definition.behavior === "hop" || this.definition.behavior === "leap"
       ? (this.aiFrame % (this.definition.behavior === "hop" ? 54 : 78) >= 40 ? -4 : 0)
       : this.definition.phasing ? Math.round(Math.sin(this.aiFrame / 16) * 2) : 0;
     const shake = this.state === "windup" ? (this.aiFrame % 2 === 0 ? 1 : -1) : 0;
     const x = Math.round(this.position.x + shake);
-    const y = Math.round(this.position.y + hop);
+    const y = Math.round(this.position.y + hop + walkingBob);
+
+    this.drawReflet(ctx, x, Math.round(this.position.y));
+    if (hop === 0) ombrePortee(ctx, x + 8, Math.round(this.position.y), 12);
 
     ctx.save();
     ctx.globalAlpha = 0.3;

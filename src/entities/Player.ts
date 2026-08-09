@@ -1,3 +1,5 @@
+import { ombrePortee, dither } from "../ui/Dither";
+const WALK_BOB = [0, -1, 0, 0, 0, -1, 0, 0] as const;
 import { PALETTE } from "../data/palette";
 import type { Input } from "../core/Input";
 import type { TileMap } from "../world/TileMap";
@@ -32,7 +34,9 @@ export const BLOCK_COST = 22;
 /** Ouverture offerte par une parade parfaite : l'ennemi est sonné. */
 export const RIPOSTE_FRAMES = 34;
 
+export interface Footprint { x: number; y: number; age: number; }
 export class Player extends Entity {
+  footprints: Footprint[] = [];
   direction: Direction = "down";
   walkFrame = 0;
   hearts = 6;
@@ -371,15 +375,68 @@ export class Player extends Entity {
     return { dark: PALETTE.leaf, light: PALETTE.leafLight };
   }
 
+
+  private drawReflet(ctx: CanvasRenderingContext2D, x: number, y: number): void {
+    const tx = Math.floor(x / 16);
+    const ty = Math.floor(y / 16);
+    const isWater = this.map.isWater(tx, ty) || this.map.isWater(tx, ty + 1) || this.map.isWater(tx, ty - 1) || this.map.isWater(tx + 1, ty) || this.map.isWater(tx - 1, ty);
+    if (isWater) {
+      ctx.save();
+      ctx.translate(x + 8, y + 16);
+      ctx.scale(1, -0.4);
+      ctx.translate(-(x + 8), -y - 16);
+      ctx.globalAlpha = 0.2;
+      ctx.fillStyle = PALETTE.ink;
+      ctx.fillRect(x + 2, y, 12, 16);
+      ctx.restore();
+    }
+  }
+
+  drawSilhouette(ctx: CanvasRenderingContext2D): void {
+    if (this.invulnerabilityFrames > 0 && this.rollFrames <= 0 && Math.floor(this.invulnerabilityFrames / 4) % 2 === 0) return;
+    const x = Math.round(this.position.x);
+    let bob = this.walkFrame > 0 && !this.mounted && !this.sailing ? WALK_BOB[Math.floor(this.walkFrame / 4) % WALK_BOB.length]! : 0;
+    if (this.rollFrames > 0 && this.rollFrames <= 3) bob += 2;
+    const y = Math.round(this.position.y) ;
+    ctx.save();
+    ctx.fillStyle = PALETTE.white;
+    const drawDitheredRect = (rx: number, ry: number, rw: number, rh: number) => {
+      for (let dy = 0; dy < rh; dy++) {
+        for (let dx = 0; dx < rw; dx++) {
+          if (dither(rx + dx, ry + dy, 0.5)) { ctx.fillRect(rx + dx, ry + dy, 1, 1); }
+        }
+      }
+    };
+    drawDitheredRect(x + 2, y + 6, 12, 8);
+    drawDitheredRect(x + 4, y + 1, 9, 7);
+    ctx.restore();
+  }
+
   draw(ctx: CanvasRenderingContext2D): void {
     if (this.invulnerabilityFrames > 0 && this.rollFrames <= 0
       && Math.floor(this.invulnerabilityFrames / 4) % 2 === 0) return;
     const x = Math.round(this.position.x);
-    const y = Math.round(this.position.y);
+    let bob = this.walkFrame > 0 && !this.mounted && !this.sailing ? WALK_BOB[Math.floor(this.walkFrame / 4) % WALK_BOB.length]! : 0;
+    if (this.rollFrames > 0 && this.rollFrames <= 3) bob += 2;
+    const y = Math.round(this.position.y) ;
+    this.drawReflet(ctx, x, y);
+    if (!this.sailing && this.rollFrames === 0 && !this.mounted) ombrePortee(ctx, x + 8, Math.round(this.position.y), 10);
+
+    for (const fp of this.footprints) {
+       ctx.fillStyle = PALETTE.ink;
+       const ratio = Math.max(0, fp.age / 180) * 0.6;
+       const fx = Math.round(fp.x + 6);
+       const fy = Math.round(fp.y + 12);
+       for (let dy = 0; dy < 2; dy++) {
+         for (let dx = 0; dx < 4; dx++) {
+           if (dither(fx + dx, fy + dy, 1 - ratio)) ctx.fillRect(fx + dx, fy + dy, 1, 1);
+         }
+       }
+    }
     const step = Math.floor(this.walkFrame / 8) % 2;
-    const walking = this.walkFrame > 0;
+
     const rolling = this.rollFrames > 0;
-    const bob = walking && step === 1 ? -1 : 0;
+
 
     ctx.save();
 
@@ -406,39 +463,39 @@ export class Player extends Entity {
     ctx.fillStyle = PALETTE.ink;
     ctx.fillRect(x + 3 + step, y + 12, 4, 4);
     ctx.fillRect(x + 9 - step, y + 12, 4, 4);
-    ctx.fillRect(x + 2, y + 6 + bob, 12, 8);
+    ctx.fillRect(x + 2, y + 6, 12, 8);
     ctx.fillStyle = this.demon ? PALETTE.purple : PALETTE.pineDark;
-    ctx.fillRect(x + 3, y + 7 + bob, 10, 7);
+    ctx.fillRect(x + 3, y + 7 , 10, 7);
     ctx.fillStyle = this.demon ? PALETTE.red : this.cloakTone.dark;
-    ctx.fillRect(x + 4, y + 7 + bob, 3, 6);
+    ctx.fillRect(x + 4, y + 7 , 3, 6);
     ctx.fillStyle = this.demon ? PALETTE.yellow : this.cloakTone.light;
-    ctx.fillRect(x + 5, y + 8 + bob, 1, 4);
+    ctx.fillRect(x + 5, y + 8 , 1, 4);
 
     if (this.direction !== "up") {
       ctx.fillStyle = PALETTE.ink;
-      ctx.fillRect(x + 4, y + 1 + bob, 9, 7);
+      ctx.fillRect(x + 4, y + 1 , 9, 7);
       ctx.fillStyle = this.demon ? PALETTE.rose : PALETTE.sandLight;
-      ctx.fillRect(x + 5, y + 3 + bob, 7, 6);
+      ctx.fillRect(x + 5, y + 3 , 7, 6);
       ctx.fillStyle = PALETTE.cream;
-      ctx.fillRect(x + 6, y + 3 + bob, 4, 2);
+      ctx.fillRect(x + 6, y + 3 , 4, 2);
       ctx.fillStyle = PALETTE.woodDark;
-      ctx.fillRect(x + 4, y + 1 + bob, 9, 3);
-      ctx.fillRect(x + 11, y + 3 + bob, 2, 3);
+      ctx.fillRect(x + 4, y + 1 , 9, 3);
+      ctx.fillRect(x + 11, y + 3 , 2, 3);
     } else {
       ctx.fillStyle = PALETTE.woodDark;
-      ctx.fillRect(x + 4, y + 1 + bob, 9, 7);
+      ctx.fillRect(x + 4, y + 1 , 9, 7);
       ctx.fillStyle = PALETTE.wood;
-      ctx.fillRect(x + 6, y + 3 + bob, 5, 4);
+      ctx.fillRect(x + 6, y + 3 , 5, 4);
     }
 
     ctx.fillStyle = PALETTE.ink;
-    ctx.fillRect(x + 1, y + 2 + bob, 13, 4);
+    ctx.fillRect(x + 1, y + 2 , 13, 4);
     ctx.fillStyle = this.cloakTone.dark;
-    ctx.fillRect(x + 2, y + 1 + bob, 12, 4);
+    ctx.fillRect(x + 2, y + 1 , 12, 4);
     ctx.fillStyle = this.cloakTone.light;
-    ctx.fillRect(x + (this.direction === "left" ? 1 : 3), y + bob, 9, 2);
+    ctx.fillRect(x + (this.direction === "left" ? 1 : 3), y , 9, 2);
     ctx.fillStyle = PALETTE.pineDark;
-    ctx.fillRect(x + 11, y + 4 + bob, 4, 3);
+    ctx.fillRect(x + 11, y + 4 , 4, 3);
 
     // La rondache, levée. Elle clignote pendant la fenêtre de parade : c'est
     // le seul retour qui apprend au joueur où se trouve le bon moment.
@@ -458,19 +515,19 @@ export class Player extends Entity {
 
     if (this.demon) {
       ctx.fillStyle = PALETTE.cream;
-      ctx.fillRect(x + 2, y - 3 + bob, 2, 5);
-      ctx.fillRect(x + 13, y - 3 + bob, 2, 5);
+      ctx.fillRect(x + 2, y - 3 , 2, 5);
+      ctx.fillRect(x + 13, y - 3 , 2, 5);
       ctx.fillStyle = PALETTE.yellow;
-      ctx.fillRect(x + 2, y - 4 + bob, 1, 2);
-      ctx.fillRect(x + 14, y - 4 + bob, 1, 2);
+      ctx.fillRect(x + 2, y - 4 , 1, 2);
+      ctx.fillRect(x + 14, y - 4 , 1, 2);
     }
 
     ctx.fillStyle = PALETTE.ink;
-    if (this.direction === "left") ctx.fillRect(x + 5, y + 6 + bob, 1, 1);
-    else if (this.direction === "right") ctx.fillRect(x + 11, y + 6 + bob, 1, 1);
+    if (this.direction === "left") ctx.fillRect(x + 5, y + 6 , 1, 1);
+    else if (this.direction === "right") ctx.fillRect(x + 11, y + 6 , 1, 1);
     else if (this.direction === "down") {
-      ctx.fillRect(x + 6, y + 6 + bob, 1, 1);
-      ctx.fillRect(x + 10, y + 6 + bob, 1, 1);
+      ctx.fillRect(x + 6, y + 6 , 1, 1);
+      ctx.fillRect(x + 10, y + 6 , 1, 1);
     }
 
     ctx.fillStyle = PALETTE.woodDark;
@@ -478,7 +535,7 @@ export class Player extends Entity {
     ctx.fillRect(x + 10 - step, y + 13, 3, 3);
 
     if (this.isCharging) this.drawCharge(ctx, x, y);
-    if (this.attackFrame >= 0) this.drawBlade(ctx, x, y, bob);
+    if (this.attackFrame >= 0) this.drawBlade(ctx, x, y);
     ctx.restore();
   }
 
@@ -578,48 +635,40 @@ export class Player extends Entity {
     ctx.globalAlpha = 1;
   }
 
-  private drawBlade(ctx: CanvasRenderingContext2D, x: number, y: number, bob: number): void {
+  private drawBlade(ctx: CanvasRenderingContext2D, x: number, y: number): void {
     if (this.isSpinning) {
       const angle = (this.attackFrame / 26) * Math.PI * 2.4;
-      ctx.save();
-      ctx.translate(x + 8, y + 9);
-      ctx.rotate(angle);
-      ctx.fillStyle = PALETTE.ink;
-      ctx.fillRect(6, -3, 20, 6);
-      ctx.fillStyle = PALETTE.white;
-      ctx.fillRect(6, -2, 19, 3);
-      ctx.fillStyle = PALETTE.yellow;
-      ctx.fillRect(4, -2, 3, 4);
+      ctx.save(); ctx.translate(x + 8, y + 9); ctx.rotate(angle);
+      ctx.fillStyle = PALETTE.ink; ctx.fillRect(6, -3, 20, 6);
+      ctx.fillStyle = PALETTE.white; ctx.fillRect(6, -2, 19, 3);
+      ctx.fillStyle = PALETTE.yellow; ctx.fillRect(4, -2, 3, 4);
       ctx.restore();
-      ctx.globalAlpha = 0.22;
-      ctx.fillStyle = PALETTE.cream;
-      ctx.beginPath();
-      ctx.arc(x + 8, y + 9, 24, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.globalAlpha = 0.22; ctx.fillStyle = PALETTE.cream;
+      ctx.beginPath(); ctx.arc(x + 8, y + 9, 24, 0, Math.PI * 2); ctx.fill();
       ctx.globalAlpha = 1;
       return;
     }
-
-    const blade = this.attackHitbox();
-    ctx.fillStyle = PALETTE.ink;
-    if (this.direction === "up" || this.direction === "down") {
-      ctx.fillRect(Math.round(blade.x + 5), Math.round(blade.y), 4, blade.height);
-    } else {
-      ctx.fillRect(Math.round(blade.x), Math.round(blade.y + 5), blade.width, 4);
-    }
-    ctx.fillStyle = this.flashFrames > 0 ? PALETTE.white : PALETTE.stoneLight;
-    if (this.direction === "up" || this.direction === "down") {
-      ctx.fillRect(Math.round(blade.x + 6), Math.round(blade.y), 2, blade.height - 2);
-    } else {
-      ctx.fillRect(Math.round(blade.x), Math.round(blade.y + 6), blade.width - 2, 2);
-    }
-    ctx.fillStyle = PALETTE.yellow;
-    ctx.fillRect(x + 5, y + 8 + bob, 7, 2);
-    if (this.swordActive) {
-      ctx.globalAlpha = 0.5;
+    const phase = this.attackFrame < 4 ? "windup" : (this.attackFrame < 8 ? "strike" : "recover");
+    ctx.save(); ctx.translate(x + 8, y + 8);
+    let angle = 0;
+    if (this.direction === "up") angle = Math.PI * 1.5;
+    if (this.direction === "down") angle = Math.PI * 0.5;
+    if (this.direction === "left") angle = Math.PI;
+    if (this.direction === "right") angle = 0;
+    let swing = 0;
+    if (phase === "windup") swing = -Math.PI * 0.4;
+    else if (phase === "strike") swing = Math.PI * 0.2;
+    else swing = Math.PI * 0.4;
+    ctx.rotate(angle + swing);
+    ctx.fillStyle = PALETTE.ink; ctx.fillRect(4, -2, 12, 4);
+    ctx.fillStyle = PALETTE.white; ctx.fillRect(5, -1, 10, 2);
+    ctx.fillStyle = PALETTE.yellow; ctx.fillRect(3, -1, 2, 2);
+    if (phase === "strike") {
       ctx.fillStyle = PALETTE.white;
-      ctx.fillRect(Math.round(blade.x), Math.round(blade.y), blade.width, blade.height);
-      ctx.globalAlpha = 1;
+      for (let i = 0; i < 4; i++) {
+         if (dither(x + i*2, y + i, 0.5)) ctx.fillRect(10 + i * 2, -10 + i * 3, 2, 8);
+      }
     }
+    ctx.restore();
   }
 }
