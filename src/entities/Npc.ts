@@ -1,3 +1,5 @@
+import { ombrePortee } from "../ui/Dither";
+const WALK_BOB = [0, -1, 0, 0, 0, -1, 0, 0] as const;
 import { PALETTE } from "../data/palette";
 import type { NpcData } from "../data/npcs/core";
 import type { Clock } from "../core/Clock";
@@ -179,12 +181,27 @@ export class Npc extends Entity {
     return line;
   }
 
+
+  private drawReflet(ctx: CanvasRenderingContext2D, x: number, y: number): void {
+    const tx = Math.floor(x / 16);
+    const ty = Math.floor(y / 16);
+    const isWater = this.map?.isWater(tx, ty) || this.map?.isWater(tx, ty + 1) || this.map?.isWater(tx, ty - 1) || this.map?.isWater(tx + 1, ty) || this.map?.isWater(tx - 1, ty);
+    if (isWater) {
+      ctx.save();
+      ctx.translate(x + 8, y + 16); ctx.scale(1, -0.4); ctx.translate(-(x + 8), -y - 16);
+      ctx.globalAlpha = 0.2; ctx.fillStyle = "#101820"; ctx.fillRect(x + 2, y, 12, 16);
+      ctx.restore();
+    }
+  }
+
   draw(ctx: CanvasRenderingContext2D): void {
     const x = Math.round(this.position.x);
-    const y = Math.round(this.position.y);
     const walking = Math.abs(this.velocity.x) + Math.abs(this.velocity.y) > 0.05;
     const step = walking ? Math.floor(this.frame / 8) % 2 : 0;
-    const bob = walking && Math.floor(this.frame / 8) % 2 === 1 ? -1 : 0;
+    const bob = walking ? WALK_BOB[Math.floor(this.frame / 5) % WALK_BOB.length]! : 0;
+    const y = Math.round(this.position.y) + bob;
+    this.drawReflet(ctx, x, Math.round(this.position.y));
+    ombrePortee(ctx, x + 8, Math.round(this.position.y), 10);
     const outfit = this.flashFrames > 0 ? PALETTE.white : PALETTE[this.data.color];
     const accent = this.data.color === "sand" ? PALETTE.yellow
       : this.data.color === "water" ? PALETTE.waterLight

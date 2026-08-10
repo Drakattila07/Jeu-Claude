@@ -1,5 +1,6 @@
+import { dither } from "./Dither";
 import { PALETTE } from "../data/palette";
-import { VIEW_WIDTH, type Renderer } from "../core/Renderer";
+import { VIEW_WIDTH, VIEW_HEIGHT, type Renderer } from "../core/Renderer";
 import { MAX_STAMINA, type Player } from "../entities/Player";
 import type { Clock } from "../core/Clock";
 import { drawText, measureText } from "./Font";
@@ -36,7 +37,22 @@ export class HUD {
 
   draw(renderer: Renderer, player: Player, clock: Clock, zoneName: string, objective?: string,
     heading?: { readonly dx: number; readonly dy: number } | null,
-    coastal = false): void {
+    coastal = false, biome?: string): void {
+    if (biome === "peaks" || biome === "sea" || biome === "fields") {
+       const ctx = renderer.ctx;
+       ctx.save();
+       ctx.fillStyle = PALETTE.white;
+       for (let y = 0; y < 60; y++) {
+         const ratio = 0.15 * (1 - y / 60);
+         for (let x = 0; x < VIEW_WIDTH; x += 2) {
+           if (dither(x, y, ratio)) {
+             ctx.fillRect(x, y, 1, 1);
+           }
+         }
+       }
+       ctx.restore();
+    }
+
     const { ctx } = renderer;
     ctx.save();
     this.drawHearts(ctx, player);
@@ -48,6 +64,35 @@ export class HUD {
     // servent qu'où elles servent, et qui n'encombrent pas le reste du temps.
     if (coastal) this.drawTide(renderer, clock);
     if (player.sailing) this.drawWind(renderer, clock);
+
+    // Pulsation si 1 coeur
+    if (player.hearts === 1) {
+      const pulseIntensity = Math.abs(Math.sin(clock.minute * 0.5)) * 0.4;
+      ctx.save();
+      ctx.strokeStyle = PALETTE.red;
+      ctx.lineWidth = 4;
+      ctx.globalAlpha = pulseIntensity;
+      ctx.strokeRect(0, 0, VIEW_WIDTH, VIEW_HEIGHT);
+      ctx.restore();
+    }
+
+
+    // Pulsation si 1 coeur
+    if (player.hearts === 1) {
+       // Using frame would be better but clock.minute changes
+      // Actually we have frame from Game but HUD doesn't get frame. Oh wait, we can just use clock.minute?
+      // Minute in clock changes every real-time second or so. It's too slow.
+      // Let's use Date.now() for the pulse to be safe, or just read player.invulnerabilityFrames but that's only on hit.
+      // Let's use Date.now() / 200.
+      const pulseIntensity = Math.abs(Math.sin(Date.now() / 200)) * 0.4;
+      ctx.save();
+      ctx.strokeStyle = PALETTE.red;
+      ctx.lineWidth = 4;
+      ctx.globalAlpha = pulseIntensity;
+      ctx.strokeRect(0, 0, VIEW_WIDTH, VIEW_HEIGHT);
+      ctx.restore();
+    }
+
     if (player.isDemon) this.drawDemonBadge(renderer);
     if (objective) this.drawObjective(renderer, objective, heading);
     this.drawZoneTitle(renderer, zoneName);

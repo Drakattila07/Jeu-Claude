@@ -1,3 +1,5 @@
+import { PALETTE } from "../data/palette";
+import { dither } from "../ui/Dither";
 import type { Rect } from "../entities/Entity";
 
 export function overlaps(a: Readonly<Rect>, b: Readonly<Rect>): boolean {
@@ -16,6 +18,7 @@ export class Combat {
   hitstopFrames = 0;
   shakeFrames = 0;
   shakeStrength = 0;
+  criticalFlashFrames = 0;
   private readonly hitThisSwing = new Set<string>();
 
   get frozen(): boolean { return this.hitstopFrames > 0; }
@@ -26,6 +29,7 @@ export class Combat {
       this.shakeFrames -= 1;
       if (this.shakeFrames === 0) this.shakeStrength = 0;
     }
+    if (this.criticalFlashFrames > 0) this.criticalFlashFrames -= 1;
   }
 
   beginSwing(): void { this.hitThisSwing.clear(); }
@@ -56,5 +60,18 @@ export class Combat {
       x: Math.round(Math.sin(frame * 2.1) * decay),
       y: Math.round(Math.cos(frame * 2.9) * decay * 0.6),
     };
+  }
+
+  drawFlash(ctx: CanvasRenderingContext2D): void {
+    if (this.criticalFlashFrames <= 0) return;
+    ctx.save();
+    ctx.fillStyle = PALETTE.white; // PALETTE.white
+    const ratio = this.criticalFlashFrames / 8;
+    for (let y = 0; y < 216; y+=2) {
+      for (let x = 0; x < 384; x+=2) {
+        if (dither(x, y, ratio * 0.5)) ctx.fillRect(x, y, 2, 2);
+      }
+    }
+    ctx.restore();
   }
 }

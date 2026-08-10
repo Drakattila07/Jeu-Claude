@@ -1,3 +1,5 @@
+import { dither } from "../ui/Dither";
+import { PALETTE } from "../data/palette";
 import { VIEW_HEIGHT, VIEW_WIDTH, TILE_SIZE } from "../core/Renderer";
 import type { Renderer } from "../core/Renderer";
 import type { Camera } from "../core/Camera";
@@ -76,6 +78,7 @@ function biomeTint(biome: Biome | undefined): readonly [number, number, number] 
 
 export interface LightingOptions {
   readonly minuteOfDay: number;
+  readonly frame: number;
   readonly weather: Weather;
   readonly biome?: Biome;
   /** Un intérieur ne suit pas le soleil : il vit de ses propres foyers. */
@@ -172,7 +175,23 @@ export class Lighting {
       scene.drawImage(renderer.lightCanvas, 0, 0);
     }
     scene.restore();
+
+    if (options.biome === "forest" || options.biome === "witch" || options.interior) {
+      scene.save();
+      scene.fillStyle = PALETTE.white;
+      const frame = options.frame;
+      for (let ry = 0; ry < VIEW_HEIGHT; ry += 2) {
+        for (let rx = 0; rx < VIEW_WIDTH; rx += 2) {
+          const wave = Math.sin((rx + ry * 1.5 + frame * 0.1) * 0.05);
+          if (wave > 0.8 && dither(rx, ry, 0.1)) {
+            scene.fillRect(rx, ry, 1, 1);
+          }
+        }
+      }
+      scene.restore();
+    }
   }
+
 
   private paintLight(ctx: CanvasRenderingContext2D, camera: Camera, light: Light): void {
     const strength = light.strength ?? 1;
@@ -181,28 +200,18 @@ export class Lighting {
     const y = light.y + camera.offsetY;
     const radius = light.radius;
     if (x + radius < 0 || x - radius > VIEW_WIDTH || y + radius < 0 || y - radius > VIEW_HEIGHT) return;
-
-    const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
-    const [lr, lg, lb] = hexToRgb(light.color);
-    gradient.addColorStop(0, `rgba(${lr},${lg},${lb},${0.95 * strength})`);
-    gradient.addColorStop(0.45, `rgba(${lr},${lg},${lb},${0.4 * strength})`);
-    gradient.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.fillStyle = gradient;
-    ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+    ctx.fillStyle = light.color;
+    for (let py = -radius; py <= radius; py += 1) {
+      for (let px = -radius; px <= radius; px += 1) {
+        const dist = Math.sqrt(px * px + py * py);
+        if (dist > radius) continue;
+        const ratio = Math.max(0, 1 - (dist / radius));
+        const level = Math.floor(ratio * 4) / 3;
+        if (dither(Math.round(x + px), Math.round(y + py), level * strength)) {
+          ctx.fillRect(Math.round(x + px), Math.round(y + py), 1, 1);
+        }
+      }
+    }
   }
-}
 
-const RGB_CACHE = new Map<string, readonly [number, number, number]>();
-
-function hexToRgb(color: string): readonly [number, number, number] {
-  const cached = RGB_CACHE.get(color);
-  if (cached) return cached;
-  const value = color.replace("#", "");
-  const parsed: readonly [number, number, number] = [
-    parseInt(value.slice(0, 2), 16) || 255,
-    parseInt(value.slice(2, 4), 16) || 255,
-    parseInt(value.slice(4, 6), 16) || 255,
-  ];
-  RGB_CACHE.set(color, parsed);
-  return parsed;
 }

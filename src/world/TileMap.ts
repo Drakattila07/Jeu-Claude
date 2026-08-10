@@ -1,3 +1,4 @@
+import type { Vec2 } from "../entities/Entity";
 import { TILE_SIZE } from "../core/Renderer";
 import type { Camera } from "../core/Camera";
 import type { TileSet } from "./TileSet";
@@ -45,6 +46,7 @@ export class TileMap {
   private readonly waterMask: Uint8Array;
   private readonly harmMask: Uint8Array;
   private readonly slowMask: Float32Array;
+  private readonly waterDist: Uint8Array;
 
   private baseCanvas: HTMLCanvasElement | null = null;
   private overCanvas: HTMLCanvasElement | null = null;
@@ -95,6 +97,27 @@ export class TileMap {
       this.harmMask[index] = harm;
       this.slowMask[index] = slow;
     }
+    this.waterDist = new Uint8Array(count).fill(255);
+    const queue: number[] = [];
+    for (let i = 0; i < count; i++) {
+      if (this.waterMask[i] === 0) { this.waterDist[i] = 0; queue.push(i); }
+    }
+    let head = 0;
+    while (head < queue.length) {
+      const current = queue[head++]!;
+      const d = this.waterDist[current]!;
+      const cx = current % this.width;
+      const cy = Math.floor(current / this.width);
+      const neighbors = [[cx - 1, cy], [cx + 1, cy], [cx, cy - 1], [cx, cy + 1]];
+      for (const n of neighbors) {
+        const nx = n[0]!; const ny = n[1]!;
+        if (nx >= 0 && nx < this.width && ny >= 0 && ny < this.height) {
+          const nIdx = ny * this.width + nx;
+          if (this.waterDist[nIdx]! > d + 1) { this.waterDist[nIdx] = d + 1; queue.push(nIdx); }
+        }
+      }
+    }
+
   }
 
   tileAt(layerName: LayerName, x: number, y: number): number {
@@ -123,6 +146,10 @@ export class TileMap {
     return sailing ? this.isSolidForSailing(x, y) : this.isSolid(x, y);
   }
 
+  waterDistAt(x: number, y: number): number {
+    if (x < 0 || y < 0 || x >= this.width || y >= this.height) return 0;
+    return this.waterDist[y * this.width + x]!;
+  }
   isWater(x: number, y: number): boolean {
     if (x < 0 || y < 0 || x >= this.width || y >= this.height) return false;
     return this.waterMask[y * this.width + x] === 1;
@@ -166,24 +193,24 @@ export class TileMap {
   }
 
   /** Dessine les couches situées sous les entités. */
-  drawBase(ctx: CanvasRenderingContext2D, camera: Camera, frame: number): void {
+  drawBase(ctx: CanvasRenderingContext2D, camera: Camera, frame: number, wind?: Vec2): void {
     this.ensurePrerender();
     if (this.baseCanvas) ctx.drawImage(this.baseCanvas, 0, 0);
     for (const tile of this.animated) {
       if (tile.layer === "decor_above") continue;
       if (!camera.isVisible(tile.x * TILE_SIZE, tile.y * TILE_SIZE, TILE_SIZE, TILE_SIZE, TILE_SIZE)) continue;
-      this.tileSet.draw(ctx, this.tileAt(tile.layer, tile.x, tile.y), tile.x, tile.y, frame, this);
+      this.tileSet.draw(ctx, this.tileAt(tile.layer, tile.x, tile.y), tile.x, tile.y, frame, this, wind);
     }
   }
 
   /** Dessine la canopée et tout ce qui passe devant les entités. */
-  drawOver(ctx: CanvasRenderingContext2D, camera: Camera, frame: number): void {
+  drawOver(ctx: CanvasRenderingContext2D, camera: Camera, frame: number, wind?: Vec2): void {
     this.ensurePrerender();
     if (this.overCanvas) ctx.drawImage(this.overCanvas, 0, 0);
     for (const tile of this.animated) {
       if (tile.layer !== "decor_above") continue;
       if (!camera.isVisible(tile.x * TILE_SIZE, tile.y * TILE_SIZE, TILE_SIZE, TILE_SIZE, TILE_SIZE)) continue;
-      this.tileSet.draw(ctx, this.tileAt(tile.layer, tile.x, tile.y), tile.x, tile.y, frame, this);
+      this.tileSet.draw(ctx, this.tileAt(tile.layer, tile.x, tile.y), tile.x, tile.y, frame, this, wind);
     }
   }
 

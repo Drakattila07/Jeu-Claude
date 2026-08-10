@@ -1,3 +1,4 @@
+import { drawNineSlice } from "./NineSlice";
 import { PALETTE } from "../data/palette";
 import type { Input } from "../core/Input";
 import { VIEW_HEIGHT, VIEW_WIDTH, type Renderer } from "../core/Renderer";
@@ -88,13 +89,7 @@ export class ChoiceBox {
     ctx.save();
     ctx.fillStyle = "rgba(8,10,18,0.55)";
     ctx.fillRect(0, 0, VIEW_WIDTH, VIEW_HEIGHT);
-    ctx.fillStyle = "rgba(12,14,24,0.96)";
-    ctx.fillRect(left, top, width, height);
-    ctx.fillStyle = PALETTE.sandLight;
-    ctx.fillRect(left, top, width, 1);
-    ctx.fillRect(left, top + height - 1, width, 1);
-    ctx.fillRect(left, top, 1, height);
-    ctx.fillRect(left + width - 1, top, 1, height);
+    drawNineSlice(ctx, left, top, width, height, "dark");
 
     drawText(ctx, this.title, left + width / 2, top + 8,
       { color: PALETTE.yellow, align: "center" });

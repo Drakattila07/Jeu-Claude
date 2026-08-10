@@ -1,3 +1,5 @@
+import { dither, melange } from "../ui/Dither";
+import type { Vec2 } from "../entities/Entity";
 import { PALETTE } from "../data/palette";
 import { TILE_SIZE } from "../core/Renderer";
 import type { TileMap } from "./TileMap";
@@ -225,6 +227,34 @@ function patch(ctx: CanvasRenderingContext2D, color: string, px: number, py: num
   fill(ctx, color, px + sx, py + sy, width, height);
 }
 
+
+function getBiomeFamily(kind: TileKind): number {
+  switch (kind) {
+    case "grass": case "grass_alt": case "marsh_grass": case "tall_grass": case "alpine_grass": case "dry_grass": return 1;
+    case "path": case "cracked_path": case "shore_sand": return 2;
+    case "stone": case "moss_stone": case "gravel": case "cobble": case "basalt": case "ash": case "pebbles": return 3;
+    case "snow": case "snowdrift": case "ice": return 4;
+    default: return 0;
+  }
+}
+function biomeFringeColor(kind: TileKind): string {
+  switch (kind) {
+    case "grass": case "grass_alt": case "tall_grass": return PALETTE.grass;
+    case "marsh_grass": return PALETTE.marsh;
+    case "alpine_grass": return PALETTE.grassDark;
+    case "dry_grass": return PALETTE.sand;
+    case "path": case "cracked_path": return PALETTE.sandDark;
+    case "shore_sand": return PALETTE.sandLight;
+    case "stone": case "moss_stone": case "cobble": return PALETTE.stone;
+    case "gravel": case "pebbles": return PALETTE.stoneDark;
+    case "basalt": return PALETTE.night;
+    case "ash": return PALETTE.stone;
+    case "snow": case "snowdrift": return PALETTE.white;
+    case "ice": return "#cdeaf2";
+    default: return PALETTE.ink;
+  }
+}
+
 export class TileSet {
   properties(id: number): TileProperties {
     return TILES[id] ?? TILES[0]!;
@@ -235,8 +265,7 @@ export class TileSet {
   /** Lumière propre à une tuile, si elle en émet. */
   lightOf(id: number): TileProperties["light"] { return this.properties(id).light; }
 
-  draw(ctx: CanvasRenderingContext2D, id: number, x: number, y: number, frame = 0,
-    map?: TileMap): void {
+  draw(ctx: CanvasRenderingContext2D, id: number, x: number, y: number, frame = 0, map?: TileMap, wind?: Vec2): void {
     const px = x * TILE_SIZE;
     const py = y * TILE_SIZE;
     const kind = this.properties(id).kind;
@@ -329,8 +358,12 @@ export class TileSet {
       case "water":
       case "deep_water": {
         const deep = kind === "deep_water";
+        let dist = map ? map.waterDistAt(x, y) : (deep ? 4 : 2);
+        if (dist <= 1) { fill(ctx, PALETTE.waterLight, px, py, 16, 16); }
+        else if (dist <= 2) { melange(ctx, PALETTE.water, PALETTE.waterLight, 2 - dist, px, py, 16, 16); }
+        else if (dist <= 4) { melange(ctx, PALETTE.deepWater, PALETTE.water, (4 - dist) / 2, px, py, 16, 16); }
+        else { fill(ctx, PALETTE.deepWater, px, py, 16, 16); }
         const offset = Math.floor(frame / 18 + x * 2 + y) % 8;
-        fill(ctx, deep ? PALETTE.deepWater : PALETTE.water, px, py, 16, 16);
         fill(ctx, deep ? PALETTE.water : PALETTE.waterLight, px + offset - 4, py + 4, 8, 1);
         fill(ctx, deep ? PALETTE.pineDark : PALETTE.deepWater, px + 9 - offset / 2, py + 11, 7, 1);
         fill(ctx, PALETTE.waterLight, px + ((offset + 8) % 11), py + 14, 3, 1);
@@ -473,7 +506,7 @@ export class TileSet {
         }
         break;
       case "tall_grass": {
-        const sway = Math.sin((frame + x * 9 + y * 5) / 22) > 0 ? 1 : 0;
+        const sway = wind ? Math.round(Math.sin((x * wind.x + y * wind.y) * 0.15 + frame * 0.05) * Math.max(1, Math.abs(wind.x) * 1.5)) : (Math.sin((frame + x * 9 + y * 5) / 22) > 0 ? 1 : 0);
         for (let blade = 1; blade < 15; blade += 3) {
           const height = 8 + ((blade + x) % 5);
           fill(ctx, PALETTE.leafDark, px + blade + sway, py + 16 - height, 2, height);
@@ -482,7 +515,7 @@ export class TileSet {
         break;
       }
       case "wheat": {
-        const sway = Math.sin((frame + x * 11) / 26) > 0 ? 1 : 0;
+        const sway = wind ? Math.round(Math.sin((x * wind.x + y * wind.y) * 0.15 + frame * 0.05) * Math.max(1, Math.abs(wind.x) * 1.5)) : (Math.sin((frame + x * 11) / 26) > 0 ? 1 : 0);
         fill(ctx, PALETTE.soil, px, py + 13, 16, 3);
         for (let stem = 1; stem < 15; stem += 4) {
           fill(ctx, PALETTE.sandDark, px + stem + sway, py + 3, 1, 12);
@@ -492,12 +525,10 @@ export class TileSet {
         break;
       }
       case "cattail": {
-        const sway = Math.sin((frame + y * 13) / 30) > 0 ? 1 : 0;
-        fill(ctx, PALETTE.marsh, px, py + 11, 16, 5);
-        for (const stem of [3, 8, 12]) {
-          fill(ctx, PALETTE.pine, px + stem + sway, py + 2, 1, 13);
-          fill(ctx, PALETTE.woodDark, px + stem + sway - 1, py + 2, 3, 5);
-        }
+        const sway = wind ? Math.round(Math.sin((x * wind.x + y * wind.y) * 0.15 + frame * 0.05) * Math.max(1, Math.abs(wind.x) * 1.5)) : (Math.sin((frame + y * 13) / 30) > 0 ? 1 : 0);
+        fill(ctx, PALETTE.grassDark, px + 7 + sway, py + 4, 1, 12);
+        fill(ctx, PALETTE.woodDark, px + 6 + sway, py + 3, 3, 6);
+        fill(ctx, PALETTE.wood, px + 7 + sway, py + 3, 1, 4);
         break;
       }
       case "mushroom":
@@ -1022,6 +1053,10 @@ export class TileSet {
         patch(ctx, PALETTE.leaf, px, py, x, y, 0xe6, 0.18, 2, 2);
         break;
     }
+    if (map) {
+      const family = getBiomeFamily(kind);
+      if (family > 0) this.drawBiomeFringe(ctx, map, x, y, px, py, kind);
+    }
     ctx.restore();
   }
 
@@ -1054,6 +1089,35 @@ export class TileSet {
    * vallée ; un pixel sur deux donne un bord effrité, bien plus proche d'une
    * terre battue.
    */
+
+  private drawBiomeFringe(ctx: CanvasRenderingContext2D, map: TileMap, x: number, y: number, px: number, py: number, kind: TileKind): void {
+    const family = getBiomeFamily(kind);
+    if (family === 0) return;
+    const upKind = this.properties(map.tileAt("ground", x, y - 1)).kind;
+    const rightKind = this.properties(map.tileAt("ground", x + 1, y)).kind;
+    const downKind = this.properties(map.tileAt("ground", x, y + 1)).kind;
+    const leftKind = this.properties(map.tileAt("ground", x - 1, y)).kind;
+    if (getBiomeFamily(upKind) > family) this.paintFringe(ctx, px, py, upKind, "up");
+    if (getBiomeFamily(rightKind) > family) this.paintFringe(ctx, px, py, rightKind, "right");
+    if (getBiomeFamily(downKind) > family) this.paintFringe(ctx, px, py, downKind, "down");
+    if (getBiomeFamily(leftKind) > family) this.paintFringe(ctx, px, py, leftKind, "left");
+  }
+  private paintFringe(ctx: CanvasRenderingContext2D, px: number, py: number, neighborKind: TileKind, dir: "up" | "right" | "down" | "left"): void {
+    ctx.fillStyle = biomeFringeColor(neighborKind);
+    const drawPixel = (dx: number, dy: number, ratio: number) => {
+       if (dither(px + dx, py + dy, ratio)) ctx.fillRect(px + dx, py + dy, 1, 1);
+    };
+    if (dir === "up") {
+      for (let dy = 0; dy < 4; dy++) { const ratio = 1 - (dy / 4); for (let dx = 0; dx < 16; dx++) drawPixel(dx, dy, ratio); }
+    } else if (dir === "right") {
+      for (let dx = 12; dx < 16; dx++) { const ratio = (dx - 12) / 3; for (let dy = 0; dy < 16; dy++) drawPixel(dx, dy, ratio); }
+    } else if (dir === "down") {
+      for (let dy = 12; dy < 16; dy++) { const ratio = (dy - 12) / 3; for (let dx = 0; dx < 16; dx++) drawPixel(dx, dy, ratio); }
+    } else if (dir === "left") {
+      for (let dx = 0; dx < 4; dx++) { const ratio = 1 - (dx / 4); for (let dy = 0; dy < 16; dy++) drawPixel(dx, dy, ratio); }
+    }
+  }
+
   private drawPathFringe(ctx: CanvasRenderingContext2D, map: TileMap, x: number, y: number,
     px: number, py: number, sandy: boolean): void {
     const samePath = (tileX: number, tileY: number): boolean => {

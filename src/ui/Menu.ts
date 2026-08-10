@@ -1,3 +1,5 @@
+import { drawItemIcon } from "./Icons";
+import { drawNineSlice } from "./NineSlice";
 import { PALETTE } from "../data/palette";
 import { ACTIONABLE_ITEMS, ITEMS, isUsable, itemEffect, type ItemId } from "../data/items/core";
 import type { Journal, JournalSection } from "../systems/Journal";
@@ -122,11 +124,7 @@ export class Menu {
     ctx.save();
     ctx.fillStyle = "rgba(8,10,18,0.9)";
     ctx.fillRect(0, 0, VIEW_WIDTH, VIEW_HEIGHT);
-    ctx.fillStyle = PALETTE.night;
-    ctx.fillRect(14, 14, VIEW_WIDTH - 28, VIEW_HEIGHT - 28);
-    ctx.strokeStyle = PALETTE.sandLight;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(14.5, 14.5, VIEW_WIDTH - 29, VIEW_HEIGHT - 29);
+    drawNineSlice(ctx, 14, 14, VIEW_WIDTH - 28, VIEW_HEIGHT - 28, "dark");
 
     const tabWidth = (VIEW_WIDTH - 40) / TABS.length;
     TABS.forEach((tab, index) => {
@@ -178,7 +176,8 @@ export class Menu {
         ctx.fillStyle = PALETTE.yellow;
         ctx.fillRect(24, y - 2, 2, 14);
       }
-      drawText(ctx, definition.name, 32, y, { color: selected ? PALETTE.cream : PALETTE.stoneLight });
+      drawItemIcon(ctx, entry.id, 32, y - 2);
+      drawText(ctx, definition.name, 50, y, { color: selected ? PALETTE.cream : PALETTE.stoneLight });
       drawText(ctx, `×${entry.count}`, 194, y,
         { color: selected ? PALETTE.yellow : PALETTE.stoneDark, align: "right" });
     }

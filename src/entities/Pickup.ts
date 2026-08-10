@@ -1,3 +1,4 @@
+import { ombrePortee } from "../ui/Dither";
 import { PALETTE } from "../data/palette";
 import type { Rect, Vec2 } from "./Entity";
 
@@ -62,6 +63,7 @@ export class Pickup {
     const bob = Math.round(Math.sin((frame - this.birth) / 12) * 1.5);
     const x = Math.round(this.position.x);
     const y = Math.round(this.position.y) + bob;
+    ombrePortee(ctx, x + 8, Math.round(this.position.y), 6, 8);
 
     ctx.save();
     ctx.globalAlpha = 0.3;
