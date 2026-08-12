@@ -30,6 +30,7 @@ export const UPGRADES: readonly Upgrade[] = [
   { flag: "forge_1", label: "Lame Trempée", sword: 1 },
   { flag: "forge_2", label: "Lame de Lune", sword: 1 },
   { flag: "forge_3", label: "Lame des Marges", sword: 1 },
+  { flag: "act2_complete", label: "Sceau des Racines", hearts: 2 },
 ];
 
 /** Drapeaux des paliers de forge, dans l'ordre. */

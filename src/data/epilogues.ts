@@ -1,4 +1,23 @@
 export const EPILOGUES = {
+  /**
+   * Ce que la vallée dit une fois les Racines Creuses refermées. Il prime sur
+   * `release`/`root` : c'est le dernier mot, celui que la Chronique promettait
+   * à sa page blanche sans jamais l'écrire.
+   */
+  hollow: {
+    doyen_orme: "Des racines sous la Cime ? J'ai dirigé cette vallée quarante ans sans le savoir.",
+    mira: "Liane connaît des herbes que même moi je n'ai jamais vues.",
+    bram: "Elle m'a demandé pourquoi le fer chante sous le marteau. Je n'ai pas su répondre.",
+    nessa: "Le lac ne dit plus rien de nouveau. C'est reposant, pour changer.",
+    ryn: "On l'a vue rire. Une racine, ça rit !", tam: "J'avais raison depuis le début.",
+    colporteur: "Une compagne qui pousse des ronces ! Le marché n'est pas prêt.",
+    sylve: "Sylve dessine deux arbres qui se tiennent par la main.",
+    gorm: "Sous la Cime, hein. Je m'en doutais un peu, à vrai dire.",
+    iris: "Le nom du jeu qu'on joue depuis toujours, révélé à la fin. Ça m'amuse.",
+    crane: "Encore une racine qui parle. Ce monde ne cessera jamais de m'étonner.",
+    fermier_a: "On l'a vue porter l'eau aux jeunes pousses, la nuit.",
+    fermier_b: "Sans qu'on le lui demande. C'est bon signe.",
+  },
   release: {
     doyen_orme: "Elle est partie. La vallée devra apprendre à ne plus dépendre d'une seule racine.",
     mira: "Les graines qu'elle a laissées germent déjà.",

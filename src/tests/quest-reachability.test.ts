@@ -55,6 +55,10 @@ describe("atteignabilité des quêtes", () => {
     for (const flag of ["half_demon_skull", "boss_defeated", "lantern", "village_alarm"]) {
       advanceable.add(`flag:${flag}`);
     }
+    // Les Racines Creuses : Liane se recrute par une conversation en deux
+    // temps, et la Gardienne se bat à part, comme l'Arbre-Mère et le dragon.
+    advanceable.add("talkTo:liane");
+    advanceable.add("defeat:hollow_guardian");
 
     const blocked = quests.flatMap((quest) =>
       quest.steps

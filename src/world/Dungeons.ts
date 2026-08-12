@@ -100,8 +100,62 @@ export const VERTEPIERRE: DungeonDefinition = {
   ],
 };
 
+/**
+ * Les Racines Creuses.
+ *
+ * Sous la Cime Errante, là où l'Arbre-Mère plongeait ses dernières racines :
+ * dix salles, deux clés, une prisonnière et une gardienne. Le nom du jeu
+ * n'était encore expliqué nulle part — c'est ici qu'il l'est.
+ */
+export const RACINES_CREUSES: DungeonDefinition = {
+  id: "racines_creuses",
+  name: "LES RACINES CREUSES",
+  columns: 4,
+  rows: 3,
+  floor: TILE.hollowFloor,
+  wall: TILE.giantRoot,
+  rooms: [
+    { x: 0, y: 2, kind: "entrance", guards: [], links: [
+      { edge: "east", locked: false }, { edge: "north", locked: false },
+    ] },
+    { x: 1, y: 2, kind: "hall", guards: ["spore_stalker", "spore_stalker"], dropsKey: true, links: [
+      { edge: "west", locked: false }, { edge: "east", locked: false }, { edge: "north", locked: false },
+    ] },
+    { x: 2, y: 2, kind: "hall", guards: ["root_horror"], links: [
+      { edge: "west", locked: false }, { edge: "north", locked: false }, { edge: "east", locked: true },
+    ] },
+    { x: 3, y: 2, kind: "treasure", guards: ["crystal_sentinel"], prize: "rupees", links: [
+      { edge: "west", locked: true }, { edge: "north", locked: false },
+    ] },
+    { x: 0, y: 1, kind: "trial", guards: ["crystal_sentinel"], dropsKey: true, links: [
+      { edge: "south", locked: false }, { edge: "east", locked: false }, { edge: "north", locked: false },
+    ] },
+    { x: 1, y: 1, kind: "hall", guards: ["root_horror", "root_horror"], links: [
+      { edge: "south", locked: false }, { edge: "west", locked: false },
+      { edge: "east", locked: false }, { edge: "north", locked: true },
+    ] },
+    { x: 2, y: 1, kind: "trial", guards: ["spore_stalker", "root_horror"], dropsKey: true, links: [
+      { edge: "south", locked: false }, { edge: "west", locked: false }, { edge: "east", locked: false },
+    ] },
+    { x: 3, y: 1, kind: "treasure", guards: ["crystal_sentinel"], prize: "heart_shard", links: [
+      { edge: "south", locked: false }, { edge: "west", locked: false },
+    ] },
+    // Le Sanctuaire des Semis : aucune garde. Liane s'y trouve, et ce silence
+    // est la seule annonce dont elle a besoin.
+    { x: 0, y: 0, kind: "treasure", guards: [], links: [
+      { edge: "south", locked: false },
+    ] },
+    // La gardienne se bat seule : aucun garde déclaré, elle est instanciée
+    // à part dans le moteur, comme l'Arbre-Mère.
+    { x: 1, y: 0, kind: "boss", guards: [], links: [
+      { edge: "south", locked: true },
+    ] },
+  ],
+};
+
 export const DUNGEONS: Readonly<Record<string, DungeonDefinition>> = {
   vertepierre: VERTEPIERRE,
+  racines_creuses: RACINES_CREUSES,
 };
 
 export function roomAt(dungeon: DungeonDefinition, x: number, y: number): DungeonRoom | null {
@@ -138,6 +192,11 @@ export function createRoomMap(dungeon: DungeonDefinition, room: DungeonRoom,
     decor_above: new Array<number>(W * H).fill(0),
   };
   const seed = hash2(room.x, room.y, 0x7e57);
+  // Les Racines Creuses réutilisent le même bâtisseur de salles que
+  // Vertepierre, mais rien n'y doit ressembler à des ruines de pierre :
+  // colonnes et lumière changent de matière.
+  const hollow = dungeon.id === "racines_creuses";
+  const pillar = hollow ? TILE.giantRoot : TILE.ruinColumn;
 
   for (let x = 0; x < W; x += 1) {
     layers.terrain[at(x, 0)] = dungeon.wall;
@@ -170,12 +229,12 @@ export function createRoomMap(dungeon: DungeonDefinition, room: DungeonRoom,
   } else if (room.kind === "trial") {
     // Colonnes en quinconce : de quoi se mettre à couvert d'un lanceur.
     for (const [cx, cy] of [[6, 4], [10, 8], [14, 4], [18, 8]] as const) {
-      layers.terrain[at(cx, cy)] = TILE.ruinColumn;
-      layers.decor_above[at(cx, cy - 1)] = TILE.archTop;
+      layers.terrain[at(cx, cy)] = pillar;
+      if (!hollow) layers.decor_above[at(cx, cy - 1)] = TILE.archTop;
     }
   } else {
     for (const [cx, cy] of [[5, 5], [W - 6, 5], [5, H - 4], [W - 6, H - 4]] as const) {
-      layers.terrain[at(cx, cy)] = TILE.ruinColumn;
+      layers.terrain[at(cx, cy)] = pillar;
     }
   }
 
@@ -186,6 +245,18 @@ export function createRoomMap(dungeon: DungeonDefinition, room: DungeonRoom,
       if (Math.abs(x - W / 2) < 3 && Math.abs(y - H / 2) < 3) continue;
       if (randomAt(x, y, seed) > 0.045) continue;
       layers.decor_below[at(x, y)] = TILE.pebbles;
+    }
+  }
+
+  // Sous les Racines Creuses, ce sont des champignons qui remplacent les
+  // torches — c'est même leur seule source de lumière.
+  if (hollow) {
+    for (let y = 3; y < H - 3; y += 1) {
+      for (let x = 3; x < W - 3; x += 1) {
+        if (layers.terrain[at(x, y)] !== 0 || layers.decor_below[at(x, y)] !== 0) continue;
+        if (randomAt(x, y, seed ^ 0x2c0e) > 0.035) continue;
+        layers.decor_below[at(x, y)] = TILE.glowSpore;
+      }
     }
   }
 

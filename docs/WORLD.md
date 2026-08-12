@@ -47,8 +47,10 @@ une créature.
 - **Château de Cendre** [5,2] — Gardes de Cendre, Crâne du Demi-Démon.
 - **Tour de Lune** [0,2] — Maëlis et le Chat-Lanterne.
 - **Ermitage de Gorm** [7,2] — Gorm, et ce qu'il sait de la Cime.
-- **La Cime Errante** [7,0] — plateau dallé, arène de l'Arbre-Mère.
+- **La Cime Errante** [7,0] — plateau dallé, arène de l'Arbre-Mère ; une fois
+  `postgame` posé, une fissure y ouvre sur les Racines Creuses, un donjon à
+  salles indépendant de la grille (voir `Dungeons.ts`).
 
 Les changements majeurs sont persistants : retour de la source, rivière en eau,
 forêt reconfigurée, passage vers les Marches, trois sceaux, niveau haut du lac,
-moulin en marche et deux états post-game.
+moulin en marche et trois états post-game (Libérer, Enraciner, Racines Creuses).

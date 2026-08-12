@@ -105,4 +105,7 @@ const SCRIPTED_LAIRS: Readonly<Record<string, string>> = {
   mother_tree: "boss_arena",
   green_knight: "vertepierre",
   dragon: "caldeira",
+  // La Gardienne se bat sous la Cime, mais aucune région de la grille ne mène
+  // à sa salle : la fissure d'entrée, elle, reste à la Cime Errante.
+  hollow_guardian: "boss_arena",
 };

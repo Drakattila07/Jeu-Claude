@@ -326,9 +326,53 @@ que l'arrivée soit libre *et* reliée au réseau principal. Un automate joue
 - Le signe « × » manquait à la police : chaque quantité du sac s'affichait
   « ?4 »
 
+## Acte II — Les Racines Creuses ✅
+
+Le jeu se terminait sur un choix, jamais sur une réponse : la page 12 de la
+Chronique promettait une suite (« la suite appartient à celle qui lira ces
+pages ») que rien ne tenait, et le titre du jeu lui-même n'était expliqué
+nulle part. Un contenu de post-partie complet répare les deux à la fois.
+
+- Nouveau donjon à salles `racines_creuses`, dix salles pour neuf à
+  Vertepierre, bâti sur le même système générique (`Dungeons.ts`/
+  `Fortress.ts`) — aucune extension de la grille des 90 zones, aucun risque
+  sur les tests de connexité existants
+- Trois tuiles neuves (`hollow_floor`, `giant_root`, `glow_spore`) : la seule
+  matière du jeu qui n'appartienne à aucun biome de surface, avec ses propres
+  piliers et sa propre source de lumière
+- Une vraie gardienne de fin, `HollowGuardian` : vingt cœurs, trois phases,
+  anneau de racines à esquiver puis fenêtre de faiblesse, spores dès la
+  deuxième phase, cage de racines en troisième — sans brasier ni forme
+  démoniaque, un combat qui se tient seul
+- Une compagne permanente, `Companion` (Liane) : recrutée en deux répliques,
+  elle ne s'efface jamais en changeant de région ni de donjon — à la
+  différence du Chat-Lanterne — se bat à ses côtés (ronces sur les ennemis et
+  sur la Gardienne) et fait tourner son bavardage
+- Deux créatures neuves (Vigie des Spores, Sentinelle de Cristal) et
+  réemploi de la Horreur des Racines, déclarée depuis longtemps mais jamais
+  posée nulle part
+- Portail conditionnel à la Cime Errante, gardé par le drapeau `postgame`
+  déjà posé (et jusque-là inutilisé) à la fin de l'Acte IV ; nouvelle quête
+  `racines_creuses` à déclenchement automatique
+- Huitième palier de dialogue post-partie (`hollow`), prioritaire sur les
+  deux épilogues Libérer/Enraciner, pour huit habitants
+- Correctif profité au passage : mourir dans une forteresse laissait le jeu
+  convaincu d'y être encore une fois respawné dehors — `Fortress.leave()`
+  manquait au retour au puits. Vertepierre en bénéficie aussi.
+- Trente tests neufs : topologie du donjon (salles reliées dans les deux
+  sens, atteignables, clés ≥ verrous), phases et fenêtres de la gardienne,
+  suivi et bavardage de la compagne
+
+## Vallée — atmosphère de fond ✅
+
+Deux biomes dessinaient un décor sans jamais bouger : ni fumée de cheminée au
+village, ni duvet ni pollen aux champs, alors que `forest`, `lake` et `marsh`
+en avaient depuis longtemps. `EnvironmentOverlay` leur donne chacun leur
+ambiance propre, sans toucher à la génération du terrain.
+
 ## État final
 
 Le jeu respecte TypeScript strict, le Canvas 2D pur, l'upscale entier, les
-données séparées du moteur et la simulation déterministe à 60 Hz. 126 tests
+données séparées du moteur et la simulation déterministe à 60 Hz. 295 tests
 unitaires, validation des données et du monde généré, et une partie automatique
-sans incident sur les 56 régions.
+sans incident sur les 90 régions.

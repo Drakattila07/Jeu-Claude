@@ -182,6 +182,17 @@ export const ITEMS = {
     name: "Licol du mulet", stack: 1,
     description: "Il s'appelle Grognon. Le nom n'est pas de vous.",
   },
+
+  // — Les Racines Creuses —
+
+  root_key: {
+    name: "Clé-Racine", stack: 3,
+    description: "Tressée, pas forgée. Elle plie sans casser dans la serrure.",
+  },
+  root_charm: {
+    name: "Sceau des Racines", stack: 1,
+    description: "Un nœud de fibre et de cristal. Liane l'a noué elle-même.",
+  },
 } as const satisfies Record<string, ItemDefinition>;
 
 export type ItemId = keyof typeof ITEMS;

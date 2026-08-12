@@ -25,7 +25,10 @@ export type TileKind =
   // Le large et le volcan.
   | "open_sea" | "swell" | "coral" | "bollard" | "net" | "driftwood" | "palm"
   | "lava" | "basalt" | "ash" | "obsidian" | "lighthouse" | "sea_rock"
-  | "hull" | "portcullis";
+  | "hull" | "portcullis"
+  // Les Racines Creuses : la seule matière du jeu qui n'existe sous aucun
+  // biome de surface.
+  | "hollow_floor" | "giant_root" | "glow_spore";
 
 export interface TileProperties {
   readonly kind: TileKind;
@@ -147,6 +150,9 @@ const TILES: readonly TileProperties[] = [
   /* 93 */ { kind: "sea_rock", solid: true },
   /* 94 */ { kind: "hull", solid: true, burnable: true },
   /* 95 */ { kind: "portcullis", solid: true },
+  /* 96 */ { kind: "hollow_floor" },
+  /* 97 */ { kind: "giant_root", solid: true },
+  /* 98 */ { kind: "glow_spore", light: { radius: 50, color: "#7cffc4" } },
 ];
 
 /** Indices nommés, pour que les générateurs restent lisibles. */
@@ -170,13 +176,14 @@ export const TILE = {
   openSea: 81, swell: 82, coral: 83, bollard: 84, net: 85, driftwood: 86,
   palm: 87, lava: 88, basalt: 89, ash: 90, obsidian: 91, lighthouse: 92,
   seaRock: 93, hull: 94, portcullis: 95,
+  hollowFloor: 96, giantRoot: 97, glowSpore: 98,
 } as const;
 
 /** Tuiles repeintes à chaque image : eau, flammes, herbe qui ondule. */
 const ANIMATED = new Set<number>([
   TILE.water, TILE.deepWater, TILE.lilypad, TILE.fireplace, TILE.brazier,
   TILE.tallGrass, TILE.wheat, TILE.cattail, TILE.banner, TILE.shrineStone,
-  TILE.lava, TILE.lighthouse,
+  TILE.lava, TILE.lighthouse, TILE.glowSpore,
 ]);
 
 function fill(ctx: CanvasRenderingContext2D, color: string, x: number, y: number,
@@ -1052,6 +1059,46 @@ export class TileSet {
         patch(ctx, PALETTE.deepWater, px, py, x, y, 0xe4, 0.3, 5, 3);
         patch(ctx, PALETTE.leaf, px, py, x, y, 0xe6, 0.18, 2, 2);
         break;
+
+      // — Les Racines Creuses —
+      case "hollow_floor":
+        // Terre de racine, tassée par des siècles de sève : ni herbe ni
+        // pavé, la seule matière qui n'appartient à aucun biome de surface.
+        fill(ctx, PALETTE.soil, px, py, 16, 16);
+        specks(ctx, PALETTE.woodDark, px, py, x, y, 0xf1, 7);
+        specks(ctx, PALETTE.pineDark, px, py, x, y, 0xf2, 5);
+        patch(ctx, PALETTE.wood, px, py, x, y, 0xf3, 0.22, 5, 1);
+        patch(ctx, PALETTE.pineDark, px, py, x, y, 0xf4, 0.16, 3, 3);
+        break;
+      case "giant_root":
+        // Un pilier vivant plutôt qu'une colonne : deux racines torses
+        // portent une arche d'écorce, assez large pour barrer un couloir.
+        shadow(ctx, px, py, 15);
+        fill(ctx, PALETTE.woodDark, px + 1, py, 4, 16);
+        fill(ctx, PALETTE.woodDark, px + 11, py, 4, 16);
+        fill(ctx, PALETTE.wood, px + 2, py + 1, 2, 14);
+        fill(ctx, PALETTE.wood, px + 12, py + 1, 2, 14);
+        fill(ctx, PALETTE.woodDark, px + 4, py + 2, 8, 5);
+        fill(ctx, PALETTE.woodLight, px + 5, py + 3, 3, 2);
+        fill(ctx, PALETTE.leafDark, px, py + 12, 5, 4);
+        fill(ctx, PALETTE.leafDark, px + 11, py + 13, 5, 3);
+        fill(ctx, PALETTE.ink, px + 6, py + 6, 4, 8);
+        break;
+      case "glow_spore": {
+        // Champignon bioluminescent, pas décoratif seulement : c'est lui qui
+        // éclaire les Racines Creuses, faute de torches sous terre.
+        const pulse = (Math.sin(frame / 20 + x + y) + 1) / 2;
+        fill(ctx, PALETTE.woodDark, px + 6, py + 10, 4, 6);
+        fill(ctx, PALETTE.wood, px + 7, py + 11, 2, 5);
+        ctx.globalAlpha = 0.5 + pulse * 0.5;
+        fill(ctx, "#3fae82", px + 3, py + 4, 10, 8);
+        fill(ctx, "#7cffc4", px + 5, py + 5, 6, 5);
+        ctx.globalAlpha = 0.7 + pulse * 0.3;
+        fill(ctx, PALETTE.white, px + 6, py + 6, 2, 2);
+        fill(ctx, PALETTE.white, px + 9, py + 7, 1, 1);
+        ctx.globalAlpha = 1;
+        break;
+      }
     }
     if (map) {
       const family = getBiomeFamily(kind);

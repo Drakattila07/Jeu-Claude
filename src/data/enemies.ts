@@ -127,6 +127,16 @@ export const ENEMY_TYPES = {
     name: "Rôdeur de l'estran", hearts: 6, speed: 1, damage: 2, behavior: "hunt",
     color: "sand", aggro: 140, reach: 26, windup: 24, bounty: 15,
   },
+
+  // — Les Racines Creuses, sous la Cime Errante —
+  spore_stalker: {
+    name: "Vigie des Spores", hearts: 4, speed: 0.62, damage: 2, behavior: "caster",
+    color: "leaf", aggro: 170, reach: 140, windup: 42, bounty: 14, ranged: true,
+  },
+  crystal_sentinel: {
+    name: "Sentinelle de Cristal", hearts: 9, speed: 0.5, damage: 3, behavior: "charger",
+    color: "purple", aggro: 150, reach: 30, windup: 32, bounty: 20,
+  },
 } as const satisfies Record<string, EnemyDefinition>;
 
 export type EnemyType = keyof typeof ENEMY_TYPES;

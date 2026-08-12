@@ -248,6 +248,18 @@ export const INTERACTABLES = [
   { id: "satchel_gift", zone: "quai_des_carenes", kind: "chest", x: 240, y: 208,
     text: "Sarn a cousu un double fond dans une vieille besace. Elle est pour vous.",
     grants: { item: "bigger_satchel", count: 1 } },
+
+  // — Les Racines Creuses : ce que l'Arbre-Mère laisse derrière elle —
+
+  {
+    id: "hollow_gate", zone: "boss_arena", kind: "door", x: 352, y: 352,
+    text: "Descendre dans les Racines Creuses.",
+    requires: {
+      flags: ["postgame"],
+      refusal: "Une fissure sombre s'ouvre entre les dalles, mais elle reste muette. "
+        + "Il faudrait d'abord régler son sort à l'Arbre-Mère.",
+    },
+  },
 ] as const satisfies readonly InteractableData[];
 
 /**

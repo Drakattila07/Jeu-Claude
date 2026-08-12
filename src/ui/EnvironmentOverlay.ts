@@ -91,6 +91,26 @@ export class EnvironmentOverlay {
         ctx.fillStyle = PALETTE.stoneLight;
         ctx.fillRect(x, y, 1, 1);
       }
+    } else if (biome === "village") {
+      // Fumée de cheminée, lente et montante : la place manquait de vie
+      // ambiante alors que c'est le lieu où l'on s'attarde le plus.
+      ctx.globalAlpha = 0.3;
+      for (let index = 0; index < 6; index += 1) {
+        const rise = (Math.floor(frame / 6) + index * 47) % 150;
+        const x = (index * 61 + 20) % VIEW_WIDTH;
+        const y = VIEW_HEIGHT - 20 - rise;
+        ctx.fillStyle = index % 2 === 0 ? PALETTE.cream : PALETTE.sandLight;
+        ctx.fillRect(x, y, 1, 2);
+      }
+    } else if (biome === "fields") {
+      // Duvet et pollen, chassés à l'horizontale par le vent des champs.
+      ctx.globalAlpha = 0.4;
+      for (let index = 0; index < 10; index += 1) {
+        const x = (index * 43 + frame) % (VIEW_WIDTH + 12);
+        const y = 34 + (index * 19) % 158;
+        ctx.fillStyle = index % 3 === 0 ? PALETTE.cream : PALETTE.grassLight;
+        ctx.fillRect(x, y, 1, 1);
+      }
     }
     ctx.restore();
   }

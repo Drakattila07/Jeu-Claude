@@ -97,5 +97,11 @@ export const QUESTS = [
   { id: "panier_du_lac", title: "Le Panier du Lac", giver: "nessa", prerequisites: ["fishing_unlocked"], steps: [
     { id: "prises", type: "collect", target: "fish", count: 4,
       hint: "Quai du Lac : quatre poissons pour remplir le panier." }
-  ], rewards: [{ type: "rupees", id: "prime", amount: 80 }], worldEffects: [] }
+  ], rewards: [{ type: "rupees", id: "prime", amount: 80 }], worldEffects: [] },
+  { id: "racines_creuses", title: "Les Racines Creuses", giver: "auto", prerequisites: ["postgame"], steps: [
+    { id: "liane", type: "talkTo", target: "liane",
+      hint: "Sanctuaire des Semis : quelque chose remue entre les racines." },
+    { id: "gardienne", type: "defeat", target: "hollow_guardian",
+      hint: "Cœur des Racines Creuses : la Gardienne referme le passage derrière elle." }
+  ], rewards: [{ type: "flag", id: "act2_complete" }], worldEffects: [] }
 ] as const satisfies readonly QuestDefinition[];

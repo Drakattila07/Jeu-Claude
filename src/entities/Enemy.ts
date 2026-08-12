@@ -519,6 +519,42 @@ export class Enemy extends Entity {
         ctx.fillRect(x + 4, y + 6, 2, 2);
         ctx.fillRect(x + 10, y + 6, 2, 2);
         break;
+      case "spore_stalker": {
+        // Une tige coiffée d'un chapeau qui gonfle avant de lâcher sa spore :
+        // le gonflement, c'est l'annonce, avant même la fenêtre de windup.
+        const swell = this.state === "windup"
+          ? Math.min(3, Math.floor((this.stateFrames / this.definition.windup) * 4)) : 0;
+        ctx.fillStyle = PALETTE.ink;
+        ctx.fillRect(x + 6, y + 6, 4, 10);
+        ctx.fillRect(x + 2 - swell, y - swell, 12 + swell * 2, 10 + swell);
+        ctx.fillStyle = PALETTE.woodDark;
+        ctx.fillRect(x + 7, y + 8, 2, 8);
+        ctx.fillStyle = tint;
+        ctx.fillRect(x + 3 - swell, y + 1 - swell, 10 + swell * 2, 8 + swell);
+        ctx.fillStyle = PALETTE.leafLight;
+        ctx.fillRect(x + 5 - swell, y + 2 - swell, 3, 2);
+        ctx.fillRect(x + 9, y + 3, 2, 2);
+        ctx.fillStyle = PALETTE.purple;
+        ctx.fillRect(x + 6, y + 4, 1, 1);
+        ctx.fillRect(x + 9, y + 5, 1, 1);
+        break;
+      }
+      case "crystal_sentinel": {
+        const pulse = Math.floor(this.aiFrame / 10) % 2;
+        ctx.fillStyle = PALETTE.ink;
+        ctx.fillRect(x + 2, y + 1, 12, 15);
+        ctx.fillStyle = PALETTE.stoneDark;
+        ctx.fillRect(x + 3, y + 2, 10, 13);
+        ctx.fillStyle = tint;
+        ctx.fillRect(x + 4, y + 3, 8, 9);
+        ctx.fillStyle = PALETTE.stoneLight;
+        ctx.fillRect(x + 4, y + 12, 8, 3);
+        ctx.fillStyle = pulse === 0 ? PALETTE.waterLight : PALETTE.purple;
+        ctx.fillRect(x + 6, y + 4, 4, 5);
+        ctx.fillStyle = PALETTE.white;
+        ctx.fillRect(x + 7, y + 5, 2, 2);
+        break;
+      }
       default:
         ctx.fillStyle = PALETTE.ink;
         ctx.fillRect(x + 2, y + 3, 12, 12);

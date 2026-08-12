@@ -85,6 +85,8 @@ import {
 } from "../world/Dungeons";
 import { Dragon } from "../entities/Dragon";
 import { drawText } from "../ui/Font";
+import { HollowGuardian } from "../entities/HollowGuardian";
+import { Companion, COMPANION_REACH } from "../entities/Companion";
 
 export const FIXED_STEP_MS = 1000 / 60;
 export const MAX_FRAME_DELTA_MS = 250;
@@ -146,6 +148,8 @@ export class Game {
   private readonly sideActivities = new SideActivities(this.flags, this.quests);
   private readonly fishing = new Fishing();
   private boss: MotherTreeBoss | null = null;
+  private hollowBoss: HollowGuardian | null = null;
+  private companion: Companion | null = null;
   private endingPending = false;
   private readonly audio = new Audio();
   private readonly particles = new Particles();
@@ -578,9 +582,11 @@ export class Game {
     this.checkFestival();
     this.sufferWeather();
     this.familiar?.update();
+    this.companion?.update();
     this.updateNpcs();
     this.updateEnemies();
     this.updateBoss();
+    this.updateHollowGuardian();
     this.updateProjectiles();
     this.updatePickups();
 
@@ -752,6 +758,7 @@ export class Game {
       }
     }
     this.updateFamiliarCombat();
+    this.updateCompanionCombat();
   }
 
   /**
@@ -802,6 +809,31 @@ export class Game {
       { x: cat.position.x + 8, y: cat.position.y + 6 },
       { x: dx / length, y: dy / length }, "ember", "player"));
     this.particles.emit(cat.position.x + 8, cat.position.y, "ember", 5);
+  }
+
+  /**
+   * Liane au combat.
+   *
+   * Une ronce sur ce qui approche, la Gardienne comprise — elle ne perce pas
+   * son écorce fermée, mais Liane n'a pas besoin de le savoir pour essayer.
+   */
+  private updateCompanionCombat(): void {
+    const liane = this.companion;
+    if (!liane?.isFollowing || !liane.ready) return;
+    const bossCentre = this.hollowBoss?.active
+      ? { x: this.hollowBoss.position.x + 24, y: this.hollowBoss.position.y + 34 } : null;
+    const target = (bossCentre && liane.distanceTo(bossCentre) <= COMPANION_REACH)
+      ? bossCentre
+      : this.enemies.find((enemy) => enemy.active
+        && liane.distanceTo(enemy.position) <= COMPANION_REACH)?.position;
+    if (!target || !liane.spark()) return;
+    const dx = target.x - liane.position.x;
+    const dy = target.y - liane.position.y;
+    const length = Math.max(1, Math.hypot(dx, dy));
+    this.projectiles.push(new Projectile(
+      { x: liane.position.x + 8, y: liane.position.y + 6 },
+      { x: dx / length, y: dy / length }, "seed", "player"));
+    this.particles.emit(liane.position.x + 8, liane.position.y, "leaf", 5);
   }
 
   /**
@@ -857,6 +889,32 @@ export class Game {
     }
     for (const spike of boss.spikeBounds()) {
       if (!overlaps(spike, playerBox)) continue;
+      if (this.player.takeDamage(2, { x: 0, y: -1 })) this.onPlayerHurt(2);
+    }
+  }
+
+  private updateHollowGuardian(): void {
+    const guardian = this.hollowBoss;
+    if (!guardian?.active) return;
+    guardian.update();
+    const playerBox = {
+      x: this.player.position.x + this.player.hitbox.x,
+      y: this.player.position.y + this.player.hitbox.y,
+      width: this.player.hitbox.width,
+      height: this.player.hitbox.height,
+    };
+    for (const spore of guardian.spores) {
+      if (!spore.active) continue;
+      const box = { x: spore.x - 3, y: spore.y - 3, width: 6, height: 6 };
+      if (!overlaps(box, playerBox)) continue;
+      spore.active = false;
+      const dx = this.player.position.x - spore.x;
+      const dy = this.player.position.y - spore.y;
+      const length = Math.max(1, Math.hypot(dx, dy));
+      if (this.player.takeDamage(1, { x: dx / length, y: dy / length })) this.onPlayerHurt(1);
+    }
+    for (const eruption of guardian.eruptionBounds()) {
+      if (!overlaps(eruption, playerBox)) continue;
       if (this.player.takeDamage(2, { x: 0, y: -1 })) this.onPlayerHurt(2);
     }
   }
@@ -979,6 +1037,23 @@ export class Game {
             PALETTE.stoneLight);
         }
         if (defeated) this.onBossDefeated();
+      }
+    }
+
+    if (this.hollowBoss?.active) {
+      const guardian = this.hollowBoss;
+      if (overlaps(sword, guardian.bounds) && this.combat.confirmHit("hollow_guardian", true)) {
+        const wasExposed = guardian.isExposed;
+        const defeated = guardian.hit(damage);
+        this.audio.playSfx(wasExposed ? "hit" : "deny");
+        if (wasExposed) {
+          this.floaters.damage(guardian.position.x + 24, guardian.position.y + 10, damage, true);
+          this.particles.emit(guardian.position.x + 24, guardian.position.y + 34, "spark", 10);
+        } else {
+          this.floaters.push(guardian.position.x + 24, guardian.position.y + 10, "écorce",
+            PALETTE.stoneLight);
+        }
+        if (defeated) this.onHollowGuardianDefeated();
       }
     }
 
@@ -1111,6 +1186,27 @@ export class Game {
     this.textBox.open("L'Arbre-Mère s'agenouille. X : la libérer · C : l'enraciner.");
   }
 
+  /**
+   * La Gardienne des Racines n'a pas de choix binaire à offrir : elle gardait
+   * un lieu, pas un destin. La refermer suffit à finir ce que l'Arbre-Mère
+   * avait laissé en plan sous la Cime.
+   */
+  private onHollowGuardianDefeated(): void {
+    if (this.flags.has("hollow_guardian_felled")) return;
+    this.flags.set("hollow_guardian_felled");
+    this.quests.notify("defeat", "hollow_guardian", this.frame);
+    this.inventory.add("root_charm");
+    this.progression.apply(this.player);
+    this.combat.impact(5, 26);
+    this.particles.emit(this.player.position.x + 8, this.player.position.y, "ring", 30);
+    this.audio.playSfx("secret");
+    this.showNotice("LA GARDIENNE SE TAIT — les Racines Creuses sont franchies.", 300);
+    this.textBox.open(
+      "La Gardienne s'affaisse en un nœud de racines mortes. Le silence qui suit "
+      + "n'est pas vide : c'est celui d'un lieu enfin sans travail à faire.",
+      "Les Racines Creuses");
+  }
+
   private onPlayerHurt(amount: number): void {
     this.audio.playSfx("hurt");
     this.combat.impact(3, 10);
@@ -1153,6 +1249,17 @@ export class Game {
               projectile.damage);
           }
           if (defeated) this.onBossDefeated();
+        }
+        if (this.hollowBoss?.active && overlaps(projectile.bounds, this.hollowBoss.bounds)) {
+          const wasExposed = this.hollowBoss.isExposed;
+          const defeated = this.hollowBoss.hit(projectile.damage);
+          this.particles.emit(projectile.position.x, projectile.position.y, "spark", 14);
+          projectile.destroy();
+          if (wasExposed) {
+            this.floaters.damage(this.hollowBoss.position.x + 24, this.hollowBoss.position.y + 10,
+              projectile.damage);
+          }
+          if (defeated) this.onHollowGuardianDefeated();
         }
         for (const enemy of this.enemies) {
           if (!projectile.active || !enemy.active || !overlaps(projectile.bounds, enemy.bounds)) continue;
@@ -1401,6 +1508,7 @@ export class Game {
       this.projectiles = [];
       this.familiar = null;
       this.boss = null;
+      this.hollowBoss = null;
       this.hud.announce(HOUSE_LABELS[houseTradeFor(seed)]);
       this.showNotice(houseTradeFor(seed) === "auberge"
         ? "Un lit libre au fond : X pour dormir jusqu'au matin."
@@ -1419,6 +1527,10 @@ export class Game {
     }
     if (this.familiar && this.familiar.distanceTo(this.player.position) <= 34) {
       this.blessFromFamiliar();
+      return;
+    }
+    if (this.companion && this.companion.distanceTo(this.player.position) <= 34) {
+      this.talkToLiane();
       return;
     }
 
@@ -1465,6 +1577,7 @@ export class Game {
         return;
       }
       if (nearest.data.id === "fortress_gate") this.enterFortress("vertepierre");
+      else if (nearest.data.id === "hollow_gate") this.enterFortress("racines_creuses");
       else {
         this.enterInterior(nearest.data.id === "hermitage_door" ? "hermitage"
           : nearest.data.id === "castle_gate" ? "castle"
@@ -1479,11 +1592,13 @@ export class Game {
   }
 
   private talkTo(npc: Npc): void {
-    const postgameLine = this.flags.has("ending_release")
-      ? epilogueLine("release", npc.data.id)
-      : this.flags.has("ending_root")
-        ? epilogueLine("root", npc.data.id)
-        : null;
+    const postgameLine = this.flags.has("act2_complete")
+      ? epilogueLine("hollow", npc.data.id)
+      : this.flags.has("ending_release")
+        ? epilogueLine("release", npc.data.id)
+        : this.flags.has("ending_root")
+          ? epilogueLine("root", npc.data.id)
+          : null;
     const line = postgameLine ?? (npc.data.id === "sylve"
       ? this.hints.hint(this.camera.zone)
       : npc.talk(this.events));
@@ -2339,6 +2454,41 @@ export class Game {
     this.audio.playSfx("secret");
   }
 
+  /**
+   * Liane.
+   *
+   * Deux répliques avant qu'elle ne se décide, puis elle suit — sans jamais
+   * s'effacer au changement de région, contrairement au Chat-Lanterne. Une
+   * fois recrutée, la même touche fait juste tourner son bavardage.
+   */
+  private talkToLiane(): void {
+    const liane = this.companion;
+    if (!liane) return;
+    if (liane.isFollowing) {
+      this.textBox.open(liane.nextBanter(), "Liane", "liane");
+      return;
+    }
+    if (!this.flags.has("liane_met")) {
+      this.flags.set("liane_met");
+      this.textBox.open(
+        "« ...Vous voyez encore la lumière ? Je suis restée ici pendant que l'Arbre-Mère "
+        + "rêvait de racines. Je crois qu'elle m'a oubliée, en se réveillant. »",
+        "Liane", "liane");
+      return;
+    }
+    this.flags.set("liane_recruited");
+    liane.follow(this.player.position);
+    this.quests.notify("talkTo", "liane", this.frame);
+    this.audio.playSfx("secret");
+    this.particles.emit(liane.position.x + 8, liane.position.y + 8, "leaf", 16);
+    this.journal.notePerson("liane", "Liane",
+      "Une graine de l'Arbre-Mère, oubliée sous la Cime. Elle vous suit, désormais.",
+      this.clock.day);
+    this.textBox.open(
+      "« Alors je viens. Je n'ai jamais vu la vallée d'en haut — juste ses racines. »",
+      "Liane", "liane");
+  }
+
   private toggleDemonForm(): void {
     if (!this.flags.has("half_demon_skull")) {
       this.showNotice("Une force ancienne manque encore.", 90);
@@ -2593,7 +2743,8 @@ export class Game {
       this.interior = null;
       this.player.setSailing(false);
       this.loadRoom(null);
-      this.hud.announce(this.fortress.name, "Trois portes, trois clés");
+      this.hud.announce(this.fortress.name,
+        id === "racines_creuses" ? "Ce que l'Arbre-Mère laisse derrière elle" : "Trois portes, trois clés");
     });
   }
 
@@ -2627,6 +2778,17 @@ export class Game {
     this.boss = null;
     this.enemies = this.fortress.spawns().map((spawn) => new Enemy(spawn, this.player, this.map));
     this.particles.clear();
+
+    // Les Racines Creuses : la Gardienne se réveille dans sa salle, et Liane
+    // n'existe que dans la sienne tant qu'elle n'a pas choisi de vous suivre.
+    this.hollowBoss = (definition.id === "racines_creuses" && room.kind === "boss"
+      && !this.flags.has("hollow_guardian_felled")) ? new HollowGuardian(this.player) : null;
+    if (this.companion && !this.companion.isFollowing) this.companion = null;
+    if (definition.id === "racines_creuses" && room.x === 0 && room.y === 0
+      && !this.flags.has("liane_recruited")) {
+      this.companion = new Companion({ x: 120, y: 96 });
+      this.showNotice("Quelque chose remue entre les racines, au fond de la salle.", 200);
+    }
   }
 
   /** Franchissement d'une porte entre deux salles. */
@@ -2657,11 +2819,24 @@ export class Game {
     return { x: this.player.position.x, y: height - 18 };
   }
 
+  /** Chaque donjon a sa propre clé : Vertepierre ne doit rien aux Racines. */
+  private dungeonKeyItem(): ItemId {
+    return this.fortress.definition?.id === "racines_creuses" ? "root_key" : "fortress_key";
+  }
+
+  private dungeonKeyName(): string {
+    return this.fortress.definition?.id === "racines_creuses" ? "Clé-Racine" : "clé de Vertepierre";
+  }
+
   /**
    * « Agir » dans une forteresse : sortir par la herse d'entrée, ou ouvrir une
    * porte verrouillée si l'on porte une clé.
    */
   private interactInFortress(): void {
+    if (this.companion && this.companion.distanceTo(this.player.position) <= 34) {
+      this.talkToLiane();
+      return;
+    }
     if (this.fortress.room?.kind === "entrance" && nearFortressExit(this.player.position)) {
       this.leaveFortress();
       return;
@@ -2679,8 +2854,8 @@ export class Game {
     });
     if (!near) return;
 
-    if (!this.inventory.remove("fortress_key")) {
-      this.showNotice("La herse est verrouillée. Il faudrait une clé de Vertepierre.", 160);
+    if (!this.inventory.remove(this.dungeonKeyItem())) {
+      this.showNotice(`La herse est verrouillée. Il faudrait une ${this.dungeonKeyName()}.`, 160);
       this.audio.playSfx("deny");
       return;
     }
@@ -2702,9 +2877,9 @@ export class Game {
     this.fortress.markCleared();
 
     if (room.dropsKey) {
-      this.inventory.add("fortress_key");
+      this.inventory.add(this.dungeonKeyItem());
       this.floaters.reward(this.player.position.x + 8, this.player.position.y - 8,
-        "Clé de Vertepierre");
+        ITEMS[this.dungeonKeyItem()].name);
       this.audio.playSfx("secret");
     }
     if (room.prize === "heart_shard") {
@@ -2923,6 +3098,7 @@ export class Game {
         : [];
       this.familiar = kind === "tower" ? new LanternCat({ x: 300, y: 180 }) : null;
       this.boss = null;
+      this.hollowBoss = null;
       this.hud.announce(INTERIOR_NAMES[kind]);
       // Chaque lieu dit ce qu'il est. La cascade retombait sur la réplique du
       // Château, si bien qu'on entrait dans la Bibliothèque en lisant que les
@@ -2985,11 +3161,16 @@ export class Game {
     this.player.clearImpact();
     this.interior = null;
     this.houseSeed = null;
+    // Mourir dans un donjon ne devait pas laisser sa progression à moitié en
+    // suspens : sans ce retrait, la région rechargée croyait encore être une
+    // salle de forteresse et refusait toute interaction du dehors.
+    this.fortress.leave();
     this.camera.zone = { ...point.zone };
     this.player.position = { x: point.x, y: point.y };
     this.projectiles = [];
     this.pickups = [];
     this.boss = null;
+    this.hollowBoss = null;
     this.endingPending = false;
     this.loadZoneObjects();
     this.player.unstick();
@@ -3014,6 +3195,7 @@ export class Game {
     this.projectiles = [];
     this.pickups = [];
     this.boss = null;
+    this.hollowBoss = null;
     this.endingPending = false;
     this.player.setDemon(false);
     this.player.setSailing(false);
@@ -3089,6 +3271,12 @@ export class Game {
       .find((tone) => this.flags.has(`dye:${tone}`)) ?? null;
     this.progression.apply(this.player);
     this.quests.refresh();
+    // Liane ne se rappelle pas au son d'une flûte : une fois recrutée, une
+    // sauvegarde rechargée la retrouve déjà à vos côtés.
+    if (this.flags.has("liane_recruited")) {
+      this.companion = new Companion({ x: this.player.position.x - 24, y: this.player.position.y });
+      this.companion.follow(this.player.position);
+    }
   }
 
   // — Rendu ————————————————————————————————————————————————
@@ -3166,7 +3354,11 @@ export class Game {
       drawables.push({ entity: { draw: (c) => pickup.draw(c, this.frame) }, y: pickup.position.y });
     }
     if (this.familiar) drawables.push({ entity: this.familiar, y: this.familiar.position.y + 16 });
+    if (this.companion) drawables.push({ entity: this.companion, y: this.companion.position.y + 16 });
     if (this.boss?.active) drawables.push({ entity: this.boss, y: this.boss.position.y + 74 });
+    if (this.hollowBoss?.active) {
+      drawables.push({ entity: this.hollowBoss, y: this.hollowBoss.position.y + 62 });
+    }
     // Le dragon passe au-dessus de tout quand il vole, et se range dans le
     // tri dès qu'il se pose : c'est ce qui rend son atterrissage lisible.
     if (this.dragon?.active && !this.dragon.isGrounded) {
@@ -3242,12 +3434,20 @@ export class Game {
       lights.push({ x: this.familiar.position.x + 8, y: this.familiar.position.y + 8,
         radius: 90, color: "#ffd479" });
     }
+    if (this.companion) {
+      lights.push({ x: this.companion.position.x + 8, y: this.companion.position.y + 8,
+        radius: 64, color: "#7cffc4" });
+    }
     if (this.boss?.active && this.boss.isBurning) {
       lights.push({ x: this.boss.position.x + 32, y: this.boss.position.y + 34,
         radius: 150, color: "#ff8a3c" });
     } else if (this.boss?.active && this.boss.isExposed) {
       lights.push({ x: this.boss.position.x + 32, y: this.boss.position.y + 40,
         radius: 120, color: "#ffe07a" });
+    }
+    if (this.hollowBoss?.active && this.hollowBoss.isExposed) {
+      lights.push({ x: this.hollowBoss.position.x + 24, y: this.hollowBoss.position.y + 34,
+        radius: 110, color: "#7cffc4" });
     }
 
     const denseForest = zone?.id === "lisiere_carrefour" && !this.flags.has("lantern");
@@ -3271,7 +3471,8 @@ export class Game {
     const waypoint = this.waypoint();
     // Face à un gardien, le haut de l'écran appartient à sa jauge : ni
     // cartouche de région ni rappel d'objectif ne doivent s'y superposer.
-    const fighting = this.boss?.active === true || this.dragon?.active === true;
+    const fighting = this.boss?.active === true || this.dragon?.active === true
+      || this.hollowBoss?.active === true;
     if (fighting) this.hud.clearAnnouncement();
     const heading = waypoint && !this.indoors
       ? { dx: waypoint.zone.x - this.camera.zone.x, dy: waypoint.zone.y - this.camera.zone.y }
@@ -3287,6 +3488,7 @@ export class Game {
     }
     if (this.boss?.active) this.drawBossBar();
     if (this.dragon?.active) this.drawDragonBar();
+    if (this.hollowBoss?.active) this.drawHollowGuardianBar();
 
     if (this.fortress.active && this.fortress.room?.kind === "entrance"
       && nearFortressExit(this.player.position) && !this.textBox.active) {
@@ -3376,6 +3578,27 @@ export class Game {
       drawText(ctx, state, VIEW_WIDTH / 2, 48, {
         color: boss.isBurning ? PALETTE.red : PALETTE.yellow, align: "center",
       });
+    }
+    ctx.restore();
+  }
+
+  private drawHollowGuardianBar(): void {
+    const { ctx } = this.renderer;
+    const guardian = this.hollowBoss!;
+    const width = 200;
+    const x = (VIEW_WIDTH - width) / 2;
+    ctx.save();
+    drawText(ctx, "LA GARDIENNE DES RACINES", VIEW_WIDTH / 2, 24, {
+      color: "#7cffc4", align: "center", outline: "rgba(10,8,16,0.9)", shadow: null,
+    });
+    ctx.fillStyle = "rgba(10,8,16,0.8)";
+    ctx.fillRect(x - 2, 38, width + 4, 8);
+    ctx.fillStyle = PALETTE.woodDark;
+    ctx.fillRect(x, 40, width, 4);
+    ctx.fillStyle = guardian.isExposed ? PALETTE.yellow : PALETTE.wood;
+    ctx.fillRect(x, 40, Math.round(width * guardian.healthRatio), 4);
+    if (guardian.isExposed) {
+      drawText(ctx, "LE CŒUR EST OUVERT", VIEW_WIDTH / 2, 48, { color: PALETTE.yellow, align: "center" });
     }
     ctx.restore();
   }

@@ -160,10 +160,38 @@ Le puits soigne, sauvegarde et sert de point de renaissance une fois la source
 rouverte. À zéro cœur on renaît au dernier puits touché en laissant un quart de
 sa bourse, ou l'on recharge la sauvegarde.
 
+## Acte II — Les Racines Creuses
+
+Une fois l'Arbre-Mère libérée ou enracinée, une fissure s'ouvre à la Cime
+Errante, sur le lieu même du combat. En dessous : dix salles, deux clés, et
+enfin la réponse à la seule question que le jeu n'avait jamais posée — ce que
+« racines creuses » veut dire.
+
+- **Une prisonnière.** Liane, une graine de l'Arbre-Mère oubliée sous la Cime
+  depuis plus longtemps qu'elle ne saurait dire. Deux répliques suffisent à la
+  décider ; une fois recrutée, elle ne s'efface plus jamais en changeant de
+  région — contrairement au Chat-Lanterne, elle est une compagne, pas un
+  familier qu'on rappelle. Elle lance des ronces sur ce qui s'approche, boss
+  compris, et tourne son bavardage à chaque fois qu'on lui reparle.
+- **Une vraie gardienne.** La Gardienne des Racines ne cède rien au hasard :
+  un anneau de racines force à se replacer avant qu'elle ne s'ouvre, elle
+  lance des spores dès la deuxième phase, et referme une cage de trois
+  éruptions sous vos pieds dans la troisième. Vingt cœurs, aucun brasier,
+  aucune forme démoniaque requise — elle se bat seule, à l'ancienne.
+- **Deux créatures de plus.** La Vigie des Spores tire à distance ; la
+  Sentinelle de Cristal encaisse et charge. La Horreur des Racines, dormante
+  dans les données depuis longtemps, y trouve enfin sa place.
+- **Une matière neuve.** Sol de racine tassée, piliers vivants, champignons
+  bioluminescents qui tiennent lieu de torches — la seule matière du jeu qui
+  n'appartienne à aucun biome de surface.
+- **Un dernier mot pour la vallée.** Une fois la Gardienne tue, huit
+  habitants ont quelque chose à en dire — un ultime palier de dialogue, au-
+  dessus des deux épilogues déjà existants.
+
 ## Développement
 
 ```bash
-npm test              # 265 tests unitaires
+npm test              # 295 tests unitaires
 npm run validate:data # cohérence des données et du monde généré
 npm run build         # vérification de types, bundle, préparation du site
 ```
